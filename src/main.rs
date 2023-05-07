@@ -7,7 +7,7 @@ use core::panic::PanicInfo;
 
 #[no_mangle]
 extern "C" fn kernel_init() {
-    loop {}
+    panic!();
 }
 
 #[panic_handler]

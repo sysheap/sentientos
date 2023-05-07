@@ -1,8 +1,3 @@
-# boot.S
-# bootloader for SoS
-# Stephen Marz
-# 8 February 2019
-
 # Disable generation of compressed instructions.
 .option norvc
 
