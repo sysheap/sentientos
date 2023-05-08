@@ -13,11 +13,29 @@ extern "C" {
 }
 
 #[global_allocator]
-static OS_HEAP: Heap = unsafe { Heap::new(HEAP_START as *mut u8, HEAP_SIZE) };
+static mut OS_HEAP: Heap = Heap::new();
 
 impl Heap {
-    const unsafe fn new(start: *mut u8, size: usize) -> Self {
-        Self { start, size }
+    const fn new() -> Self {
+        Self {
+            start: 0 as *mut u8,
+            size: 0,
+        }
+    }
+
+    fn init(&mut self, start: *mut u8, size: usize) {
+        self.start = start;
+        self.size = size;
+    }
+}
+
+pub fn init() {
+    unsafe {
+        OS_HEAP.init(HEAP_START as *mut u8, HEAP_SIZE);
+        println!(
+            "Heap initialized! Start: {:p}; Size: 0x{:x}",
+            OS_HEAP.start, OS_HEAP.size
+        );
     }
 }
 
@@ -26,7 +44,6 @@ unsafe impl Sync for Heap {}
 
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        println!("Start: {:p}; Size: {:x}", self.start, self.size);
         todo!()
     }
 

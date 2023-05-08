@@ -20,6 +20,9 @@ use alloc::vec::Vec;
 extern "C" fn kernel_init() {
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!");
+
+    heap::init();
+
     let mut x: Vec<u8> = Vec::new();
     x.push(1);
     x.push(1);
