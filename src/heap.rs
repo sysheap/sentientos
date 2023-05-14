@@ -45,6 +45,25 @@ impl Heap {
 
         self.free_list = free_block as *const FreeBlock as *mut FreeBlock;
     }
+
+    fn dump(&self) {
+        println!("Free blocks\nSTART\t\tEND\t\tSIZE");
+
+        let mut current_free_block_ptr = self.free_list;
+        unsafe {
+            while current_free_block_ptr != core::ptr::null_mut() {
+                let current_free_block = &*current_free_block_ptr;
+                let size = current_free_block.metadata.size;
+                println!(
+                    "{:p}\t0x{:x}\t0x{:x}",
+                    current_free_block_ptr,
+                    current_free_block_ptr as usize + size,
+                    size
+                );
+                current_free_block_ptr = current_free_block.metadata.next;
+            }
+        }
+    }
 }
 
 fn align_to(value: usize) -> usize {
@@ -53,6 +72,12 @@ fn align_to(value: usize) -> usize {
         value
     } else {
         value + 8 - remainder
+    }
+}
+
+pub fn dump() {
+    unsafe {
+        OS_HEAP.dump();
     }
 }
 
