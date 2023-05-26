@@ -1,4 +1,4 @@
-use core::{alloc::GlobalAlloc, cell::RefCell, ptr::NonNull};
+use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
 use crate::println;
 
@@ -132,42 +132,45 @@ impl Heap {
         }
 
         // Two cases: Hand out block completely or partially reduce it
-        if size == free_block_ref.metadata.size {
-            free_block_ref.metadata.used = 1;
+        let free_block_size = free_block_ref.metadata.size;
+        return match size.cmp(&free_block_size) {
+            Ordering::Equal => {
+                free_block_ref.metadata.used = 1;
 
-            match previous_free_block {
-                None => self.inner.borrow_mut().free_list = free_block_ref.metadata.next,
-                Some(mut previous_free_block) => {
-                    previous_free_block.as_mut().metadata.next = free_block_ref.metadata.next
+                match previous_free_block {
+                    None => self.inner.borrow_mut().free_list = free_block_ref.metadata.next,
+                    Some(mut previous_free_block) => {
+                        previous_free_block.as_mut().metadata.next = free_block_ref.metadata.next
+                    }
                 }
+
+                free_block_ref.metadata.next = None;
+
+                free_block_ref.get_data_ptr()
             }
+            Ordering::Less => {
+                let new_block_size = free_block_ref.metadata.size - size;
+                free_block_ref.metadata.used = 1;
+                free_block_ref.metadata.size = size;
 
-            free_block_ref.metadata.next = None;
+                let new_free_block = &mut *free_block.as_ptr().byte_add(size);
+                new_free_block.metadata.used = 0;
+                new_free_block.metadata.size = new_block_size;
+                new_free_block.metadata.next = free_block_ref.metadata.next;
 
-            free_block_ref.get_data_ptr()
-        } else if size < free_block_ref.metadata.size {
-            let new_block_size = free_block_ref.metadata.size - size;
-            free_block_ref.metadata.used = 1;
-            free_block_ref.metadata.size = size;
+                free_block_ref.metadata.next = None;
 
-            let new_free_block = &mut *free_block.as_ptr().byte_add(size);
-            new_free_block.metadata.used = 0;
-            new_free_block.metadata.size = new_block_size;
-            new_free_block.metadata.next = free_block_ref.metadata.next;
-
-            free_block_ref.metadata.next = None;
-
-            match previous_free_block {
-                None => self.inner.borrow_mut().free_list = NonNull::new(new_free_block),
-                Some(mut previous_free_block) => {
-                    previous_free_block.as_mut().metadata.next = NonNull::new(new_free_block)
+                match previous_free_block {
+                    None => self.inner.borrow_mut().free_list = NonNull::new(new_free_block),
+                    Some(mut previous_free_block) => {
+                        previous_free_block.as_mut().metadata.next = NonNull::new(new_free_block)
+                    }
                 }
-            }
 
-            free_block_ref.get_data_ptr()
-        } else {
-            panic!("size is larger than free block.");
-        }
+                free_block_ref.get_data_ptr()
+            }
+            Ordering::Greater => panic!(""),
+        };
     }
 
     unsafe fn dealloc_impl(&self, ptr: *mut u8, layout: core::alloc::Layout) {
