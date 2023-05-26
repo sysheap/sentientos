@@ -1,11 +1,11 @@
-use core::{alloc::GlobalAlloc, cell::RefCell};
+use core::{alloc::GlobalAlloc, cell::RefCell, ptr::NonNull};
 
 use crate::println;
 
 const DELIMITER: &str = "######################################################";
 
 struct HeapInner {
-    free_list: *mut FreeBlock,
+    free_list: Option<NonNull<FreeBlock>>,
 }
 
 struct Heap {
@@ -29,7 +29,7 @@ impl FreeBlock {
 
 #[repr(packed)]
 struct FreeMetadata {
-    next: *mut FreeBlock,
+    next: Option<NonNull<FreeBlock>>,
     size: usize,
     used: usize,
 }
@@ -45,9 +45,7 @@ static mut OS_HEAP: Heap = Heap::new();
 impl Heap {
     const fn new() -> Self {
         Self {
-            inner: RefCell::new(HeapInner {
-                free_list: core::ptr::null_mut(),
-            }),
+            inner: RefCell::new(HeapInner { free_list: None }),
             start_addr: core::ptr::null(),
             size: 0,
         }
@@ -60,11 +58,11 @@ impl Heap {
 
         let free_block: &mut FreeBlock = unsafe { &mut *(align_start as *mut FreeBlock) };
 
-        free_block.metadata.next = core::ptr::null_mut();
+        free_block.metadata.next = None;
         free_block.metadata.size = size;
         free_block.metadata.used = 0;
 
-        self.inner.borrow_mut().free_list = free_block as *const FreeBlock as *mut FreeBlock;
+        self.inner.borrow_mut().free_list = NonNull::new(free_block);
         self.start_addr = align_start as *const u8;
         self.size = size;
     }
@@ -103,27 +101,28 @@ impl Heap {
     unsafe fn alloc_impl(&self, layout: core::alloc::Layout) -> *mut u8 {
         let mut size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
 
-        let mut previous_free_block = core::ptr::null_mut();
+        let mut previous_free_block = None;
 
-        let mut free_block = self.inner.borrow_mut().free_list;
+        let mut free_block_option = self.inner.borrow_mut().free_list;
 
         // Find free block which is large enough
         unsafe {
-            while !free_block.is_null() {
-                let free_block_ref = &*free_block;
+            while let Some(free_block) = free_block_option {
+                let free_block_ref = free_block.as_ref();
                 if free_block_ref.metadata.size >= size {
                     break;
                 }
-                previous_free_block = free_block;
-                free_block = free_block_ref.metadata.next;
+                previous_free_block = Some(free_block);
+                free_block_option = free_block_ref.metadata.next;
             }
         }
 
-        if free_block.is_null() {
-            return core::ptr::null_mut();
-        }
+        let mut free_block = match free_block_option {
+            None => return core::ptr::null_mut(),
+            Some(x) => x,
+        };
 
-        let free_block_ref = &mut *free_block;
+        let free_block_ref = free_block.as_mut();
 
         // Check if the rest of the block is too small to fit and consume it complete
         let remaining_size = free_block_ref.metadata.size - size;
@@ -136,13 +135,14 @@ impl Heap {
         if size == free_block_ref.metadata.size {
             free_block_ref.metadata.used = 1;
 
-            if previous_free_block.is_null() {
-                self.inner.borrow_mut().free_list = free_block_ref.metadata.next;
-            } else {
-                (*previous_free_block).metadata.next = free_block_ref.metadata.next;
+            match previous_free_block {
+                None => self.inner.borrow_mut().free_list = free_block_ref.metadata.next,
+                Some(mut previous_free_block) => {
+                    previous_free_block.as_mut().metadata.next = free_block_ref.metadata.next
+                }
             }
 
-            free_block_ref.metadata.next = core::ptr::null_mut();
+            free_block_ref.metadata.next = None;
 
             free_block_ref.get_data_ptr()
         } else if size < free_block_ref.metadata.size {
@@ -150,17 +150,18 @@ impl Heap {
             free_block_ref.metadata.used = 1;
             free_block_ref.metadata.size = size;
 
-            let new_free_block = &mut *free_block.byte_add(size);
+            let new_free_block = &mut *free_block.as_ptr().byte_add(size);
             new_free_block.metadata.used = 0;
             new_free_block.metadata.size = new_block_size;
             new_free_block.metadata.next = free_block_ref.metadata.next;
 
-            free_block_ref.metadata.next = core::ptr::null_mut();
+            free_block_ref.metadata.next = None;
 
-            if previous_free_block.is_null() {
-                self.inner.borrow_mut().free_list = new_free_block;
-            } else {
-                (*previous_free_block).metadata.next = new_free_block;
+            match previous_free_block {
+                None => self.inner.borrow_mut().free_list = NonNull::new(new_free_block),
+                Some(mut previous_free_block) => {
+                    previous_free_block.as_mut().metadata.next = NonNull::new(new_free_block)
+                }
             }
 
             free_block_ref.get_data_ptr()
@@ -175,7 +176,7 @@ impl Heap {
         freeblock.metadata.next = self.inner.borrow().free_list;
         freeblock.metadata.used = 0;
 
-        self.inner.borrow_mut().free_list = freeblock as *mut FreeBlock;
+        self.inner.borrow_mut().free_list = NonNull::new(freeblock);
     }
 }
 

@@ -54,6 +54,5 @@ fn panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
-    heap::dump();
     loop {}
 }
