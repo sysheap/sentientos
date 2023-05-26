@@ -24,7 +24,7 @@
                 }
             ],
             "miDebuggerPath": "/usr/bin/gdb-multiarch",
-            "miDebuggerServerAddress": "localhost:1234"
+            "miDebuggerServerAddress": "localhost:1234",
         }
     ]
 }

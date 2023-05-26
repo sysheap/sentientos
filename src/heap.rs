@@ -2,6 +2,8 @@ use core::{alloc::GlobalAlloc, cell::RefCell};
 
 use crate::println;
 
+const DELIMITER: &str = "######################################################";
+
 struct HeapInner {
     free_list: *mut FreeBlock,
 }
@@ -15,7 +17,14 @@ struct Heap {
 #[repr(packed)]
 struct FreeBlock {
     metadata: FreeMetadata,
-    data: u8,
+    data: usize,
+}
+
+impl FreeBlock {
+    fn get_data_ptr(&self) -> *mut u8 {
+        let free_block_ptr = self as *const FreeBlock as *const u8 as *mut u8;
+        unsafe { free_block_ptr.byte_add(core::mem::size_of::<FreeMetadata>()) }
+    }
 }
 
 #[repr(packed)]
@@ -57,17 +66,18 @@ impl Heap {
 
         self.inner.borrow_mut().free_list = free_block as *const FreeBlock as *mut FreeBlock;
         self.start_addr = align_start as *const u8;
-        self.size = 0;
+        self.size = size;
     }
 
     fn dump(&self) {
+        println!("{}", DELIMITER);
         println!("Heap DUMP");
-        println!("START\t\tEND\t\tSIZE\t\tUSED");
+        println!("USED\t\tSTART\t\tEND\t\tSIZE");
 
         let mut current_metadata_block = self.start_addr as *const FreeMetadata;
 
         unsafe {
-            while current_metadata_block as usize <= self.start_addr as usize + self.size {
+            while (current_metadata_block as usize) < (self.start_addr as usize + self.size) {
                 let start_addr = current_metadata_block;
                 let size = (*current_metadata_block).size;
                 let used = if (*current_metadata_block).used == 0 {
@@ -77,37 +87,86 @@ impl Heap {
                 };
 
                 println!(
-                    "{:p}\t0x{:x}\t0x{:x}\t{}",
+                    "{}\t\t{:p}\t0x{:x}\t0x{:x}",
+                    used,
                     start_addr,
                     start_addr as usize + size,
-                    size,
-                    used
+                    size
                 );
 
                 current_metadata_block = current_metadata_block.byte_add(size);
             }
         }
-
-        // println!("Free blocks\nSTART\t\tEND\t\tSIZE");
-
-        // let mut current_free_block_ptr = self.inner.borrow().free_list;
-        // unsafe {
-        //     while !current_free_block_ptr.is_null() {
-        //         let current_free_block = &*current_free_block_ptr;
-        //         let size = current_free_block.metadata.size;
-        //         println!(
-        //             "{:p}\t0x{:x}\t0x{:x}",
-        //             current_free_block_ptr,
-        //             current_free_block_ptr as usize + size,
-        //             size
-        //         );
-        //         current_free_block_ptr = current_free_block.metadata.next;
-        //     }
-        // }
+        println!("{}", DELIMITER);
     }
 
     unsafe fn alloc_impl(&self, layout: core::alloc::Layout) -> *mut u8 {
-        todo!()
+        let mut size = core::cmp::max(layout.size(), core::mem::size_of::<FreeBlock>());
+
+        let mut previous_free_block = core::ptr::null_mut();
+
+        let mut free_block = self.inner.borrow_mut().free_list;
+
+        // Find free block which is large enough
+        unsafe {
+            while !free_block.is_null() {
+                let free_block_ref = &*free_block;
+                if free_block_ref.metadata.size >= size {
+                    break;
+                }
+                previous_free_block = free_block;
+                free_block = free_block_ref.metadata.next;
+            }
+        }
+
+        if free_block.is_null() {
+            return core::ptr::null_mut();
+        }
+
+        let free_block_ref = &mut *free_block;
+
+        // Check if the rest of the block is too small to fit and consume it complete
+        let remaining_size = free_block_ref.metadata.size - size;
+
+        if remaining_size < core::mem::size_of::<FreeBlock>() {
+            size = free_block_ref.metadata.size;
+        }
+
+        // Two cases: Hand out block completely or partially reduce it
+        if size == free_block_ref.metadata.size {
+            free_block_ref.metadata.used = 1;
+
+            if previous_free_block.is_null() {
+                self.inner.borrow_mut().free_list = free_block_ref.metadata.next;
+            } else {
+                (*previous_free_block).metadata.next = free_block_ref.metadata.next;
+            }
+
+            free_block_ref.metadata.next = core::ptr::null_mut();
+
+            free_block_ref.get_data_ptr()
+        } else if size < free_block_ref.metadata.size {
+            let new_block_size = free_block_ref.metadata.size - size;
+            free_block_ref.metadata.used = 1;
+            free_block_ref.metadata.size = size;
+
+            let new_free_block = &mut *free_block.byte_add(size);
+            new_free_block.metadata.used = 0;
+            new_free_block.metadata.size = new_block_size;
+            new_free_block.metadata.next = free_block_ref.metadata.next;
+
+            free_block_ref.metadata.next = core::ptr::null_mut();
+
+            if previous_free_block.is_null() {
+                self.inner.borrow_mut().free_list = new_free_block;
+            } else {
+                (*previous_free_block).metadata.next = new_free_block;
+            }
+
+            free_block_ref.get_data_ptr()
+        } else {
+            panic!("size is larger than free block.");
+        }
     }
 
     unsafe fn dealloc_impl(&self, ptr: *mut u8, layout: core::alloc::Layout) {
@@ -150,10 +209,28 @@ unsafe impl Sync for Heap {}
 
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        self.alloc_impl(layout)
+        let size = core::cmp::max(layout.size(), core::mem::size_of::<FreeBlock>());
+
+        println!(
+            "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
+            size,
+            layout.size()
+        );
+        self.dump();
+
+        let ptr = self.alloc_impl(layout);
+
+        println!("AFTER ALLOC (received {:p})", ptr);
+        self.dump();
+
+        ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        println!("BEFORE DEALLOC: {:p}", ptr);
+        self.dump();
         self.dealloc_impl(ptr, layout);
+        println!("AFTER DEALLOC");
+        self.dump();
     }
 }

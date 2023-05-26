@@ -24,10 +24,20 @@ extern "C" fn kernel_init() {
 
     heap::init();
 
-    let mut x: Vec<u8> = Vec::new();
-    x.push(1);
-    x.push(1);
-    x.push(1);
+    {
+        let mut x: Vec<u8> = Vec::new();
+        x.push(1);
+    }
+    {
+        let mut x: Vec<u8> = Vec::new();
+        x.push(1);
+
+        let mut y: Vec<u8> = Vec::new();
+        y.push(1);
+        y.push(1);
+        y.push(1);
+        y.push(1);
+    }
 }
 
 #[panic_handler]
