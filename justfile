@@ -16,6 +16,16 @@ run: _build-no-clippy
         -bios none \
         -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros
 
+vscode: _build-no-clippy
+    qemu-system-riscv64 \
+        -machine virt -cpu rv64 \
+        -smp 1 \
+        -m 128M \
+        -nographic -serial mon:stdio \
+        -bios none \
+        -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros \
+        -s -S
+
 debug FUNC: _build-no-clippy
     tmux new-session -d 'qemu-system-riscv64 \
         -machine virt -cpu rv64 \

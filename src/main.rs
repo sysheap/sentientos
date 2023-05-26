@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![feature(panic_info_message)]
+#![feature(pointer_byte_offsets)]
 
 mod asm;
 mod heap;
