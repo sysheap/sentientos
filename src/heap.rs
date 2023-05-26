@@ -101,7 +101,7 @@ impl Heap {
     }
 
     unsafe fn alloc_impl(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let mut size = core::cmp::max(layout.size(), core::mem::size_of::<FreeBlock>());
+        let mut size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
 
         let mut previous_free_block = core::ptr::null_mut();
 
@@ -209,8 +209,7 @@ unsafe impl Sync for Heap {}
 
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let size = core::cmp::max(layout.size(), core::mem::size_of::<FreeBlock>());
-
+        let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
         println!(
             "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
             size,

@@ -15,7 +15,7 @@ use core::panic::PanicInfo;
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 
 #[no_mangle]
 extern "C" fn kernel_init() {
@@ -38,6 +38,11 @@ extern "C" fn kernel_init() {
         y.push(1);
         y.push(1);
     }
+    let mut x = String::from("Hello!");
+    for _ in 0..1000 {
+        x += "hello";
+    }
+    println!("{}", x);
 }
 
 #[panic_handler]
