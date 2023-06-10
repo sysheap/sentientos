@@ -4,45 +4,46 @@
 #![allow(unused_variables)]
 #![feature(panic_info_message)]
 #![feature(pointer_byte_offsets)]
+#![feature(strict_provenance)]
+#![feature(nonzero_ops)]
 
 mod asm;
 mod heap;
 mod mmio;
+mod page_allocator;
 mod println;
 mod uart;
+mod util;
 
-use core::panic::PanicInfo;
+use core::{cmp::Ordering, panic::PanicInfo};
 
-extern crate alloc;
+// extern crate alloc;
 
-use alloc::{string::String, vec::Vec};
+extern "C" {
+    static HEAP_START: usize;
+    static HEAP_SIZE: usize;
+}
 
 #[no_mangle]
 extern "C" fn kernel_init() {
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!");
-
-    heap::init();
-
-    {
-        let mut x: Vec<u8> = Vec::new();
-        x.push(1);
+    unsafe {
+        page_allocator::init(HEAP_START, HEAP_SIZE);
     }
-    {
-        let mut x: Vec<u8> = Vec::new();
-        x.push(1);
 
-        let mut y: Vec<u8> = Vec::new();
-        y.push(1);
-        y.push(1);
-        y.push(1);
-        y.push(1);
+    loop {
+        let page = page_allocator::zalloc();
+        if page.is_none() {
+            break;
+        }
+        println!("Allocated {:?}", page);
+        unsafe {
+            assert!(page.unwrap().addr().as_ref().cmp(&[0; 4096]) == Ordering::Equal);
+        }
     }
-    let mut x = String::from("Hello!");
-    for _ in 0..1000 {
-        x += "hello";
-    }
-    println!("{}", x);
+
+    // heap::init();
 }
 
 #[panic_handler]

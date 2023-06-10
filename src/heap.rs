@@ -33,7 +33,7 @@ extern "C" {
     static mut HEAP_SIZE: usize;
 }
 
-#[global_allocator]
+// #[global_allocator]
 static mut OS_HEAP: Heap = Heap::new();
 
 impl Heap {
