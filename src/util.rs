@@ -1,4 +1,4 @@
-use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl};
+use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
 pub fn align_up(value: usize, alignment: usize) -> usize {
     let remainder = value % alignment;
@@ -41,6 +41,13 @@ where
     DataType: BitAndAssign + Not<Output = DataType> + From<u8> + Shl<usize, Output = DataType>,
 {
     *data &= !(DataType::from(1) << bit_position)
+}
+
+pub fn get_bit<DataType>(data: DataType, bit_position: usize) -> bool
+where
+    DataType: Shr<usize, Output = DataType> + PartialEq<DataType> + From<u8>,
+{
+    (data >> bit_position) == DataType::from(1)
 }
 
 pub fn set_multiple_bits<DataType, ValueType>(

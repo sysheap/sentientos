@@ -1,13 +1,47 @@
-use crate::util::{set_multiple_bits, set_or_clear_bit};
+use core::ptr::NonNull;
+
+use crate::{
+    page_allocator, println,
+    uart::UART_BASE_ADDRESS,
+    util::{get_bit, set_multiple_bits, set_or_clear_bit},
+};
 
 #[repr(transparent)]
-struct PageTable([PageTableEntry; 4096]);
+pub struct PageTable([PageTableEntry; 512]);
+
+impl PageTable {
+    fn new() -> &'static mut PageTable {
+        let page = page_allocator::zalloc().expect("Memory should be available.");
+        let mut page_table: NonNull<PageTable> = page.addr().cast();
+        unsafe { page_table.as_mut() }
+    }
+
+    fn get_entry_for_virtual_address(
+        &mut self,
+        virtual_address: usize,
+        level: u8,
+    ) -> &mut PageTableEntry {
+        assert!(level <= 2);
+        let shifted_address = virtual_address >> (12 + 9 * level);
+        let index = shifted_address & 0x1ff;
+        &mut self.0[index]
+    }
+
+    fn get_physical_address(&self) -> u64 {
+        self as *const Self as u64
+    }
+
+    unsafe fn activate(&self) {
+        todo!();
+    }
+}
 
 #[repr(transparent)]
 struct PageTableEntry(u64);
 
 #[repr(u8)]
-enum XWRMode {
+#[derive(Clone, Copy)]
+pub enum XWRMode {
     PointerToNextLevel = 0b000,
     ReadOnly = 0b001,
     ReadWrite = 0b011,
@@ -22,9 +56,14 @@ impl PageTableEntry {
     const WRITE_BIT_POS: usize = 2;
     const EXECUTE_BIT_POS: usize = 3;
     const USER_MODE_ACCESSIBLE_BIT_POS: usize = 4;
+    const PHYSICAL_PAGE_BIT_POS: usize = 10;
 
     fn set_validity(&mut self, is_valid: bool) {
         set_or_clear_bit(&mut self.0, is_valid, PageTableEntry::VALID_BIT_POS);
+    }
+
+    fn get_validity(&self) -> bool {
+        get_bit(self.0, PageTableEntry::VALID_BIT_POS)
     }
 
     fn set_user_mode_accessible(&mut self, is_user_mode_accessible: bool) {
@@ -39,7 +78,114 @@ impl PageTableEntry {
         set_multiple_bits(&mut self.0, mode as u8, 3, PageTableEntry::READ_BIT_POS);
     }
 
+    fn set_physical_address(&mut self, address: u64) {
+        set_multiple_bits(
+            &mut self.0,
+            address,
+            44,
+            PageTableEntry::PHYSICAL_PAGE_BIT_POS,
+        );
+    }
+
+    fn get_physical_address(&self) -> u64 {
+        (self.0 >> PageTableEntry::PHYSICAL_PAGE_BIT_POS) & 0xfffffffffff
+    }
+
+    fn get_target_page_table(&self) -> &'static mut PageTable {
+        assert!(self.get_physical_address() != 0);
+        let phyiscal_address = self.get_physical_address();
+        unsafe { &mut *(phyiscal_address as *const PageTable as *mut PageTable) }
+    }
+
     fn clear(&mut self) {
         self.0 = 0;
+    }
+}
+
+pub struct MappingInformation {
+    start_address: usize,
+    end_address: usize,
+    privileges: XWRMode,
+}
+
+impl MappingInformation {
+    pub fn new(start_address: usize, end_address: usize, privileges: XWRMode) -> Self {
+        assert!(end_address > start_address);
+        Self {
+            start_address,
+            end_address,
+            privileges,
+        }
+    }
+}
+
+pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'static PageTable {
+    let root_page_table = PageTable::new();
+
+    for mapping in mapping_information {
+        for address in (mapping.start_address..mapping.end_address).step_by(4096) {
+            println!("Map address 0x{:x}", address);
+            let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
+            if first_level_entry.get_physical_address() == 0 {
+                let new_page_table = PageTable::new();
+                first_level_entry.set_physical_address(new_page_table.get_physical_address());
+                first_level_entry.set_validity(true);
+            }
+
+            let second_level_entry = first_level_entry
+                .get_target_page_table()
+                .get_entry_for_virtual_address(address, 1);
+            if second_level_entry.get_physical_address() == 0 {
+                let new_page_table = PageTable::new();
+                second_level_entry.set_physical_address(new_page_table.get_physical_address());
+                second_level_entry.set_validity(true);
+            }
+
+            let third_level_entry = second_level_entry
+                .get_target_page_table()
+                .get_entry_for_virtual_address(address, 0);
+            if third_level_entry.get_physical_address() == 0 {
+                let new_page_table = PageTable::new();
+                third_level_entry.set_physical_address(new_page_table.get_physical_address());
+                third_level_entry.set_validity(true);
+            }
+            third_level_entry.set_xwr_mode(mapping.privileges);
+            third_level_entry.set_validity(true);
+        }
+    }
+
+    root_page_table
+}
+
+pub fn setup_kernel_identity_mapping() {
+    extern "C" {
+        static mut TEXT_START: usize;
+        static mut TEXT_END: usize;
+        static mut RODATA_START: usize;
+        static mut RODATA_END: usize;
+        static mut DATA_START: usize;
+        static mut DATA_END: usize;
+
+        static mut HEAP_START: usize;
+        static mut HEAP_SIZE: usize;
+    }
+
+    let mapping_information: &[MappingInformation] = unsafe {
+        &[
+            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ExecuteOnly),
+            MappingInformation::new(RODATA_START, RODATA_END, XWRMode::ReadOnly),
+            MappingInformation::new(DATA_START, DATA_END, XWRMode::ReadWrite),
+            MappingInformation::new(HEAP_START, HEAP_START + HEAP_SIZE, XWRMode::ReadWrite),
+            MappingInformation::new(
+                UART_BASE_ADDRESS,
+                UART_BASE_ADDRESS + 4096,
+                XWRMode::ReadWrite,
+            ),
+        ]
+    };
+
+    let identity_mapped_pagetable = create_identity_mapping(mapping_information);
+    unsafe {
+        identity_mapped_pagetable.activate();
     }
 }

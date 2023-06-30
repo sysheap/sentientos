@@ -17,7 +17,7 @@ mod println;
 mod uart;
 mod util;
 
-use core::{cmp::Ordering, panic::PanicInfo};
+use core::panic::PanicInfo;
 
 // extern crate alloc;
 
@@ -34,18 +34,7 @@ extern "C" fn kernel_init() {
         page_allocator::init(HEAP_START, HEAP_SIZE);
     }
 
-    loop {
-        let page = page_allocator::zalloc();
-        if page.is_none() {
-            break;
-        }
-        println!("Allocated {:?}", page);
-        unsafe {
-            assert!(page.unwrap().addr().as_ref().cmp(&[0; 4096]) == Ordering::Equal);
-        }
-    }
-
-    // heap::init();
+    page_tables::setup_kernel_identity_mapping();
 }
 
 #[panic_handler]

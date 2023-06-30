@@ -2,7 +2,7 @@ use core::fmt::Write;
 
 use crate::mmio::MMIO;
 
-const UART_BASE_ADDRESS: usize = 0x1000_0000;
+pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 
 pub const QEMU_UART: Uart = Uart::new(UART_BASE_ADDRESS);
 
