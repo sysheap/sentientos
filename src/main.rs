@@ -6,11 +6,13 @@
 #![feature(pointer_byte_offsets)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]
+#![feature(core_intrinsics)]
 
 mod asm;
 mod heap;
 mod mmio;
 mod page_allocator;
+mod page_tables;
 mod println;
 mod uart;
 mod util;
