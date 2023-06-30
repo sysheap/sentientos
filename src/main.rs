@@ -35,6 +35,7 @@ extern "C" fn kernel_init() {
     }
 
     page_tables::setup_kernel_identity_mapping();
+    println!("Boot completed!");
 }
 
 #[panic_handler]

@@ -32,7 +32,7 @@ impl PageTable {
     }
 
     unsafe fn activate(&self) {
-        todo!();
+        // todo!();
     }
 }
 
@@ -124,7 +124,7 @@ pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'
 
     for mapping in mapping_information {
         for address in (mapping.start_address..mapping.end_address).step_by(4096) {
-            println!("Map address 0x{:x}", address);
+            // println!("Map address 0x{:x}", address);
             let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
             if first_level_entry.get_physical_address() == 0 {
                 let new_page_table = PageTable::new();
@@ -144,13 +144,10 @@ pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'
             let third_level_entry = second_level_entry
                 .get_target_page_table()
                 .get_entry_for_virtual_address(address, 0);
-            if third_level_entry.get_physical_address() == 0 {
-                let new_page_table = PageTable::new();
-                third_level_entry.set_physical_address(new_page_table.get_physical_address());
-                third_level_entry.set_validity(true);
-            }
+
             third_level_entry.set_xwr_mode(mapping.privileges);
             third_level_entry.set_validity(true);
+            third_level_entry.set_physical_address(address as u64);
         }
     }
 

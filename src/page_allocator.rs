@@ -106,7 +106,7 @@ pub fn init(heap_start: usize, heap_size: usize) {
 pub fn zalloc() -> Option<Page> {
     let page = unsafe { PAGE_ALLOCATOR.zalloc() };
     unsafe {
-        println!("Allocated {} pages", PAGE_ALLOCATOR.allocated());
+        // println!("Allocated {} pages", PAGE_ALLOCATOR.allocated());
     };
     page
 }
