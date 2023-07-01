@@ -29,12 +29,13 @@ extern "C" {
 #[no_mangle]
 extern "C" fn kernel_init() {
     uart::QEMU_UART.init();
-    println!("Hello World from YaROS!");
+    println!("Hello World from YaROS!\n");
     unsafe {
         page_allocator::init(HEAP_START, HEAP_SIZE);
     }
 
     page_tables::setup_kernel_identity_mapping();
+
     println!("Boot completed!");
 }
 

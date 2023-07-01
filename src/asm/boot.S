@@ -47,6 +47,8 @@ bss_cleared:
 	la ra, loop
 	mret
 
+	sfence.vma # Flush cache for virtual memory mapping
+
 loop:
 	wfi
 	j loop

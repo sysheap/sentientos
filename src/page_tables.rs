@@ -1,10 +1,12 @@
-use core::ptr::NonNull;
+use core::{arch::asm, fmt::Debug, ptr::NonNull};
 
 use crate::{
     page_allocator, println,
     uart::UART_BASE_ADDRESS,
     util::{get_bit, set_multiple_bits, set_or_clear_bit},
 };
+
+static mut CURRENT_PAGE_TABLE: Option<&'static PageTable> = None;
 
 #[repr(transparent)]
 pub struct PageTable([PageTableEntry; 512]);
@@ -30,17 +32,13 @@ impl PageTable {
     fn get_physical_address(&self) -> u64 {
         self as *const Self as u64
     }
-
-    unsafe fn activate(&self) {
-        // todo!();
-    }
 }
 
 #[repr(transparent)]
 struct PageTableEntry(u64);
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum XWRMode {
     PointerToNextLevel = 0b000,
     ReadOnly = 0b001,
@@ -81,14 +79,14 @@ impl PageTableEntry {
     fn set_physical_address(&mut self, address: u64) {
         set_multiple_bits(
             &mut self.0,
-            address,
+            address >> 12,
             44,
             PageTableEntry::PHYSICAL_PAGE_BIT_POS,
         );
     }
 
     fn get_physical_address(&self) -> u64 {
-        (self.0 >> PageTableEntry::PHYSICAL_PAGE_BIT_POS) & 0xfffffffffff
+        ((self.0 >> PageTableEntry::PHYSICAL_PAGE_BIT_POS) & 0xfffffffffff) << 12
     }
 
     fn get_target_page_table(&self) -> &'static mut PageTable {
@@ -106,16 +104,33 @@ pub struct MappingInformation {
     start_address: usize,
     end_address: usize,
     privileges: XWRMode,
+    name: &'static str,
 }
 
 impl MappingInformation {
-    pub fn new(start_address: usize, end_address: usize, privileges: XWRMode) -> Self {
+    pub fn new(
+        start_address: usize,
+        end_address: usize,
+        privileges: XWRMode,
+        name: &'static str,
+    ) -> Self {
         assert!(end_address > start_address);
         Self {
             start_address,
             end_address,
             privileges,
+            name,
         }
+    }
+}
+
+impl Debug for MappingInformation {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "Mapping {}:\t0x{:x}-0x{:x} ({:?})",
+            self.name, self.start_address, self.end_address, self.privileges
+        )
     }
 }
 
@@ -123,6 +138,8 @@ pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'
     let root_page_table = PageTable::new();
 
     for mapping in mapping_information {
+        println!("{:?}", mapping);
+        assert!(mapping.start_address % 4096 == 0);
         for address in (mapping.start_address..mapping.end_address).step_by(4096) {
             // println!("Map address 0x{:x}", address);
             let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
@@ -169,20 +186,48 @@ pub fn setup_kernel_identity_mapping() {
 
     let mapping_information: &[MappingInformation] = unsafe {
         &[
-            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ExecuteOnly),
-            MappingInformation::new(RODATA_START, RODATA_END, XWRMode::ReadOnly),
-            MappingInformation::new(DATA_START, DATA_END, XWRMode::ReadWrite),
-            MappingInformation::new(HEAP_START, HEAP_START + HEAP_SIZE, XWRMode::ReadWrite),
+            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ExecuteOnly, "TEXT"),
+            MappingInformation::new(RODATA_START, RODATA_END, XWRMode::ReadOnly, "RODATA"),
+            MappingInformation::new(DATA_START, DATA_END, XWRMode::ReadWrite, "DATA"),
+            MappingInformation::new(
+                HEAP_START,
+                HEAP_START + HEAP_SIZE,
+                XWRMode::ReadWrite,
+                "HEAP",
+            ),
             MappingInformation::new(
                 UART_BASE_ADDRESS,
                 UART_BASE_ADDRESS + 4096,
                 XWRMode::ReadWrite,
+                "UART",
             ),
         ]
     };
 
+    println!("Create identitiy mapping");
+
     let identity_mapped_pagetable = create_identity_mapping(mapping_information);
+    let old_page_table = activate_page_table(identity_mapped_pagetable);
+    assert!(old_page_table.is_none());
+}
+
+fn activate_page_table(page_table: &'static PageTable) -> Option<&'static PageTable> {
+    let page_table_address = page_table as *const PageTable as usize;
+    println!(
+        "Activate new page mapping (Addr of page tables 0x{:x})",
+        page_table_address
+    );
+    let page_table_address_shifted = page_table_address >> 12;
+
+    let satp_val = 8 << 60 | (page_table_address_shifted & 0xfffffffffff);
+
     unsafe {
-        identity_mapped_pagetable.activate();
+        asm!("csrw satp, {satp_val}", satp_val = in(reg) satp_val);
     }
+
+    let old_page_table = unsafe { CURRENT_PAGE_TABLE.replace(page_table) };
+
+    println!("Done!\n");
+
+    old_page_table
 }

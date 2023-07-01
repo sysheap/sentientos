@@ -170,6 +170,7 @@ SECTIONS
 	 to be able to do.
    */
   .rodata : {
+	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.*)
     PROVIDE(_rodata_end = .);
@@ -204,8 +205,10 @@ SECTIONS
   } >ram AT>ram :data
 
   .bss : {
+	. = ALIGN(4096);
     PROVIDE(_bss_start = .);
     *(.sbss .sbss.*) *(.bss .bss.*)
+	. = ALIGN(4096);
     PROVIDE(_bss_end = .);
   } >ram AT>ram :bss
 

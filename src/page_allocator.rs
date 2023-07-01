@@ -6,15 +6,11 @@ const PAGE_SIZE: usize = 4096;
 
 struct PageAllocator {
     free_list: Option<NonNull<FreePage>>,
-    allocated: usize,
 }
 
 impl PageAllocator {
     const fn new() -> Self {
-        Self {
-            free_list: None,
-            allocated: 0,
-        }
+        Self { free_list: None }
     }
 
     fn init(&mut self, heap_start: usize, heap_size: usize) {
@@ -41,13 +37,9 @@ impl PageAllocator {
         }
 
         println!(
-            "Page allocator initialized! (Start: 0x{:x}, End: 0x{:x})",
+            "Page allocator initialized! (Start: 0x{:x}, End: 0x{:x})\n",
             heap_start_aligned, heap_end_aligned
         );
-    }
-
-    fn allocated(&self) -> usize {
-        self.allocated
     }
 
     fn zalloc(&mut self) -> Option<Page> {
@@ -58,7 +50,6 @@ impl PageAllocator {
         unsafe {
             self.free_list = page.as_ref().next;
         }
-        self.allocated += 1;
         Some(Page::new(page))
     }
 
@@ -68,7 +59,6 @@ impl PageAllocator {
             free_page.as_mut().next = self.free_list;
             self.free_list = Some(free_page);
         }
-        self.allocated -= 1;
     }
 }
 
@@ -104,11 +94,7 @@ pub fn init(heap_start: usize, heap_size: usize) {
 }
 
 pub fn zalloc() -> Option<Page> {
-    let page = unsafe { PAGE_ALLOCATOR.zalloc() };
-    unsafe {
-        // println!("Allocated {} pages", PAGE_ALLOCATOR.allocated());
-    };
-    page
+    unsafe { PAGE_ALLOCATOR.zalloc() }
 }
 
 pub fn dealloc(page: Page) {
