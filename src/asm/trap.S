@@ -1,6 +1,12 @@
 .section .text
-.global asm_trap_vector
-asm_trap_vector:
-asm_trap_vector_loop:
+.global machine_trap_vector
+.align 4
+machine_trap_vector:
 	wfi
-	j asm_trap_vector_loop
+	j machine_trap_vector
+
+.global supervisor_trap_vector
+.align 4
+supervisor_trap_vector:
+	wfi
+	j supervisor_trap_vector

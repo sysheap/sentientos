@@ -20,6 +20,9 @@ _start:
 	la		gp, _global_pointer
 .option pop
 	
+	# Disable interrupts.
+	csrw mie, zero
+
 	# Clear bss segment
 	la a0, _bss_start
 	la a1, _bss_end
@@ -32,22 +35,38 @@ bss_loop:
 
 bss_cleared:
 	la sp, _stack_end
-	li t0, (0b11 << 11) | (1 << 7) | (1 << 3) # MIE, MPIE, MPP
-	csrw mstatus, t0
 
-	la t0, kernel_init
+	jal machine_mode_init
+
+	# Jump to supervisor mode
+	la t0, supervisor_mode_init
 	csrw mepc, t0
 
-	la t0, asm_trap_vector
+	# Load trap vector machine mode
+	la t0, machine_trap_vector
 	csrw mtvec, t0
 
-	li t0, (1 << 3) | (1 << 7) | (1 << 11)
-	csrw mie, t0
+	# Load trap vector supervisor mode
+	la t0, supervisor_trap_vector
+	csrw stvec, t0
+
+	# Set MPP to 01 (supervisor mode)
+	li t0, 0x1800
+	csrc mstatus, t0
+
+	li t0, 0x800
+	csrs mstatus, t0
+
+	# We need at least one pmp entry. Therefore we create on which spans the whole address space.
+	li t0, -1
+	csrw pmpaddr0, t0
+	csrw pmpcfg0, 0xF
 
 	la ra, loop
-	mret
 
-	sfence.vma # Flush cache for virtual memory mapping
+activate_supervisor_mode:
+	# Jump to supervisor mode
+	mret
 
 loop:
 	wfi

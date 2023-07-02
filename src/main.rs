@@ -27,7 +27,7 @@ extern "C" {
 }
 
 #[no_mangle]
-extern "C" fn kernel_init() {
+extern "C" fn machine_mode_init() {
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!\n");
     unsafe {
@@ -36,7 +36,12 @@ extern "C" fn kernel_init() {
 
     page_tables::setup_kernel_identity_mapping();
 
-    println!("Boot completed!");
+    println!("Machine mode init completed!");
+}
+
+#[no_mangle]
+extern "C" fn supervisor_mode_init() {
+    println!("Supervisor mode init");
 }
 
 #[panic_handler]

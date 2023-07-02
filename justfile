@@ -9,7 +9,7 @@ _build-no-clippy:
 
 run: _build-no-clippy
     qemu-system-riscv64 \
-        -machine virt -cpu rv64 \
+        -machine virt -cpu rv64  \
         -smp 1 \
         -m 128M \
         -nographic -serial mon:stdio \
@@ -18,7 +18,7 @@ run: _build-no-clippy
 
 vscode: _build-no-clippy
     qemu-system-riscv64 \
-        -machine virt -cpu rv64 \
+        -machine virt -cpu rv64  \
         -smp 1 \
         -m 128M \
         -nographic -serial mon:stdio \
@@ -29,6 +29,8 @@ vscode: _build-no-clippy
 debug: _build-no-clippy
     tmux new-session -d 'qemu-system-riscv64 \
         -machine virt -cpu rv64 \
+        -d int,cpu_reset,guest_errors \
+        -D log.txt \
         -smp 1 \
         -m 128M \
         -nographic -serial mon:stdio \
@@ -39,6 +41,8 @@ debug: _build-no-clippy
 debugf FUNC: _build-no-clippy
     tmux new-session -d 'qemu-system-riscv64 \
         -machine virt -cpu rv64 \
+        -d int,cpu_reset,guest_errors \
+        -D log.txt \
         -smp 1 \
         -m 128M \
         -nographic -serial mon:stdio \

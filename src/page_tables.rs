@@ -186,7 +186,7 @@ pub fn setup_kernel_identity_mapping() {
 
     let mapping_information: &[MappingInformation] = unsafe {
         &[
-            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ExecuteOnly, "TEXT"),
+            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ReadExecute, "TEXT"),
             MappingInformation::new(RODATA_START, RODATA_END, XWRMode::ReadOnly, "RODATA"),
             MappingInformation::new(DATA_START, DATA_END, XWRMode::ReadWrite, "DATA"),
             MappingInformation::new(
@@ -223,6 +223,7 @@ fn activate_page_table(page_table: &'static PageTable) -> Option<&'static PageTa
 
     unsafe {
         asm!("csrw satp, {satp_val}", satp_val = in(reg) satp_val);
+        asm!("sfence.vma");
     }
 
     let old_page_table = unsafe { CURRENT_PAGE_TABLE.replace(page_table) };
