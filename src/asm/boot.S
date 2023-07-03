@@ -19,7 +19,7 @@ _start:
 .option norelax
 	la		gp, _global_pointer
 .option pop
-	
+
 	# Disable interrupts.
 	csrw mie, zero
 

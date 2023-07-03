@@ -207,6 +207,7 @@ pub fn setup_kernel_identity_mapping() {
     println!("Create identitiy mapping");
 
     let identity_mapped_pagetable = create_identity_mapping(mapping_information);
+
     let old_page_table = activate_page_table(identity_mapped_pagetable);
     assert!(old_page_table.is_none());
 }

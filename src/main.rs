@@ -14,6 +14,7 @@ mod mmio;
 mod page_allocator;
 mod page_tables;
 mod println;
+mod trap;
 mod uart;
 mod util;
 
