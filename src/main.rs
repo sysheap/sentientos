@@ -27,21 +27,23 @@ extern "C" {
 }
 
 #[no_mangle]
-extern "C" fn machine_mode_init() {
+extern "C" fn kernel_init() {
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!\n");
+
     unsafe {
+        println!("Initializing page allocator");
         page_allocator::init(HEAP_START, HEAP_SIZE);
     }
 
     page_tables::setup_kernel_identity_mapping();
 
-    println!("Machine mode init completed!");
+    println!("kernel_init() completed!");
 }
 
 #[no_mangle]
-extern "C" fn supervisor_mode_init() {
-    println!("Supervisor mode init");
+extern "C" fn kernel_main() {
+    println!("kernel_main()");
 }
 
 #[panic_handler]

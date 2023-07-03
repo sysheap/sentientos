@@ -36,10 +36,10 @@ bss_loop:
 bss_cleared:
 	la sp, _stack_end
 
-	jal machine_mode_init
+	jal kernel_init
 
 	# Jump to supervisor mode
-	la t0, supervisor_mode_init
+	la t0, kernel_main
 	csrw mepc, t0
 
 	# Load trap vector machine mode
