@@ -13,7 +13,7 @@ pub struct PageTable([PageTableEntry; 512]);
 
 impl PageTable {
     fn new() -> &'static mut PageTable {
-        let page = page_allocator::zalloc().expect("Memory should be available.");
+        let page = page_allocator::zalloc(1).expect("Memory should be available.");
         let mut page_table: NonNull<PageTable> = page.addr().cast();
         unsafe { page_table.as_mut() }
     }

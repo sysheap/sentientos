@@ -1,87 +1,144 @@
-use core::ptr::NonNull;
+use core::ptr::{null_mut, NonNull};
 
-use crate::{println, util};
+use crate::{print, println, util::align_up};
 
 const PAGE_SIZE: usize = 4096;
+type Page = [u8; PAGE_SIZE];
+
+#[repr(u8)]
+#[derive(PartialEq, Eq)]
+enum PageStatus {
+    Free = 1 << 0,
+    Used = 1 << 1,
+    Last = 1 << 2,
+}
 
 struct PageAllocator {
-    free_list: Option<NonNull<FreePage>>,
+    metadata: *mut PageStatus,
+    heap: *mut Page,
+    number_of_pages: usize,
 }
 
 impl PageAllocator {
     const fn new() -> Self {
-        Self { free_list: None }
+        Self {
+            metadata: null_mut(),
+            heap: null_mut(),
+            number_of_pages: 0,
+        }
     }
 
     fn init(&mut self, heap_start: usize, heap_size: usize) {
-        let heap_start_aligned = util::align_up(heap_start, PAGE_SIZE);
-        let heap_end_aligned = util::align_down(heap_start + heap_size, PAGE_SIZE);
+        let number_of_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
-        let mut current = NonNull::new(heap_start_aligned as *const FreePage as *mut FreePage)
-            .expect("Heap start must not be nul.");
-        self.free_list = Some(current);
+        self.metadata = heap_start as *mut PageStatus;
+        self.heap = align_up(heap_start + number_of_pages, PAGE_SIZE) as *mut Page;
+        self.number_of_pages = number_of_pages;
 
-        loop {
+        assert!(self.metadata as usize % PAGE_SIZE == 0);
+        assert!(self.heap as usize % PAGE_SIZE == 0);
+        assert!(self.heap as usize - self.metadata as usize >= number_of_pages);
+        assert!((self.heap as usize + (number_of_pages * PAGE_SIZE)) <= (heap_start + heap_size));
+
+        for idx in 0..number_of_pages {
             unsafe {
-                let next_free_page_addr = current.as_ptr().byte_add(PAGE_SIZE);
-
-                if next_free_page_addr.addr() >= heap_end_aligned {
-                    current.as_mut().next = None;
-                    break;
-                }
-
-                let next_free_page = NonNull::new(next_free_page_addr);
-                current.as_mut().next = next_free_page;
-                current = next_free_page.expect("Next free page must be not null.");
+                *self.metadata.add(idx) = PageStatus::Free;
             }
         }
-
-        println!(
-            "Page allocator initialized! (Start: 0x{:x}, End: 0x{:x})\n",
-            heap_start_aligned, heap_end_aligned
-        );
     }
 
-    fn zalloc(&mut self) -> Option<Page> {
-        let page = match self.free_list {
-            None => return None,
-            Some(page) => page,
-        };
-        unsafe {
-            self.free_list = page.as_ref().next;
+    fn page_idx_to_page_pointer(&self, page_index: usize) -> PagePointer {
+        assert!(page_index < self.number_of_pages);
+        unsafe { PagePointer::new(self.heap.add(page_index)) }
+    }
+
+    fn page_pointer_to_page_idx(&self, page_pointer: &PagePointer) -> usize {
+        let distance = self.heap as usize - page_pointer.addr.as_ptr() as usize;
+        assert!(distance % 4096 == 0);
+        distance / 4096
+    }
+
+    fn zalloc(&self, number_of_pages_requested: usize) -> Option<PagePointer> {
+        'outer: for idx in 0..self.number_of_pages {
+            unsafe {
+                // Check if this page is free and also if we have enough pages left where we can check consecutiveness
+                if *self.metadata.add(idx) != PageStatus::Free
+                    || (idx + number_of_pages_requested) > self.number_of_pages
+                {
+                    continue;
+                }
+                for consecutive_idx in idx..(idx + number_of_pages_requested) {
+                    if *self.metadata.add(consecutive_idx) != PageStatus::Free {
+                        continue 'outer;
+                    }
+                }
+                // Got it! We have enough free consecutive pages. Mark the as used
+                for mark_idx in idx..(idx + number_of_pages_requested - 1) {
+                    *self.metadata.add(mark_idx) = PageStatus::Used;
+                }
+                *self.metadata.add(idx + number_of_pages_requested - 1) = PageStatus::Last;
+                let mut page_pointer = self.page_idx_to_page_pointer(idx);
+                page_pointer.zero();
+                return Some(page_pointer);
+            }
         }
-        Some(Page::new(page))
+        None
     }
 
-    fn dealloc(&mut self, page: Page) {
-        let mut free_page: NonNull<FreePage> = page.addr.cast();
+    fn dealloc(&self, page: PagePointer) {
+        let mut idx = self.page_pointer_to_page_idx(&page);
         unsafe {
-            free_page.as_mut().next = self.free_list;
-            self.free_list = Some(free_page);
+            while *self.metadata.add(idx) != PageStatus::Last {
+                *self.metadata.add(idx) = PageStatus::Free;
+                idx += 1;
+            }
+            *self.metadata.add(idx) = PageStatus::Free;
         }
     }
-}
 
-struct FreePage {
-    next: Option<NonNull<FreePage>>,
+    fn dump(&self) {
+        println!("###############");
+        println!("Page allocator dump");
+        println!("Metadata start:\t\t{:p}", self.metadata);
+        println!("Heap start:\t\t{:p}", self.heap);
+        println!("Number of pages:\t{}", self.number_of_pages);
+        for idx in 0..self.number_of_pages {
+            let status = unsafe {
+                match *self.metadata.add(idx) {
+                    PageStatus::Free => "F",
+                    PageStatus::Used => "U",
+                    PageStatus::Last => "L",
+                }
+            };
+            print!("{} ", status);
+
+            if (idx + 1) % 80 == 0 {
+                print!("\n");
+            }
+        }
+        println!("\n###############");
+    }
 }
 
 #[derive(Debug)]
-pub struct Page {
-    addr: NonNull<[u8; PAGE_SIZE]>,
+pub struct PagePointer {
+    addr: NonNull<Page>,
 }
 
-impl Page {
-    fn new(free_page: NonNull<FreePage>) -> Self {
-        let mut addr: NonNull<[u8; PAGE_SIZE]> = free_page.cast();
-        unsafe {
-            addr.as_mut().fill(0);
-        }
+impl PagePointer {
+    fn new(free_page: *mut Page) -> Self {
+        let addr = NonNull::new(free_page).unwrap();
         Self { addr }
     }
 
     pub fn addr(&self) -> NonNull<[u8; PAGE_SIZE]> {
         self.addr
+    }
+
+    pub fn zero(&mut self) {
+        unsafe {
+            self.addr.as_mut().fill(0);
+        }
     }
 }
 
@@ -93,12 +150,18 @@ pub fn init(heap_start: usize, heap_size: usize) {
     }
 }
 
-pub fn zalloc() -> Option<Page> {
-    unsafe { PAGE_ALLOCATOR.zalloc() }
+pub fn zalloc(number_of_pages: usize) -> Option<PagePointer> {
+    unsafe { PAGE_ALLOCATOR.zalloc(number_of_pages) }
 }
 
-pub fn dealloc(page: Page) {
+pub fn dealloc(page: PagePointer) {
     unsafe {
         PAGE_ALLOCATOR.dealloc(page);
+    }
+}
+
+pub fn dump() {
+    unsafe {
+        PAGE_ALLOCATOR.dump();
     }
 }
