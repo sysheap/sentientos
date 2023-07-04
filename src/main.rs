@@ -20,7 +20,9 @@ mod util;
 
 use core::panic::PanicInfo;
 
-// extern crate alloc;
+use alloc::vec::Vec;
+
+extern crate alloc;
 
 extern "C" {
     static HEAP_START: usize;
@@ -35,6 +37,7 @@ extern "C" fn kernel_init() {
     unsafe {
         println!("Initializing page allocator");
         page_allocator::init(HEAP_START, HEAP_SIZE);
+        heap::init();
     }
 
     page_tables::setup_kernel_identity_mapping();

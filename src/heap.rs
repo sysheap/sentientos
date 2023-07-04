@@ -1,6 +1,6 @@
 use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
-use crate::println;
+use crate::{page_allocator, println, util::align_up};
 
 const DELIMITER: &str = "######################################################";
 
@@ -28,12 +28,7 @@ impl FreeBlock {
     }
 }
 
-extern "C" {
-    static mut HEAP_START: usize;
-    static mut HEAP_SIZE: usize;
-}
-
-// #[global_allocator]
+#[global_allocator]
 static mut OS_HEAP: Heap = Heap::new();
 
 impl Heap {
@@ -193,11 +188,13 @@ pub fn dump() {
 }
 
 pub fn init() {
+    let heap_start = page_allocator::zalloc(1).unwrap();
     unsafe {
-        OS_HEAP.init(HEAP_START as *mut u8, HEAP_SIZE);
+        OS_HEAP.init(heap_start.addr().cast().as_ptr(), page_allocator::PAGE_SIZE);
         println!(
-            "Heap initialized! (Start: 0x{:x} Size: 0x{:x})",
-            HEAP_START, HEAP_SIZE
+            "Heap initialized! (Start: 0x{:p} Size: 0x{:x})\n",
+            heap_start.addr().as_ptr(),
+            page_allocator::PAGE_SIZE
         );
     }
 }
@@ -215,7 +212,24 @@ unsafe impl GlobalAlloc for Heap {
         );
         self.dump();
 
-        let ptr = self.alloc_impl(layout);
+        let mut ptr = self.alloc_impl(layout);
+
+        // If the heap is empty we try to allocate more from the page allocator
+        if ptr.is_null() {
+            println!("Try to allocate from page_allocator");
+
+            let number_of_pages =
+                align_up(size, page_allocator::PAGE_SIZE) / page_allocator::PAGE_SIZE;
+            let pages = match page_allocator::zalloc(number_of_pages) {
+                None => return ptr,
+                Some(pages) => pages,
+            };
+            let free_block: &mut FreeBlock = pages.addr().cast().as_mut();
+            free_block.next = None;
+            free_block.size = number_of_pages * page_allocator::PAGE_SIZE;
+            free_block.used = 1;
+            ptr = free_block.get_data_ptr();
+        }
 
         println!("AFTER ALLOC (received {:p})", ptr);
         self.dump();

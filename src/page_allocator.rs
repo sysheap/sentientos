@@ -2,7 +2,7 @@ use core::ptr::{null_mut, NonNull};
 
 use crate::{print, println, util::align_up};
 
-const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = 4096;
 type Page = [u8; PAGE_SIZE];
 
 #[repr(u8)]
@@ -45,6 +45,11 @@ impl PageAllocator {
                 *self.metadata.add(idx) = PageStatus::Free;
             }
         }
+
+        println!("Page allocator initalized");
+        println!("Metadata start:\t\t{:p}", self.metadata);
+        println!("Heap start:\t\t{:p}", self.heap);
+        println!("Number of pages:\t{}\n", self.number_of_pages);
     }
 
     fn page_idx_to_page_pointer(&self, page_index: usize) -> PagePointer {

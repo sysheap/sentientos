@@ -172,6 +172,8 @@ pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'
 }
 
 pub fn setup_kernel_identity_mapping() {
+    println!("Setup page tables identity mapping");
+
     extern "C" {
         static mut TEXT_START: usize;
         static mut TEXT_END: usize;
