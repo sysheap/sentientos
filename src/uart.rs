@@ -100,3 +100,7 @@ impl Write for Uart {
         Ok(())
     }
 }
+
+pub fn read() -> Option<u8> {
+    QEMU_UART.read()
+}

@@ -13,6 +13,7 @@ mod heap;
 mod mmio;
 mod page_allocator;
 mod page_tables;
+mod plic;
 mod println;
 mod trap;
 mod uart;
@@ -46,6 +47,8 @@ extern "C" fn kernel_init() {
 #[no_mangle]
 extern "C" fn kernel_main() {
     println!("kernel_main()");
+
+    plic::init_uart_interrupt();
 }
 
 #[panic_handler]

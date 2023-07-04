@@ -1,11 +1,56 @@
+use crate::{
+    plic::{self, InterruptSource},
+    print, println, uart,
+};
+
 #[no_mangle]
 extern "C" fn machine_mode_trap(mcause: usize, mtval: usize) {
-    panic!(
-        "Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
-        mcause,
-        get_reason(mcause),
-        mtval
-    );
+    let is_interrupt = (mcause >> 63) == 1;
+
+    if is_interrupt {
+        println!(
+            "Asynchronous Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
+            (mcause << 1) >> 1,
+            get_reason(mcause),
+            mtval
+        );
+        let mcause = (mcause << 1) >> 1;
+        match mcause {
+            11 => {
+                let plic_interrupt =
+                    plic::get_next_pending().expect("There should be a pending interrupt.");
+                assert!(plic_interrupt == InterruptSource::Uart);
+
+                let input = uart::read().expect("There should be input from the uart.");
+
+                match input {
+                    8 => {
+                        // This is a backspace, so we
+                        // essentially have to write a space and
+                        // backup again:
+                        print!("{} {}", 8 as char, 8 as char);
+                    }
+                    10 | 13 => {
+                        // Newline or carriage-return
+                        println!();
+                    }
+                    _ => {
+                        print!("{}", input as char);
+                    }
+                };
+
+                plic::complete_interrupt(plic_interrupt);
+            }
+            _ => panic!("Inavlid external interrupt"),
+        };
+    } else {
+        panic!(
+            "Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
+            mcause,
+            get_reason(mcause),
+            mtval
+        );
+    }
 }
 
 #[no_mangle]

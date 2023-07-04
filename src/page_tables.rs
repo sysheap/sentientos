@@ -1,7 +1,7 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull};
 
 use crate::{
-    page_allocator, println,
+    page_allocator, plic, println,
     uart::UART_BASE_ADDRESS,
     util::{get_bit, set_multiple_bits, set_or_clear_bit},
 };
@@ -202,6 +202,12 @@ pub fn setup_kernel_identity_mapping() {
                 UART_BASE_ADDRESS + 4096,
                 XWRMode::ReadWrite,
                 "UART",
+            ),
+            MappingInformation::new(
+                plic::PLIC_BASE,
+                plic::PLIC_BASE + plic::PLIC_SIZE,
+                XWRMode::ReadWrite,
+                "PLIC",
             ),
         ]
     };

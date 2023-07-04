@@ -21,4 +21,13 @@ impl<Size> MMIO<Size> {
     pub unsafe fn write(&self, value: Size) {
         self.address.write_volatile(value);
     }
+
+    pub fn add(&self, count: usize) -> Self {
+        unsafe {
+            Self {
+                address: self.address.add(count),
+                phantom: PhantomData,
+            }
+        }
+    }
 }
