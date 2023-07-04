@@ -20,8 +20,6 @@ mod util;
 
 use core::panic::PanicInfo;
 
-use alloc::vec::Vec;
-
 extern crate alloc;
 
 extern "C" {
