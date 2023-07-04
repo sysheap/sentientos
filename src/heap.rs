@@ -10,15 +10,12 @@ struct HeapInner {
 
 struct Heap {
     inner: RefCell<HeapInner>,
-    start_addr: *const u8,
-    size: usize,
 }
 
 #[repr(packed)]
 struct FreeBlock {
     next: Option<NonNull<FreeBlock>>,
     size: usize,
-    used: usize,
 }
 
 impl FreeBlock {
@@ -35,8 +32,6 @@ impl Heap {
     const fn new() -> Self {
         Self {
             inner: RefCell::new(HeapInner { free_list: None }),
-            start_addr: core::ptr::null(),
-            size: 0,
         }
     }
 
@@ -49,40 +44,51 @@ impl Heap {
 
         free_block.next = None;
         free_block.size = size;
-        free_block.used = 0;
 
         self.inner.borrow_mut().free_list = NonNull::new(free_block);
-        self.start_addr = align_start as *const u8;
-        self.size = size;
     }
 
     fn dump(&self) {
         println!("{}", DELIMITER);
-        println!("Heap DUMP");
-        println!("USED\t\tSTART\t\tEND\t\tSIZE");
+        println!("Heap DUMP of free blocks");
+        println!("START\t\t\tEND\t\t\tSIZE");
 
-        let mut current_block = self.start_addr as *const FreeBlock;
+        let mut free_block_holder = self.inner.borrow().free_list;
 
         unsafe {
-            while (current_block as usize) < (self.start_addr as usize + self.size) {
-                let start_addr = current_block;
-                let size = (*current_block).size;
-                let used = if (*current_block).used == 0 {
-                    "NO"
-                } else {
-                    "YES"
-                };
+            while let Some(free_block) = free_block_holder {
+                let free_block_addr = free_block.as_ptr();
+                let free_block = free_block.as_ref();
+                let size = free_block.size;
 
                 println!(
-                    "{}\t\t{:p}\t0x{:x}\t0x{:x}",
-                    used,
-                    start_addr,
-                    start_addr as usize + size,
+                    "{:p}\t\t{:p}\t\t0x{:x}",
+                    free_block_addr,
+                    (free_block_addr.byte_add(size)),
                     size
                 );
 
-                current_block = current_block.byte_add(size);
+                free_block_holder = free_block.next;
             }
+            // while (current_block as usize) < (self.start_addr as usize + self.size) {
+            //     let start_addr = current_block;
+            //     let size = (*current_block).size;
+            //     let used = if (*current_block).used == 0 {
+            //         "NO"
+            //     } else {
+            //         "YES"
+            //     };
+
+            //     println!(
+            //         "{}\t\t{:p}\t0x{:x}\t0x{:x}",
+            //         used,
+            //         start_addr,
+            //         start_addr as usize + size,
+            //         size
+            //     );
+
+            //     current_block = current_block.byte_add(size);
+            // }
         }
         println!("{}", DELIMITER);
     }
@@ -124,8 +130,6 @@ impl Heap {
         let free_block_size = free_block_ref.size;
         return match size.cmp(&free_block_size) {
             Ordering::Equal => {
-                free_block_ref.used = 1;
-
                 match previous_free_block {
                     None => self.inner.borrow_mut().free_list = free_block_ref.next,
                     Some(mut previous_free_block) => {
@@ -139,11 +143,9 @@ impl Heap {
             }
             Ordering::Less => {
                 let new_block_size = free_block_ref.size - size;
-                free_block_ref.used = 1;
                 free_block_ref.size = size;
 
                 let new_free_block = &mut *free_block.as_ptr().byte_add(size);
-                new_free_block.used = 0;
                 new_free_block.size = new_block_size;
                 new_free_block.next = free_block_ref.next;
 
@@ -166,7 +168,6 @@ impl Heap {
         let freeblock = &mut *(ptr.sub(core::mem::size_of::<FreeBlock>()) as *mut FreeBlock);
 
         freeblock.next = self.inner.borrow().free_list;
-        freeblock.used = 0;
 
         self.inner.borrow_mut().free_list = NonNull::new(freeblock);
     }
@@ -227,7 +228,6 @@ unsafe impl GlobalAlloc for Heap {
             let free_block: &mut FreeBlock = pages.addr().cast().as_mut();
             free_block.next = None;
             free_block.size = number_of_pages * page_allocator::PAGE_SIZE;
-            free_block.used = 1;
             ptr = free_block.get_data_ptr();
         }
 
