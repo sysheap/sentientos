@@ -2,6 +2,8 @@ use crate::{print, println};
 
 pub mod qemu_exit;
 
+// Inspired by https://os.phil-opp.com/testing/
+
 pub trait Testable {
     fn run(&self);
 }
