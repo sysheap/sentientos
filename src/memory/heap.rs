@@ -1,6 +1,9 @@
 use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
-use crate::{klibc::util::align_up, println};
+use crate::{
+    klibc::{util::align_up, Mutex},
+    println,
+};
 
 use super::page_allocator;
 
@@ -28,7 +31,7 @@ impl FreeBlock {
 }
 
 #[global_allocator]
-static mut OS_HEAP: Heap = Heap::new();
+static OS_HEAP: Mutex<Heap> = Mutex::new(Heap::new());
 
 impl Heap {
     const fn new() -> Self {
@@ -166,37 +169,34 @@ fn align_to(value: usize) -> usize {
 }
 
 pub fn dump() {
-    unsafe {
-        OS_HEAP.dump();
-    }
+    OS_HEAP.lock().dump();
 }
 
 pub fn init() {
     let heap_start = page_allocator::zalloc(1).unwrap();
-    unsafe {
-        OS_HEAP.init(heap_start.addr().cast().as_ptr(), page_allocator::PAGE_SIZE);
-        println!(
-            "Heap initialized! (Start: 0x{:p} Size: 0x{:x})\n",
-            heap_start.addr().as_ptr(),
-            page_allocator::PAGE_SIZE
-        );
-    }
+
+    OS_HEAP
+        .lock()
+        .init(heap_start.addr().cast().as_ptr(), page_allocator::PAGE_SIZE);
+    println!(
+        "Heap initialized! (Start: 0x{:p} Size: 0x{:x})\n",
+        heap_start.addr().as_ptr(),
+        page_allocator::PAGE_SIZE
+    );
 }
 
-// TODO: This is unsafe! Our heap is not thread safe yet.
-unsafe impl Sync for Heap {}
-
-unsafe impl GlobalAlloc for Heap {
+unsafe impl GlobalAlloc for Mutex<Heap> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let heap = self.lock();
         let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
         println!(
             "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
             size,
             layout.size()
         );
-        self.dump();
+        heap.dump();
 
-        let mut ptr = self.alloc_impl(layout);
+        let mut ptr = heap.alloc_impl(layout);
 
         // If the heap is empty we try to allocate more from the page allocator
         if ptr.is_null() {
@@ -215,16 +215,17 @@ unsafe impl GlobalAlloc for Heap {
         }
 
         println!("AFTER ALLOC (received {:p})", ptr);
-        self.dump();
+        heap.dump();
 
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        let heap = self.lock();
         println!("BEFORE DEALLOC: {:p}", ptr);
-        self.dump();
-        self.dealloc_impl(ptr, layout);
+        heap.dump();
+        heap.dealloc_impl(ptr, layout);
         println!("AFTER DEALLOC");
-        self.dump();
+        heap.dump();
     }
 }

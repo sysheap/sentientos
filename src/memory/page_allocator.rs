@@ -1,6 +1,9 @@
 use core::ptr::{null_mut, NonNull};
 
-use crate::{klibc::util::align_up, print, println};
+use crate::{
+    klibc::{util::align_up, Mutex},
+    print, println,
+};
 
 pub const PAGE_SIZE: usize = 4096;
 type Page = [u8; PAGE_SIZE];
@@ -147,26 +150,20 @@ impl PagePointer {
     }
 }
 
-static mut PAGE_ALLOCATOR: PageAllocator = PageAllocator::new();
+static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
 pub fn init(heap_start: usize, heap_size: usize) {
-    unsafe {
-        PAGE_ALLOCATOR.init(heap_start, heap_size);
-    }
+    PAGE_ALLOCATOR.lock().init(heap_start, heap_size);
 }
 
 pub fn zalloc(number_of_pages: usize) -> Option<PagePointer> {
-    unsafe { PAGE_ALLOCATOR.zalloc(number_of_pages) }
+    PAGE_ALLOCATOR.lock().zalloc(number_of_pages)
 }
 
 pub fn dealloc(page: PagePointer) {
-    unsafe {
-        PAGE_ALLOCATOR.dealloc(page);
-    }
+    PAGE_ALLOCATOR.lock().dealloc(page);
 }
 
 pub fn dump() {
-    unsafe {
-        PAGE_ALLOCATOR.dump();
-    }
+    PAGE_ALLOCATOR.lock().dump();
 }

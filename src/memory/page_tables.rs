@@ -3,13 +3,16 @@ use core::{arch::asm, fmt::Debug, ptr::NonNull};
 use crate::{
     interrupts::plic,
     io::uart::UART_BASE_ADDRESS,
-    klibc::util::{get_bit, set_multiple_bits, set_or_clear_bit},
+    klibc::{
+        util::{get_bit, set_multiple_bits, set_or_clear_bit},
+        Mutex,
+    },
     println,
 };
 
 use super::page_allocator;
 
-static mut CURRENT_PAGE_TABLE: Option<&'static PageTable> = None;
+static CURRENT_PAGE_TABLE: Mutex<Option<&'static PageTable>> = Mutex::new(None);
 
 #[repr(transparent)]
 pub struct PageTable([PageTableEntry; 512]);
@@ -238,7 +241,7 @@ fn activate_page_table(page_table: &'static PageTable) -> Option<&'static PageTa
         asm!("sfence.vma");
     }
 
-    let old_page_table = unsafe { CURRENT_PAGE_TABLE.replace(page_table) };
+    let old_page_table = CURRENT_PAGE_TABLE.lock().replace(page_table);
 
     println!("Done!\n");
 
