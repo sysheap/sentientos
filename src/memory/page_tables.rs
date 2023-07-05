@@ -1,10 +1,13 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull};
 
 use crate::{
-    page_allocator, plic, println,
-    uart::UART_BASE_ADDRESS,
-    util::{get_bit, set_multiple_bits, set_or_clear_bit},
+    interrupts::plic,
+    io::uart::UART_BASE_ADDRESS,
+    klibc::util::{get_bit, set_multiple_bits, set_or_clear_bit},
+    println,
 };
+
+use super::page_allocator;
 
 static mut CURRENT_PAGE_TABLE: Option<&'static PageTable> = None;
 

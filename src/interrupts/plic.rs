@@ -1,4 +1,4 @@
-use crate::{mmio::MMIO, println};
+use crate::{klibc::MMIO, println};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x3FFFFFC;

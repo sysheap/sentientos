@@ -1,6 +1,6 @@
 use core::ptr::{null_mut, NonNull};
 
-use crate::{print, println, util::align_up};
+use crate::{klibc::util::align_up, print, println};
 
 pub const PAGE_SIZE: usize = 4096;
 type Page = [u8; PAGE_SIZE];

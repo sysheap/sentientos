@@ -9,16 +9,11 @@
 #![feature(core_intrinsics)]
 
 mod asm;
-mod heap;
 mod init;
-mod mmio;
-mod page_allocator;
-mod page_tables;
+mod interrupts;
+mod io;
+mod klibc;
+mod memory;
 mod panic;
-mod plic;
-mod println;
-mod trap;
-mod uart;
-mod util;
 
 extern crate alloc;

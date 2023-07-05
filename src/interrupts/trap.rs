@@ -1,6 +1,7 @@
 use crate::{
-    plic::{self, InterruptSource},
-    print, println, uart,
+    interrupts::plic::{self, InterruptSource},
+    io::uart,
+    print, println,
 };
 
 #[repr(transparent)]

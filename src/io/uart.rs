@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use crate::mmio::MMIO;
+use crate::klibc::MMIO;
 
 pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 

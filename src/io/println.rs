@@ -1,10 +1,10 @@
 use core::fmt;
 
-use crate::uart;
+use crate::io::uart;
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => ($crate::println::_print(format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::io::println::_print(format_args!($($arg)*)));
 }
 
 #[macro_export]

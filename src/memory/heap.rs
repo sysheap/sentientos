@@ -1,6 +1,8 @@
 use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
-use crate::{page_allocator, println, util::align_up};
+use crate::{klibc::util::align_up, println};
+
+use super::page_allocator;
 
 const DELIMITER: &str = "######################################################";
 

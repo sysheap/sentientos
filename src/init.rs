@@ -1,4 +1,9 @@
-use crate::{heap, page_allocator, page_tables, plic, println, uart};
+use crate::{
+    interrupts::plic,
+    io::uart,
+    memory::{heap, page_allocator, page_tables},
+    println,
+};
 
 extern "C" {
     static HEAP_START: usize;
