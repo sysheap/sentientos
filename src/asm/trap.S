@@ -3,7 +3,6 @@
 .set NUM_GP_REGS, 32  # Number of registers per context
 .set NUM_FP_REGS, 32
 .set REG_SIZE, 8   # Register size (in bytes)
-.set MAX_CPUS, 8   # Maximum number of CPUs
 
 # Use macros for saving and restoring multiple registers
 .macro save_gp i, basereg=t6
