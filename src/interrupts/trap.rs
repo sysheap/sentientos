@@ -4,6 +4,21 @@ use crate::{
     print, println,
 };
 
+#[repr(packed)]
+pub struct TrapFrame {
+    registers: [usize; 32],
+    floating_registers: [usize; 32],
+}
+
+impl TrapFrame {
+    pub const fn zero() -> Self {
+        Self {
+            registers: [0; 32],
+            floating_registers: [0; 32],
+        }
+    }
+}
+
 #[repr(transparent)]
 struct MCause(usize);
 
@@ -65,13 +80,14 @@ impl MCause {
 }
 
 #[no_mangle]
-extern "C" fn machine_mode_trap(mcause: MCause, mtval: usize) {
+extern "C" fn machine_mode_trap(mcause: MCause, mtval: usize, mepc: usize, trap_fram: &TrapFrame) {
     if mcause.is_asynchronous() {
         println!(
-            "Asynchronous Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
+            "Asynchronous Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x}) (mepc: 0x{:x})",
             mcause.get_exception_code(),
             mcause.get_reason(),
-            mtval
+            mtval,
+            mepc
         );
         match mcause.get_exception_code() {
             11 => {
@@ -103,10 +119,11 @@ extern "C" fn machine_mode_trap(mcause: MCause, mtval: usize) {
         };
     } else {
         panic!(
-            "Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
+            "Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x}) (mepc: 0x{:x})",
             mcause.get_exception_code(),
             mcause.get_reason(),
-            mtval
+            mtval,
+            mepc
         );
     }
 }

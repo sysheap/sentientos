@@ -47,6 +47,7 @@ extern "C" fn kernel_init() {
     }
 
     page_tables::setup_kernel_identity_mapping();
+    interrupts::set_mscratch_to_kernel_trap_frame();
 
     println!("kernel_init() completed!");
 }
