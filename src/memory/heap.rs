@@ -72,25 +72,6 @@ impl Heap {
 
                 free_block_holder = free_block.next;
             }
-            // while (current_block as usize) < (self.start_addr as usize + self.size) {
-            //     let start_addr = current_block;
-            //     let size = (*current_block).size;
-            //     let used = if (*current_block).used == 0 {
-            //         "NO"
-            //     } else {
-            //         "YES"
-            //     };
-
-            //     println!(
-            //         "{}\t\t{:p}\t0x{:x}\t0x{:x}",
-            //         used,
-            //         start_addr,
-            //         start_addr as usize + size,
-            //         size
-            //     );
-
-            //     current_block = current_block.byte_add(size);
-            // }
         }
         println!("{}", DELIMITER);
     }
