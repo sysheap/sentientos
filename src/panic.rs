@@ -1,6 +1,6 @@
 use core::panic::PanicInfo;
 
-use crate::println;
+use crate::{println, test};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -11,5 +11,6 @@ fn panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
+    test::qemu_exit::exit_failure(1);
     loop {}
 }
