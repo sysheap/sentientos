@@ -1,1 +1,0 @@
-* TrapFrame -> Safe registers on interrupt
