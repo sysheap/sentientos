@@ -7,45 +7,17 @@ clean:
 _build-no-clippy:
     cargo build
 
+runCommand := "cargo run"
+debugCommand := "cargo run -- -s -S"
+
 run: _build-no-clippy
-    qemu-system-riscv64 \
-        -machine virt -cpu rv64  \
-        -smp 1 \
-        -m 128M \
-        -nographic -serial mon:stdio \
-        -bios none \
-        -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros
+    {{runCommand}}
 
 vscode: _build-no-clippy
-    qemu-system-riscv64 \
-        -machine virt -cpu rv64  \
-        -smp 1 \
-        -m 128M \
-        -nographic -serial mon:stdio \
-        -bios none \
-        -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros \
-        -s -S
+    {{debugCommand}}
 
 debug: _build-no-clippy
-    tmux new-session -d 'qemu-system-riscv64 \
-        -machine virt -cpu rv64 \
-        -d int,cpu_reset,guest_errors \
-        -D log.txt \
-        -smp 1 \
-        -m 128M \
-        -nographic -serial mon:stdio \
-        -bios none \
-        -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros \
-        -s -S' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "c"' \; attach
+    tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "c"' \; attach
 
 debugf FUNC: _build-no-clippy
-    tmux new-session -d 'qemu-system-riscv64 \
-        -machine virt -cpu rv64 \
-        -d int,cpu_reset,guest_errors \
-        -D log.txt \
-        -smp 1 \
-        -m 128M \
-        -nographic -serial mon:stdio \
-        -bios none \
-        -kernel ./target/riscv64gc-unknown-none-elf/debug/yaros \
-        -s -S' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "break {{FUNC}}" -ex "c"' \; attach
+    tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "break {{FUNC}}" -ex "c"' \; attach
