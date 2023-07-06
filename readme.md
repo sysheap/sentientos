@@ -1,4 +1,5 @@
 # YaROS (Yet another RISC-V Operating System)
+[![Build](https://github.com/hieronymusma/yaros/actions/workflows/build.yml/badge.svg)](https://github.com/hieronymusma/yaros/actions/workflows/build.yml)  
 This projects makes my dream come true - write my own operating system. I'm doing this mostly for fun, so don't expect a fully-fledged operating system on basis of the RISC-V architecture.
 ## Status
 Implemented
