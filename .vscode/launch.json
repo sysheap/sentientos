@@ -8,7 +8,7 @@
             "name": "(gdb) Attach",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/target/riscv64gc-unknown-none-elf/debug/yaros",
+            "program": "${workspaceRoot}/target/riscv64gc-unknown-none-elf/debug/kernel",
             "cwd": ".",
             "MIMode": "gdb",
             "setupCommands": [

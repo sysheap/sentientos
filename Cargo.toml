@@ -6,12 +6,10 @@ edition = "2021"
 [workspace]
 members = [
     "kernel",
+    "userspace"
 ]
 
 [[bin]]
 name = "kernel"
 path = "kernel/src/main.rs"
 test = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[dependencies]

@@ -3,16 +3,5 @@
 version = 3
 
 [[package]]
-name = "kernel"
-version = "0.1.0"
-dependencies = [
- "userspace",
-]
-
-[[package]]
 name = "userspace"
-version = "0.1.0"
-
-[[package]]
-name = "yaros"
 version = "0.1.0"
