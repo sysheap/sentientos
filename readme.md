@@ -19,7 +19,7 @@ TODO
 ## How do I run it?
 To run the operating system you need to have the following tools installed:
 * Rust
-* Just (justr a command runner)
+* Just (just a command runner)
 * qemu-system-riscv64  
 
 To install them on Ubuntu you can execute the following commands
