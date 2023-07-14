@@ -16,9 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: cargo install just
     - name: Build
-      run: cargo build --verbose
+      run: just build
     - name: Install QEMU
       run: sudo apt install qemu-system-riscv64
     - name: Run tests
-      run: cargo test --verbose
+      run: just test
