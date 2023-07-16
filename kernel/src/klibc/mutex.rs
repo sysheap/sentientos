@@ -56,23 +56,30 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
     }
 }
 
-#[test_case]
-fn check_lock_and_unlock() {
-    let mutex = Mutex::new(42);
-    assert_eq!(mutex.locked.load(Ordering::Acquire), false);
-    {
+#[cfg(test)]
+mod test {
+    use core::sync::atomic::Ordering;
+
+    use crate::klibc::Mutex;
+
+    #[test_case]
+    fn check_lock_and_unlock() {
+        let mutex = Mutex::new(42);
+        assert_eq!(mutex.locked.load(Ordering::Acquire), false);
+        {
+            let mut locked = mutex.lock();
+            assert_eq!(mutex.locked.load(Ordering::Acquire), true);
+            *locked = 1;
+        }
+        assert_eq!(mutex.locked.load(Ordering::Acquire), false);
+        unsafe {
+            assert_eq!(*mutex.data.get(), 1);
+        }
         let mut locked = mutex.lock();
+        *locked = 42;
         assert_eq!(mutex.locked.load(Ordering::Acquire), true);
-        *locked = 1;
-    }
-    assert_eq!(mutex.locked.load(Ordering::Acquire), false);
-    unsafe {
-        assert_eq!(*mutex.data.get(), 1);
-    }
-    let mut locked = mutex.lock();
-    *locked = 42;
-    assert_eq!(mutex.locked.load(Ordering::Acquire), true);
-    unsafe {
-        assert_eq!(*mutex.data.get(), 42);
+        unsafe {
+            assert_eq!(*mutex.data.get(), 42);
+        }
     }
 }

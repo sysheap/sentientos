@@ -1,3 +1,5 @@
+pub mod elf;
+pub mod macros;
 pub mod mmio;
 pub mod mutex;
 pub mod util;
