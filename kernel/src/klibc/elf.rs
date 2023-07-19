@@ -43,7 +43,7 @@ enum OsAbi {
 /// Warning: This only works for little endian at the moment.
 #[allow(non_camel_case_types)]
 #[repr(u16)]
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq)]
 enum FileType {
     None = 0x0,
     RelocatableFile = 0x1,
@@ -58,7 +58,7 @@ enum FileType {
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u16)]
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq)]
 enum Machine {
     NoSpecificInstructionSet = 0x0,
     AT_T_WE_32100 = 0x01,
@@ -156,6 +156,52 @@ struct ElfHeader {
 
 static_assert_size!(ElfHeader, 64);
 
+#[repr(u32)]
+#[derive(Debug, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum ProgramHeaderType {
+    PT_NULL = 0x0,
+    PT_LOAD = 0x1,
+    PT_DYNAMIC = 0x2,
+    PT_INTERP = 0x3,
+    PT_NOTE = 0x4,
+    PT_SLIB = 0x5,
+    PT_PHDR = 0x6,
+    PT_TLS = 0x7,
+    PT_LOOS = 0x60000000,
+    PT_HIOS = 0x6FFFFFFF,
+    PT_LOPROC = 0x70000000,
+    PT_HIPROC = 0x7FFFFFFF,
+}
+
+#[repr(u32)]
+#[derive(Debug, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum ProgramHeaderFlags {
+    X = 0x1,
+    W = 0x2,
+    WX = 0x3,
+    R = 0x4,
+    RX = 0x5,
+    RW = 0x6,
+    RWX = 0x7,
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq)]
+pub struct ElfProgramHeaderEntry {
+    header_type: ProgramHeaderType,
+    flags: ProgramHeaderFlags,
+    offset_in_file: u64,
+    virtual_address: u64,
+    physical_address: u64,
+    file_size: u64,
+    memory_size: u64,
+    alignment: u64,
+}
+
+static_assert_size!(ElfProgramHeaderEntry, 0x38);
+
 #[derive(Debug)]
 pub enum ElfParseErrors {
     FileTooShort,
@@ -187,6 +233,31 @@ impl<'a> ElfFile<'a> {
         assert!(self.data.len() >= core::mem::size_of::<ElfHeader>());
         // Safe because we only had out ElfFile if it is checked for consistency
         unsafe { &*(self.data.as_ptr() as *const ElfHeader) }
+    }
+
+    fn get_program_headers(&self) -> &[ElfProgramHeaderEntry] {
+        let header = self.get_header();
+        let number_of_entries = header.number_of_entries_in_program_header;
+        let position_program_header = header.start_program_header;
+        let entry_size = header.size_program_header_entry;
+
+        assert_eq!(
+            entry_size as usize,
+            core::mem::size_of::<ElfProgramHeaderEntry>()
+        );
+        assert!(
+            position_program_header as usize + (entry_size as usize * number_of_entries as usize)
+                <= self.data.len()
+        );
+
+        unsafe {
+            let program_header_pointer = self
+                .data
+                .as_ptr()
+                .byte_add(position_program_header as usize)
+                as *const ElfProgramHeaderEntry;
+            core::slice::from_raw_parts(program_header_pointer, number_of_entries as usize)
+        }
     }
 
     fn check_validity(data: &[u8]) -> Option<ElfParseErrors> {
@@ -242,7 +313,9 @@ impl<'a> ElfFile<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::ElfFile;
+    use crate::klibc::elf::ProgramHeaderType;
+
+    use super::{ElfFile, ElfProgramHeaderEntry, ProgramHeaderFlags};
 
     const TEST_ELF_FILE: &[u8] = include_bytes!("../test/test_data/elf/test.elf");
 
@@ -264,5 +337,57 @@ mod test {
         assert_eq!(header.size_program_header_entry, 56);
         assert_eq!(header.size_section_header_entry, 64);
         assert_eq!(header.flags, 0x5);
+    }
+
+    #[test_case]
+    fn check_program_header_values() {
+        let elf = ElfFile::parse(TEST_ELF_FILE).expect("Elf file must be parsable");
+        let program_headers = elf.get_program_headers();
+
+        assert_eq!(program_headers.len(), 4);
+
+        assert_eq!(
+            program_headers[0],
+            ElfProgramHeaderEntry {
+                header_type: ProgramHeaderType::PT_LOAD,
+                flags: ProgramHeaderFlags::RX,
+                offset_in_file: 0x1000,
+                virtual_address: 0x1000,
+                physical_address: 0x1000,
+                file_size: 0xba,
+                memory_size: 0xba,
+                alignment: 0x1000,
+            }
+        );
+
+        assert_eq!(
+            program_headers[1],
+            ElfProgramHeaderEntry {
+                header_type: ProgramHeaderType::PT_LOAD,
+                flags: ProgramHeaderFlags::R,
+                offset_in_file: 0x10c0,
+                virtual_address: 0x10c0,
+                physical_address: 0x10c0,
+                file_size: 0xf0,
+                memory_size: 0xf0,
+                alignment: 0x1000,
+            }
+        );
+
+        assert_eq!(
+            program_headers[2],
+            ElfProgramHeaderEntry {
+                header_type: ProgramHeaderType::PT_LOAD,
+                flags: ProgramHeaderFlags::RW,
+                offset_in_file: 0x11b0,
+                virtual_address: 0x11b0,
+                physical_address: 0x11b0,
+                file_size: 0x3a0,
+                memory_size: 0x3a0,
+                alignment: 0x1000,
+            }
+        );
+
+        // The fourth element is GNU_STACK. We don't need it, therefore we don't check for it here.
     }
 }
