@@ -2,24 +2,42 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "cargo",
-			"command": "run",
+			"type": "shell",
+			"command": "just run-vscode",
 			"isBackground": true,
-			"args": ["--", "-s", "-S"],
 			"problemMatcher": [
 				{
 					"owner": "rustc",
 					"pattern": {
-						"regexp": "error: could not compile `yaros`"
+						"regexp": "could not compile"
 					},
 					"background": {
 						"activeOnStart": true,
-						"beginsPattern": "Compiling yaros",
-						"endsPattern": "Finished dev"
+						"beginsPattern": "NONEMPTY",
+						"endsPattern": "DONE"
 					}
 				}
 			],
 			"label": "rust: cargo run -- -s -S",
-		}
+		},
+		{
+			"type": "shell",
+			"command": "just test-vscode",
+			"isBackground": true,
+			"problemMatcher": [
+				{
+					"owner": "rustc",
+					"pattern": {
+						"regexp": "could not compile"
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "NONEMPTY",
+						"endsPattern": "DONE"
+					}
+				}
+			],
+			"label": "rust: cargo test -- -s -S",
+		},
 	]
 }
