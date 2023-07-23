@@ -11,10 +11,15 @@
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use alloc::rc::Rc;
+
 use crate::{
     interrupts::plic,
     io::uart,
-    memory::{heap, page_allocator, page_tables},
+    memory::{
+        heap, page_allocator,
+        page_tables::{self, RootPageTableHolder},
+    },
 };
 
 mod asm;
@@ -47,7 +52,7 @@ extern "C" fn kernel_init() {
         heap::init();
     }
 
-    page_tables::setup_kernel_identity_mapping();
+    page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
     interrupts::set_mscratch_to_kernel_trap_frame();
 
     println!("kernel_init() completed!");

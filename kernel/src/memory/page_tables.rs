@@ -1,5 +1,7 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull};
 
+use alloc::rc::Rc;
+
 use crate::{
     interrupts::plic,
     io::uart::UART_BASE_ADDRESS,
@@ -7,12 +9,140 @@ use crate::{
         util::{get_bit, set_multiple_bits, set_or_clear_bit},
         Mutex,
     },
+    memory::page_allocator::PAGE_SIZE,
     println,
 };
 
 use super::page_allocator;
 
-static CURRENT_PAGE_TABLE: Mutex<Option<&'static PageTable>> = Mutex::new(None);
+static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
+
+pub struct RootPageTableHolder(Mutex<&'static mut PageTable>);
+
+impl RootPageTableHolder {
+    pub fn new_with_kernel_mapping() -> Self {
+        let root_page_table_holder = Self(Mutex::new(PageTable::new()));
+
+        extern "C" {
+            static mut TEXT_START: usize;
+            static mut TEXT_END: usize;
+            static mut RODATA_START: usize;
+            static mut RODATA_END: usize;
+            static mut DATA_START: usize;
+            static mut DATA_END: usize;
+
+            static mut HEAP_START: usize;
+            static mut HEAP_SIZE: usize;
+        }
+
+        unsafe {
+            root_page_table_holder.map_identity(
+                TEXT_START,
+                TEXT_END - TEXT_START,
+                XWRMode::ReadExecute,
+                "TEXT",
+            );
+
+            root_page_table_holder.map_identity(
+                RODATA_START,
+                RODATA_END - RODATA_START,
+                XWRMode::ReadOnly,
+                "RODATA",
+            );
+
+            root_page_table_holder.map_identity(
+                DATA_START,
+                DATA_END - DATA_START,
+                XWRMode::ReadWrite,
+                "DATA",
+            );
+
+            root_page_table_holder.map_identity(HEAP_START, HEAP_SIZE, XWRMode::ReadWrite, "HEAP");
+
+            root_page_table_holder.map_identity(
+                UART_BASE_ADDRESS,
+                PAGE_SIZE,
+                XWRMode::ReadWrite,
+                "UART",
+            );
+
+            root_page_table_holder.map_identity(
+                plic::PLIC_BASE,
+                plic::PLIC_SIZE,
+                XWRMode::ReadWrite,
+                "PLIC",
+            );
+        }
+
+        root_page_table_holder
+    }
+
+    fn map(
+        &self,
+        virtual_address_start: usize,
+        physical_address_start: usize,
+        size: usize,
+        privileges: XWRMode,
+        name: &str,
+    ) {
+        println!(
+            "Map {}\t{:#010x} -> {:#010x} (Size: {:#010x}) ({:?})",
+            name, virtual_address_start, physical_address_start, size, privileges
+        );
+
+        assert_eq!(virtual_address_start % PAGE_SIZE, 0);
+        assert_eq!(physical_address_start % PAGE_SIZE, 0);
+        assert_eq!(size % PAGE_SIZE, 0);
+
+        let mut root_page_table = self.0.lock();
+
+        for offset in (0..size).step_by(PAGE_SIZE) {
+            let current_virtual_address = virtual_address_start + offset;
+            let current_physical_address = physical_address_start + offset;
+
+            let first_level_entry =
+                root_page_table.get_entry_for_virtual_address(current_virtual_address, 2);
+            if first_level_entry.get_physical_address() == 0 {
+                let new_page_table = PageTable::new();
+                first_level_entry.set_physical_address(new_page_table.get_physical_address());
+                first_level_entry.set_validity(true);
+            }
+
+            let second_level_entry = first_level_entry
+                .get_target_page_table()
+                .get_entry_for_virtual_address(current_virtual_address, 1);
+            if second_level_entry.get_physical_address() == 0 {
+                let new_page_table = PageTable::new();
+                second_level_entry.set_physical_address(new_page_table.get_physical_address());
+                second_level_entry.set_validity(true);
+            }
+
+            let third_level_entry = second_level_entry
+                .get_target_page_table()
+                .get_entry_for_virtual_address(current_virtual_address, 0);
+
+            third_level_entry.set_xwr_mode(privileges);
+            third_level_entry.set_validity(true);
+            third_level_entry.set_physical_address(current_physical_address);
+        }
+    }
+
+    fn map_identity(
+        &self,
+        virtual_address_start: usize,
+        size: usize,
+        privileges: XWRMode,
+        name: &str,
+    ) {
+        self.map(
+            virtual_address_start,
+            virtual_address_start,
+            size,
+            privileges,
+            name,
+        );
+    }
+}
 
 #[repr(transparent)]
 pub struct PageTable([PageTableEntry; 512]);
@@ -35,8 +165,8 @@ impl PageTable {
         &mut self.0[index]
     }
 
-    fn get_physical_address(&self) -> u64 {
-        self as *const Self as u64
+    fn get_physical_address(&self) -> usize {
+        self as *const Self as usize
     }
 }
 
@@ -82,7 +212,7 @@ impl PageTableEntry {
         set_multiple_bits(&mut self.0, mode as u8, 3, PageTableEntry::READ_BIT_POS);
     }
 
-    fn set_physical_address(&mut self, address: u64) {
+    fn set_physical_address(&mut self, address: usize) {
         set_multiple_bits(
             &mut self.0,
             address >> 12,
@@ -106,128 +236,9 @@ impl PageTableEntry {
     }
 }
 
-pub struct MappingInformation {
-    start_address: usize,
-    end_address: usize,
-    privileges: XWRMode,
-    name: &'static str,
-}
+pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
+    let page_table_address = page_table_holder.0.lock().get_physical_address();
 
-impl MappingInformation {
-    pub fn new(
-        start_address: usize,
-        end_address: usize,
-        privileges: XWRMode,
-        name: &'static str,
-    ) -> Self {
-        assert!(end_address > start_address);
-        Self {
-            start_address,
-            end_address,
-            privileges,
-            name,
-        }
-    }
-}
-
-impl Debug for MappingInformation {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "Mapping {}:\t0x{:x}-0x{:x} ({:?})",
-            self.name, self.start_address, self.end_address, self.privileges
-        )
-    }
-}
-
-pub fn create_identity_mapping(mapping_information: &[MappingInformation]) -> &'static PageTable {
-    let root_page_table = PageTable::new();
-
-    for mapping in mapping_information {
-        println!("{:?}", mapping);
-        assert!(mapping.start_address % 4096 == 0);
-        for address in (mapping.start_address..mapping.end_address).step_by(4096) {
-            // println!("Map address 0x{:x}", address);
-            let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
-            if first_level_entry.get_physical_address() == 0 {
-                let new_page_table = PageTable::new();
-                first_level_entry.set_physical_address(new_page_table.get_physical_address());
-                first_level_entry.set_validity(true);
-            }
-
-            let second_level_entry = first_level_entry
-                .get_target_page_table()
-                .get_entry_for_virtual_address(address, 1);
-            if second_level_entry.get_physical_address() == 0 {
-                let new_page_table = PageTable::new();
-                second_level_entry.set_physical_address(new_page_table.get_physical_address());
-                second_level_entry.set_validity(true);
-            }
-
-            let third_level_entry = second_level_entry
-                .get_target_page_table()
-                .get_entry_for_virtual_address(address, 0);
-
-            third_level_entry.set_xwr_mode(mapping.privileges);
-            third_level_entry.set_validity(true);
-            third_level_entry.set_physical_address(address as u64);
-        }
-    }
-
-    root_page_table
-}
-
-pub fn setup_kernel_identity_mapping() {
-    println!("Setup page tables identity mapping");
-
-    extern "C" {
-        static mut TEXT_START: usize;
-        static mut TEXT_END: usize;
-        static mut RODATA_START: usize;
-        static mut RODATA_END: usize;
-        static mut DATA_START: usize;
-        static mut DATA_END: usize;
-
-        static mut HEAP_START: usize;
-        static mut HEAP_SIZE: usize;
-    }
-
-    let mapping_information: &[MappingInformation] = unsafe {
-        &[
-            MappingInformation::new(TEXT_START, TEXT_END, XWRMode::ReadExecute, "TEXT"),
-            MappingInformation::new(RODATA_START, RODATA_END, XWRMode::ReadOnly, "RODATA"),
-            MappingInformation::new(DATA_START, DATA_END, XWRMode::ReadWrite, "DATA"),
-            MappingInformation::new(
-                HEAP_START,
-                HEAP_START + HEAP_SIZE,
-                XWRMode::ReadWrite,
-                "HEAP",
-            ),
-            MappingInformation::new(
-                UART_BASE_ADDRESS,
-                UART_BASE_ADDRESS + 4096,
-                XWRMode::ReadWrite,
-                "UART",
-            ),
-            MappingInformation::new(
-                plic::PLIC_BASE,
-                plic::PLIC_BASE + plic::PLIC_SIZE,
-                XWRMode::ReadWrite,
-                "PLIC",
-            ),
-        ]
-    };
-
-    println!("Create identitiy mapping");
-
-    let identity_mapped_pagetable = create_identity_mapping(mapping_information);
-
-    let old_page_table = activate_page_table(identity_mapped_pagetable);
-    assert!(old_page_table.is_none());
-}
-
-fn activate_page_table(page_table: &'static PageTable) -> Option<&'static PageTable> {
-    let page_table_address = page_table as *const PageTable as usize;
     println!(
         "Activate new page mapping (Addr of page tables 0x{:x})",
         page_table_address
@@ -241,9 +252,7 @@ fn activate_page_table(page_table: &'static PageTable) -> Option<&'static PageTa
         asm!("sfence.vma");
     }
 
-    let old_page_table = CURRENT_PAGE_TABLE.lock().replace(page_table);
+    CURRENT_PAGE_TABLE.lock().replace(page_table_holder);
 
     println!("Done!\n");
-
-    old_page_table
 }

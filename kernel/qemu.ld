@@ -132,6 +132,7 @@ SECTIONS
 	  Again, with PROVIDE, we're providing a readable symbol called _text_end, which is
 	  set to the memory address AFTER .text.init, .text, and .text.*'s have been added.
 	*/
+	. = ALIGN(4096);
     PROVIDE(_text_end = .);
 	/*
 	  The portion after the right brace is in an odd format. However, this is telling the
@@ -173,6 +174,7 @@ SECTIONS
 	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.*)
+	. = ALIGN(4096);
     PROVIDE(_rodata_end = .);
 	/*
 	   Again, we're placing the rodata section in the memory segment "ram" and we're putting
@@ -201,6 +203,7 @@ SECTIONS
 	   ...in that order.
 	*/
     *(.sdata .sdata.*) *(.data .data.*)
+	. = ALIGN(4096);
     PROVIDE(_data_end = .);
   } >ram AT>ram :data
 

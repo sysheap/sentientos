@@ -1,7 +1,7 @@
 use crate::{klibc::MMIO, println};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
-pub const PLIC_SIZE: usize = 0x3FFFFFC;
+pub const PLIC_SIZE: usize = 0x1000_0000;
 
 const PRIORITY_REGISTER_BASE: MMIO<u32> = MMIO::new(PLIC_BASE);
 const PENDING_REGISTER: MMIO<u32> = MMIO::new(PLIC_BASE + 0x1000);
