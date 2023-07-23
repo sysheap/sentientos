@@ -43,14 +43,14 @@ extern "C" fn kernel_init() {
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!\n");
 
-    #[cfg(test)]
-    test_main();
-
     unsafe {
         println!("Initializing page allocator");
         page_allocator::init(HEAP_START, HEAP_SIZE);
         heap::init();
     }
+
+    #[cfg(test)]
+    test_main();
 
     page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
     interrupts::set_mscratch_to_kernel_trap_frame();
@@ -63,4 +63,6 @@ extern "C" fn kernel_main() {
     println!("kernel_main()");
 
     plic::init_uart_interrupt();
+
+    page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
 }

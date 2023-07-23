@@ -13,9 +13,8 @@ where
     T: Fn(),
 {
     fn run(&self) {
-        print!("{} ", core::any::type_name::<T>());
+        print!("TEST: {}\n", core::any::type_name::<T>());
         self();
-        println!("[ok]");
     }
 }
 

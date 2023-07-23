@@ -61,7 +61,7 @@ impl PageAllocator {
     }
 
     fn page_pointer_to_page_idx(&self, page_pointer: &PagePointer) -> usize {
-        let distance = self.heap as usize - page_pointer.addr.as_ptr() as usize;
+        let distance = page_pointer.addr.as_ptr() as usize - self.heap as usize;
         assert!(distance % 4096 == 0);
         distance / 4096
     }
@@ -146,6 +146,18 @@ impl PagePointer {
     pub fn zero(&mut self) {
         unsafe {
             self.addr.as_mut().fill(0);
+        }
+    }
+}
+
+impl From<usize> for PagePointer {
+    fn from(pointer: usize) -> Self {
+        assert_eq!(pointer % PAGE_SIZE, 0);
+        assert!(pointer != 0);
+        unsafe {
+            Self {
+                addr: NonNull::new_unchecked(pointer as *mut Page),
+            }
         }
     }
 }

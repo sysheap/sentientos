@@ -82,3 +82,14 @@ pub fn set_multiple_bits<DataType, ValueType>(
 
     *data |= mask;
 }
+
+pub fn get_multiple_bits<DataType, ValueType>(
+    data: DataType,
+    number_of_bits: usize,
+    bit_position: usize,
+) -> ValueType
+where
+    DataType: Shr<usize, Output = DataType> + BitAnd<u64, Output = ValueType>,
+{
+    (data >> bit_position) & (2u64.pow(number_of_bits as u32) - 1)
+}
