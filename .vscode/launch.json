@@ -5,11 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) Attach",
+            "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/target/riscv64gc-unknown-none-elf/debug/kernel",
-            "cwd": ".",
+            "program": "${workspaceFolder}/target/riscv64gc-unknown-none-elf/debug/kernel",
+            "cwd": "${workspaceFolder}",
             "MIMode": "gdb",
             "setupCommands": [
                 {
@@ -25,6 +25,7 @@
             ],
             "miDebuggerPath": "/usr/bin/gdb-multiarch",
             "miDebuggerServerAddress": "localhost:1234",
+            "preLaunchTask": "rust: cargo run -- -s -S",
         }
     ]
 }

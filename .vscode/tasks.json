@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cargo",
+			"command": "run",
+			"isBackground": true,
+			"args": ["--", "-s", "-S"],
+			"problemMatcher": [
+				{
+					"owner": "rustc",
+					"pattern": {
+						"regexp": "error: could not compile `yaros`"
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": "Compiling yaros",
+						"endsPattern": "Finished dev"
+					}
+				}
+			],
+			"label": "rust: cargo run -- -s -S",
+		}
+	]
+}

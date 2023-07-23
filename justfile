@@ -17,9 +17,6 @@ run: build
 test: build clippy
     cargo test
 
-vscode: build
-    {{debugCommand}}
-
 debug: build
     tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "c"' \; attach
 
