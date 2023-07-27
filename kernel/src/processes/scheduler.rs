@@ -1,5 +1,6 @@
 use alloc::collections::VecDeque;
 
+use crate::klibc::macros::include_bytes_align_as;
 use crate::{
     klibc::{elf::ElfFile, Mutex},
     println,
@@ -9,17 +10,20 @@ use super::process::Process;
 
 macro_rules! prog_bytes {
     ($prog_ident:ident, $prog_name:literal) => {
-        pub const $prog_ident: &[u8] = include_bytes!(concat!(
-            "../../../target/riscv64gc-unknown-none-elf/debug/",
-            $prog_name
-        ));
+        pub static $prog_ident: &[u8] = include_bytes_align_as!(
+            u64,
+            concat!(
+                "../../../target/riscv64gc-unknown-none-elf/debug/",
+                $prog_name
+            )
+        );
     };
 }
 
 prog_bytes!(PROG1, "prog1");
 prog_bytes!(PROG2, "prog1");
 
-const PROGRAMS: [&[u8]; 2] = [PROG1, PROG2];
+static PROGRAMS: [&[u8]; 2] = [PROG1, PROG2];
 
 pub struct Scheduler {
     queue: VecDeque<Process>,

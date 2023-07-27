@@ -220,6 +220,8 @@ pub struct ElfFile<'a> {
 
 impl<'a> ElfFile<'a> {
     pub fn parse(data: &'a [u8]) -> Result<Self, ElfParseErrors> {
+        assert_eq!(data.as_ptr() as usize % 8, 0, "Elf file has to be aligned"); // TODO: Copy contents out of slice to create aligned structs
+
         let error = ElfFile::check_validity(data);
 
         if let Some(error) = error {
@@ -320,11 +322,11 @@ impl<'a> ElfFile<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::klibc::elf::ProgramHeaderType;
+    use crate::klibc::{elf::ProgramHeaderType, macros::include_bytes_align_as};
 
     use super::{ElfFile, ElfProgramHeaderEntry, ProgramHeaderFlags};
 
-    const TEST_ELF_FILE: &[u8] = include_bytes!("../test/test_data/elf/test.elf");
+    static TEST_ELF_FILE: &[u8] = include_bytes_align_as!(u64, "../test/test_data/elf/test.elf");
 
     #[test_case]
     fn parse_basic_elf_file() {
