@@ -63,6 +63,4 @@ extern "C" fn kernel_main() {
     println!("kernel_main()");
 
     plic::init_uart_interrupt();
-
-    page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
 }

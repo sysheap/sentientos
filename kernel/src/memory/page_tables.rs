@@ -40,37 +40,42 @@ impl RootPageTableHolder {
         }
 
         unsafe {
-            root_page_table_holder.map_identity(
+            root_page_table_holder.map_identity_kernel(
                 TEXT_START,
                 TEXT_END - TEXT_START,
                 XWRMode::ReadExecute,
                 "TEXT",
             );
 
-            root_page_table_holder.map_identity(
+            root_page_table_holder.map_identity_kernel(
                 RODATA_START,
                 RODATA_END - RODATA_START,
                 XWRMode::ReadOnly,
                 "RODATA",
             );
 
-            root_page_table_holder.map_identity(
+            root_page_table_holder.map_identity_kernel(
                 DATA_START,
                 DATA_END - DATA_START,
                 XWRMode::ReadWrite,
                 "DATA",
             );
 
-            root_page_table_holder.map_identity(HEAP_START, HEAP_SIZE, XWRMode::ReadWrite, "HEAP");
+            root_page_table_holder.map_identity_kernel(
+                HEAP_START,
+                HEAP_SIZE,
+                XWRMode::ReadWrite,
+                "HEAP",
+            );
 
-            root_page_table_holder.map_identity(
+            root_page_table_holder.map_identity_kernel(
                 UART_BASE_ADDRESS,
                 PAGE_SIZE,
                 XWRMode::ReadWrite,
                 "UART",
             );
 
-            root_page_table_holder.map_identity(
+            root_page_table_holder.map_identity_kernel(
                 plic::PLIC_BASE,
                 plic::PLIC_SIZE,
                 XWRMode::ReadWrite,
@@ -81,12 +86,49 @@ impl RootPageTableHolder {
         root_page_table_holder
     }
 
+    pub fn map_kernel(
+        &self,
+        virtual_address_start: usize,
+        physical_address_start: usize,
+        size: usize,
+        privileges: XWRMode,
+        name: &str,
+    ) {
+        self.map(
+            virtual_address_start,
+            physical_address_start,
+            size,
+            privileges,
+            false,
+            name,
+        );
+    }
+
+    pub fn map_userspace(
+        &self,
+        virtual_address_start: usize,
+        physical_address_start: usize,
+        size: usize,
+        privileges: XWRMode,
+        name: &str,
+    ) {
+        self.map(
+            virtual_address_start,
+            physical_address_start,
+            size,
+            privileges,
+            true,
+            name,
+        );
+    }
+
     fn map(
         &self,
         virtual_address_start: usize,
         physical_address_start: usize,
         size: usize,
         privileges: XWRMode,
+        is_user_mode_accessible: bool,
         name: &str,
     ) {
         println!(
@@ -128,7 +170,18 @@ impl RootPageTableHolder {
             third_level_entry.set_xwr_mode(privileges);
             third_level_entry.set_validity(true);
             third_level_entry.set_physical_address(current_physical_address);
+            third_level_entry.set_user_mode_accessible(is_user_mode_accessible);
         }
+    }
+
+    pub fn map_identity_kernel(
+        &self,
+        virtual_address_start: usize,
+        size: usize,
+        privileges: XWRMode,
+        name: &str,
+    ) {
+        self.map_identity(virtual_address_start, size, privileges, false, name);
     }
 
     fn map_identity(
@@ -136,6 +189,7 @@ impl RootPageTableHolder {
         virtual_address_start: usize,
         size: usize,
         privileges: XWRMode,
+        is_user_mode_accessible: bool,
         name: &str,
     ) {
         self.map(
@@ -143,6 +197,7 @@ impl RootPageTableHolder {
             virtual_address_start,
             size,
             privileges,
+            is_user_mode_accessible,
             name,
         );
     }
@@ -235,7 +290,7 @@ impl PageTableEntry {
         set_or_clear_bit(
             &mut self.0,
             is_user_mode_accessible,
-            PageTableEntry::VALID_BIT_POS,
+            PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS,
         );
     }
 
