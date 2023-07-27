@@ -167,6 +167,8 @@ impl RootPageTableHolder {
                 .get_target_page_table()
                 .get_entry_for_virtual_address(current_virtual_address, 0);
 
+            assert!(!third_level_entry.get_validity());
+
             third_level_entry.set_xwr_mode(privileges);
             third_level_entry.set_validity(true);
             third_level_entry.set_physical_address(current_physical_address);
