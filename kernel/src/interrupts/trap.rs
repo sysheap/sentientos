@@ -11,11 +11,17 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
+    const STACK_POINTER_REGISTER_INDEX: usize = 2;
+
     pub const fn zero() -> Self {
         Self {
             registers: [0; 32],
             floating_registers: [0; 32],
         }
+    }
+
+    pub fn set_stack_pointer(&mut self, stack_pointer: usize) {
+        self.registers[TrapFrame::STACK_POINTER_REGISTER_INDEX] = stack_pointer;
     }
 }
 

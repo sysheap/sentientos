@@ -9,27 +9,18 @@ SECTIONS
 		*(.text .text.*)
 	}
 	
-	.rodata : {
-		. = ALIGN(16);
+	.rodata ALIGN(4K) : {
 		*(.srodata .srodata.*)
-		. = ALIGN(16);
 		*(.rodata .rodata.*)
-		. = ALIGN(16);
 	}
 	
-	.data : {
-		. = ALIGN(16);
+	.data ALIGN(4K) : {
 		*(.sdata .sdata.*)
-		. = ALIGN(16);
 		*(.data .data.*)
 	}
 	
-	.bss : {
-		. = ALIGN(16);
+	.bss ALIGN(4K) : {
 		*(.sbss .sbss.*)
-		. = ALIGN(16);
 		*(.bss .bss.*)
 	}
-	
-	PROVIDE(end = .);
 }

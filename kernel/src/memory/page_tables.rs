@@ -6,6 +6,7 @@ use crate::{
     interrupts::plic,
     io::uart::UART_BASE_ADDRESS,
     klibc::{
+        elf,
         util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
         Mutex,
     },
@@ -269,6 +270,20 @@ pub enum XWRMode {
 impl From<u8> for XWRMode {
     fn from(value: u8) -> Self {
         unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl From<elf::ProgramHeaderFlags> for XWRMode {
+    fn from(value: elf::ProgramHeaderFlags) -> Self {
+        match value {
+            elf::ProgramHeaderFlags::RW => Self::ReadWrite,
+            elf::ProgramHeaderFlags::RWX => Self::ReadWriteExecute,
+            elf::ProgramHeaderFlags::RX => Self::ReadExecute,
+            elf::ProgramHeaderFlags::X => Self::ExecuteOnly,
+            elf::ProgramHeaderFlags::W => panic!("Cannot map W flag"),
+            elf::ProgramHeaderFlags::WX => panic!("Cannot map WX flag"),
+            elf::ProgramHeaderFlags::R => Self::ReadOnly,
+        }
     }
 }
 

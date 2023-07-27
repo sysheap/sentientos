@@ -1,5 +1,7 @@
 use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
+use crate::memory::page_allocator::PAGE_SIZE;
+
 pub fn align_up(value: usize, alignment: usize) -> usize {
     let remainder = value % alignment;
     if remainder == 0 {
@@ -9,9 +11,18 @@ pub fn align_up(value: usize, alignment: usize) -> usize {
     }
 }
 
+pub fn align_up_number_of_pages(value: usize) -> usize {
+    align_up(value, PAGE_SIZE) / PAGE_SIZE
+}
+
 pub fn align_down(value: usize, alignment: usize) -> usize {
     let multiples = value / alignment;
     multiples * alignment
+}
+
+pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
+    assert!(dst.len() >= src.len());
+    dst[..src.len()].copy_from_slice(src);
 }
 
 pub fn set_or_clear_bit<DataType>(data: &mut DataType, should_set_bit: bool, bit_position: usize)

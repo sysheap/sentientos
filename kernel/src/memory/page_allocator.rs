@@ -1,4 +1,7 @@
-use core::ptr::{null_mut, NonNull};
+use core::{
+    ptr::{null_mut, NonNull},
+    slice,
+};
 
 use crate::{
     klibc::{util::align_up, Mutex},
@@ -55,9 +58,9 @@ impl PageAllocator {
         println!("Number of pages:\t{}\n", self.number_of_pages);
     }
 
-    fn page_idx_to_page_pointer(&self, page_index: usize) -> PagePointer {
+    fn page_idx_to_page_pointer(&self, page_index: usize, number_of_pages: usize) -> PagePointer {
         assert!(page_index < self.number_of_pages);
-        unsafe { PagePointer::new(self.heap.add(page_index)) }
+        unsafe { PagePointer::new(self.heap.add(page_index), number_of_pages) }
     }
 
     fn page_pointer_to_page_idx(&self, page_pointer: &PagePointer) -> usize {
@@ -85,7 +88,8 @@ impl PageAllocator {
                     *self.metadata.add(mark_idx) = PageStatus::Used;
                 }
                 *self.metadata.add(idx + number_of_pages_requested - 1) = PageStatus::Last;
-                let mut page_pointer = self.page_idx_to_page_pointer(idx);
+                let mut page_pointer =
+                    self.page_idx_to_page_pointer(idx, number_of_pages_requested);
                 page_pointer.zero();
                 return Some(page_pointer);
             }
@@ -128,19 +132,35 @@ impl PageAllocator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PagePointer {
     addr: NonNull<Page>,
+    number_of_pages: usize,
 }
 
 impl PagePointer {
-    fn new(free_page: *mut Page) -> Self {
+    fn new(free_page: *mut Page, number_of_pages: usize) -> Self {
         let addr = NonNull::new(free_page).unwrap();
-        Self { addr }
+        Self {
+            addr,
+            number_of_pages,
+        }
     }
 
     pub fn addr(&self) -> NonNull<[u8; PAGE_SIZE]> {
         self.addr
+    }
+
+    fn u8(&self) -> *mut u8 {
+        self.addr.cast().as_ptr()
+    }
+
+    pub fn slice(&self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.u8(), self.number_of_pages * PAGE_SIZE) }
+    }
+
+    pub fn addr_as_usize(&self) -> usize {
+        self.addr.as_ptr() as usize
     }
 
     pub fn zero(&mut self) {
@@ -157,6 +177,7 @@ impl From<usize> for PagePointer {
         unsafe {
             Self {
                 addr: NonNull::new_unchecked(pointer as *mut Page),
+                number_of_pages: 0, // TODO: Should count how many pages are actually allocated
             }
         }
     }

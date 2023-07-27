@@ -4,14 +4,14 @@ const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
-enum BitFormat {
+pub enum BitFormat {
     Bit32 = 1,
     Bit64 = 2,
 }
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
-enum Endianess {
+pub enum Endianess {
     Little = 1,
     Big = 2,
 }
@@ -19,7 +19,7 @@ enum Endianess {
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
-enum OsAbi {
+pub enum OsAbi {
     SystemV = 0x0,
     HP_UX = 0x1,
     NetBSD = 0x2,
@@ -44,7 +44,7 @@ enum OsAbi {
 #[allow(non_camel_case_types)]
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
-enum FileType {
+pub enum FileType {
     None = 0x0,
     RelocatableFile = 0x1,
     ExecutableFile = 0x2,
@@ -59,7 +59,7 @@ enum FileType {
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
-enum Machine {
+pub enum Machine {
     NoSpecificInstructionSet = 0x0,
     AT_T_WE_32100 = 0x01,
     SPARC = 0x02,
@@ -131,27 +131,27 @@ enum Machine {
 }
 
 #[repr(C)]
-struct ElfHeader {
-    magic_number: [u8; 4],
-    bit_format: BitFormat,
-    endianess: Endianess,
-    version: u8,
-    os_abi: OsAbi,
-    abi_version: u8,
-    padding: [u8; 7],
-    object_file_type: FileType,
-    machine: Machine,
-    version2: u32,
-    entry_point: u64,
-    start_program_header: u64,
-    start_of_section_header: u64,
-    flags: u32,
-    size_of_this_header: u16,
-    size_program_header_entry: u16,
-    number_of_entries_in_program_header: u16,
-    size_section_header_entry: u16,
-    number_of_entries_section_header: u16,
-    index_of_section_names_in_section_header_table: u16,
+pub struct ElfHeader {
+    pub magic_number: [u8; 4],
+    pub bit_format: BitFormat,
+    pub endianess: Endianess,
+    pub version: u8,
+    pub os_abi: OsAbi,
+    pub abi_version: u8,
+    pub padding: [u8; 7],
+    pub object_file_type: FileType,
+    pub machine: Machine,
+    pub version2: u32,
+    pub entry_point: u64,
+    pub start_program_header: u64,
+    pub start_of_section_header: u64,
+    pub flags: u32,
+    pub size_of_this_header: u16,
+    pub size_program_header_entry: u16,
+    pub number_of_entries_in_program_header: u16,
+    pub size_section_header_entry: u16,
+    pub number_of_entries_section_header: u16,
+    pub index_of_section_names_in_section_header_table: u16,
 }
 
 static_assert_size!(ElfHeader, 64);
@@ -175,7 +175,7 @@ pub enum ProgramHeaderType {
 }
 
 #[repr(u32)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum ProgramHeaderFlags {
     X = 0x1,
@@ -190,14 +190,14 @@ pub enum ProgramHeaderFlags {
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
 pub struct ElfProgramHeaderEntry {
-    header_type: ProgramHeaderType,
-    flags: ProgramHeaderFlags,
-    offset_in_file: u64,
-    virtual_address: u64,
-    physical_address: u64,
-    file_size: u64,
-    memory_size: u64,
-    alignment: u64,
+    pub header_type: ProgramHeaderType,
+    pub access_flags: ProgramHeaderFlags,
+    pub offset_in_file: u64,
+    pub virtual_address: u64,
+    pub physical_address: u64,
+    pub file_size: u64,
+    pub memory_size: u64,
+    pub alignment: u64,
 }
 
 static_assert_size!(ElfProgramHeaderEntry, 0x38);
@@ -229,13 +229,13 @@ impl<'a> ElfFile<'a> {
         }
     }
 
-    fn get_header(&self) -> &ElfHeader {
+    pub fn get_header(&self) -> &ElfHeader {
         assert!(self.data.len() >= core::mem::size_of::<ElfHeader>());
         // Safe because we only had out ElfFile if it is checked for consistency
         unsafe { &*(self.data.as_ptr() as *const ElfHeader) }
     }
 
-    fn get_program_headers(&self) -> &[ElfProgramHeaderEntry] {
+    pub fn get_program_headers(&self) -> &[ElfProgramHeaderEntry] {
         let header = self.get_header();
         let number_of_entries = header.number_of_entries_in_program_header;
         let position_program_header = header.start_program_header;
@@ -258,6 +258,13 @@ impl<'a> ElfFile<'a> {
                 as *const ElfProgramHeaderEntry;
             core::slice::from_raw_parts(program_header_pointer, number_of_entries as usize)
         }
+    }
+
+    pub fn get_program_header_data(&self, program_header: &ElfProgramHeaderEntry) -> &[u8] {
+        let start = program_header.offset_in_file as usize;
+        let size = program_header.file_size as usize;
+
+        &self.data[start..start + size]
     }
 
     fn check_validity(data: &[u8]) -> Option<ElfParseErrors> {
@@ -350,7 +357,7 @@ mod test {
             program_headers[0],
             ElfProgramHeaderEntry {
                 header_type: ProgramHeaderType::PT_LOAD,
-                flags: ProgramHeaderFlags::RX,
+                access_flags: ProgramHeaderFlags::RX,
                 offset_in_file: 0x1000,
                 virtual_address: 0x1000,
                 physical_address: 0x1000,
@@ -364,7 +371,7 @@ mod test {
             program_headers[1],
             ElfProgramHeaderEntry {
                 header_type: ProgramHeaderType::PT_LOAD,
-                flags: ProgramHeaderFlags::R,
+                access_flags: ProgramHeaderFlags::R,
                 offset_in_file: 0x10c0,
                 virtual_address: 0x10c0,
                 physical_address: 0x10c0,
@@ -378,7 +385,7 @@ mod test {
             program_headers[2],
             ElfProgramHeaderEntry {
                 header_type: ProgramHeaderType::PT_LOAD,
-                flags: ProgramHeaderFlags::RW,
+                access_flags: ProgramHeaderFlags::RW,
                 offset_in_file: 0x11b0,
                 virtual_address: 0x11b0,
                 physical_address: 0x11b0,
