@@ -28,7 +28,7 @@ mod io;
 mod klibc;
 mod memory;
 mod panic;
-mod scheduler;
+mod processes;
 mod test;
 
 extern crate alloc;
