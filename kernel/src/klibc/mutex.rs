@@ -57,7 +57,7 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use core::sync::atomic::Ordering;
 
     use crate::klibc::Mutex;

@@ -155,7 +155,7 @@ impl PagePointer {
         self.addr.cast().as_ptr()
     }
 
-    pub fn slice(&self) -> &mut [u8] {
+    pub fn slice(&mut self) -> &mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.u8(), self.number_of_pages * PAGE_SIZE) }
     }
 

@@ -216,9 +216,9 @@ impl RootPageTableHolder {
 
 impl Drop for RootPageTableHolder {
     fn drop(&mut self) {
-        let mut root_page_table = self.0.lock();
-        drop_recursive(&mut root_page_table);
-        fn drop_recursive(page_table: &mut PageTable) {
+        let root_page_table = self.0.lock();
+        drop_recursive(&root_page_table);
+        fn drop_recursive(page_table: &PageTable) {
             // Iterate through all childs
             for entry in &page_table.0 {
                 if entry.get_validity() && !entry.is_leaf() {

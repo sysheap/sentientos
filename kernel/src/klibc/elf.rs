@@ -319,7 +319,7 @@ impl<'a> ElfFile<'a> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::klibc::elf::ProgramHeaderType;
 
     use super::{ElfFile, ElfProgramHeaderEntry, ProgramHeaderFlags};

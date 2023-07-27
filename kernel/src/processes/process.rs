@@ -62,7 +62,7 @@ impl Process {
         for program_header in loadable_program_header {
             let data = elf_file.get_program_header_data(program_header);
             let size_in_pages = align_up_number_of_pages(data.len());
-            let pages =
+            let mut pages =
                 zalloc(size_in_pages).expect("Could not allocate memory for program header.");
             allocated_pages.push(pages.clone());
             let page_slice = pages.slice();
@@ -94,5 +94,19 @@ impl Drop for Process {
         for allocated_page in &self.allocated_pages {
             dealloc(allocated_page.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{klibc::elf::ElfFile, processes::scheduler};
+
+    use super::Process;
+
+    #[test_case]
+    fn create_process_from_elf() {
+        let elf = ElfFile::parse(scheduler::PROG1).expect("Cannot parse elf file");
+        let process = Process::from_elf(&elf);
+        drop(process);
     }
 }
