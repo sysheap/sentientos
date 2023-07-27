@@ -12,6 +12,7 @@ use crate::{
     },
     memory::page_allocator::PAGE_SIZE,
     println,
+    processes::timer,
 };
 
 use super::page_allocator::{self, PagePointer};
@@ -81,6 +82,13 @@ impl RootPageTableHolder {
                 plic::PLIC_SIZE,
                 XWRMode::ReadWrite,
                 "PLIC",
+            );
+
+            root_page_table_holder.map_identity_kernel(
+                timer::CLINT_BASE,
+                timer::CLINT_SIZE,
+                XWRMode::ReadWrite,
+                "CLINT",
             );
         }
 

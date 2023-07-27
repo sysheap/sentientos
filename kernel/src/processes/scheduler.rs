@@ -1,6 +1,9 @@
 use alloc::collections::VecDeque;
 
-use crate::klibc::{elf::ElfFile, Mutex};
+use crate::{
+    klibc::{elf::ElfFile, Mutex},
+    println,
+};
 
 use super::process::Process;
 
@@ -30,6 +33,8 @@ impl Scheduler {
     }
 
     pub fn initialize(&mut self) {
+        println!("Initializing scheduler");
+
         for progam in PROGRAMS {
             let elf = ElfFile::parse(progam).expect("Cannot parse ELF file");
             let process = Process::from_elf(&elf);

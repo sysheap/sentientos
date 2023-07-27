@@ -10,6 +10,7 @@ use crate::{
         page_allocator::{dealloc, zalloc, PagePointer, PAGE_SIZE},
         page_tables::RootPageTableHolder,
     },
+    println,
 };
 
 pub struct Process {
@@ -30,6 +31,8 @@ impl Process {
     const STACK_END: usize = Process::STACK_START + (PAGE_SIZE - 1);
 
     pub fn from_elf(elf_file: &ElfFile) -> Self {
+        println!("Create process from elf file");
+
         let page_table = RootPageTableHolder::new_with_kernel_mapping();
         let mut register_state = TrapFrame::zero();
 
@@ -73,6 +76,8 @@ impl Process {
                 "LOAD",
             );
         }
+
+        println!("DONE");
 
         Self {
             register_state,

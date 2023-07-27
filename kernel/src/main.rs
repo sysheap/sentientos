@@ -20,7 +20,7 @@ use crate::{
         heap, page_allocator,
         page_tables::{self, RootPageTableHolder},
     },
-    processes::scheduler,
+    processes::{scheduler, timer},
 };
 
 mod asm;
@@ -66,4 +66,5 @@ extern "C" fn kernel_main() {
     plic::init_uart_interrupt();
 
     scheduler::SCHEDULER.lock().initialize();
+    timer::set_timer(1000);
 }
