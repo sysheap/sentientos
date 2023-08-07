@@ -21,6 +21,6 @@ jobs:
     - name: Build
       run: just build
     - name: Install QEMU
-      run: sudo apt install qemu-system-riscv64
+      run: sudo apt update && sudo apt install --yes qemu-system-riscv64
     - name: Run tests
       run: just test
