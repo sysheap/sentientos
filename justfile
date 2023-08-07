@@ -2,6 +2,10 @@ build:
     cd userspace && cargo build    
     cargo build
 
+build-release:
+    cd userspace && cargo build --release
+    cargo build --release
+
 clippy:
     cd userspace && cargo clippy
     cargo clippy
@@ -14,8 +18,11 @@ debugCommand := "cargo run -- -s -S"
 run: build
     cargo run
 
-test: build clippy
-    cargo test
+run-release: build-release
+    cargo run --release
+
+test: build-release clippy
+    cargo test --release
 
 run-vscode: build
     cargo run -- -s -S && echo "DONE"

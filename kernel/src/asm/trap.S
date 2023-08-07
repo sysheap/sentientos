@@ -1,3 +1,4 @@
+.attribute arch, "rv64gc"
 # Copied from https://osblog.stephenmarz.com/ch4.html
 .altmacro
 .set NUM_GP_REGS, 32  # Number of registers per context
