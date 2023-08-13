@@ -1,4 +1,4 @@
-build:
+build-debug:
     cd userspace && cargo build    
     cargo build
 
@@ -15,23 +15,23 @@ clean:
 
 debugCommand := "cargo run -- -s -S"
 
-run: build
-    cargo run
-
-run-release: build-release
+run: build-release
     cargo run --release
+
+run-debug: build-debug
+    cargo run
 
 test: build-release clippy
     cargo test --release
 
-run-vscode: build
+run-vscode: build-debug
     cargo run -- -s -S && echo "DONE"
 
-test-vscode: build
+test-vscode: build-debug
     cargo test -- -s -S && echo "DONE"
 
-debug: build
+debug: build-debug
     tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "c"' \; attach
 
-debugf FUNC: build
+debugf FUNC: build-debug
     tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/yaros -ex "target remote :1234" -ex "break {{FUNC}}" -ex "c"' \; attach
