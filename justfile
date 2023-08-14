@@ -21,7 +21,7 @@ run: build-release
 run-debug: build-debug
     cargo run
 
-test: build-release clippy
+test: build-release
     cargo test --release
 
 run-vscode: build-debug
