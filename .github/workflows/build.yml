@@ -22,8 +22,8 @@ jobs:
     - name: Build
       run: just build-release
     - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: qemu-system-riscv64
-          version: 14082023
+      with:
+        packages: qemu-system-riscv64
+        version: 14082023
     - name: Run tests
       run: just test
