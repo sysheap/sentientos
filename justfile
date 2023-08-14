@@ -7,7 +7,7 @@ build-release:
     cargo build --release
 
 clippy:
-    cd userspace && cargo clippy
+    cd userspace && cargo build && cargo clippy
     cargo clippy
 
 clean:

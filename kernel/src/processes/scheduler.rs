@@ -8,15 +8,24 @@ use crate::{
 
 use super::process::Process;
 
+#[cfg(debug_assertions)]
+macro_rules! path_to_compiled_binaries {
+    () => {
+        "../../../target/riscv64gc-unknown-none-elf/debug/"
+    };
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! path_to_compiled_binaries {
+    () => {
+        "../../../target/riscv64gc-unknown-none-elf/release/"
+    };
+}
+
 macro_rules! prog_bytes {
     ($prog_ident:ident, $prog_name:literal) => {
-        pub static $prog_ident: &[u8] = include_bytes_align_as!(
-            u64,
-            concat!(
-                "../../../target/riscv64gc-unknown-none-elf/debug/",
-                $prog_name
-            )
-        );
+        pub static $prog_ident: &[u8] =
+            include_bytes_align_as!(u64, concat!(path_to_compiled_binaries!(), $prog_name));
     };
 }
 
