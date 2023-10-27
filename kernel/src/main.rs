@@ -41,6 +41,8 @@ extern "C" {
 
 #[no_mangle]
 extern "C" fn kernel_init() {
+    return;
+
     uart::QEMU_UART.init();
     println!("Hello World from YaROS!\n");
 
@@ -55,13 +57,6 @@ extern "C" fn kernel_init() {
 
     page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
     interrupts::set_mscratch_to_kernel_trap_frame();
-
-    println!("kernel_init() completed!");
-}
-
-#[no_mangle]
-extern "C" fn kernel_main() {
-    println!("kernel_main()");
 
     plic::init_uart_interrupt();
 

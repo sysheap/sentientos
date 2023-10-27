@@ -135,11 +135,16 @@ extern "C" fn machine_mode_trap(mcause: MCause, mtval: usize, mepc: usize, trap_
 }
 
 #[no_mangle]
-extern "C" fn supervisor_mode_trap(mcause: MCause, mtval: usize) {
+extern "C" fn supervisor_mode_trap(
+    scause: MCause,
+    stval: usize,
+    sepc: usize,
+    trap_frame: &TrapFrame,
+) {
     panic!(
-        "Supervisor mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x})",
-        mcause.get_exception_code(),
-        mcause.get_reason(),
-        mtval
+        "Supervisor mode trap occurred! (scause: {} (Reason: {})) (stval: 0x{:x})",
+        scause.get_exception_code(),
+        scause.get_reason(),
+        stval
     );
 }

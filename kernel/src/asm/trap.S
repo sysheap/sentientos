@@ -20,11 +20,11 @@
 .endm
 
 .section .text
-.global machine_trap_vector
+.global supervisor_trap_vector
 .align 4
-machine_trap_vector:
+supervisor_trap_vector:
 	# Save all registers to the kernel trap frame
-	csrrw t6, mscratch, t6
+	csrrw t6, sscratch, t6
 
 	# Save all registers
 	# In order to make things easier we also save x0 which is always zero
@@ -39,17 +39,17 @@ machine_trap_vector:
 
 	# Save last register
 	mv t5, t6
-	csrr t6, mscratch
+	csrr t6, sscratch
 	save_gp 31, t5
 
 	# Restore trap frame pointer
-	csrw mscratch, t5
+	csrw sscratch, t5
 
-	csrr a0, mcause
-	csrr a1, mtval
-	csrr a2, mepc
-	csrr a3, mscratch
-	call machine_mode_trap
+	csrr a0, scause
+	csrr a1, stval
+	csrr a2, sepc
+	csrr a3, sscratch
+	call supervisor_mode_trap
 
 	# Restore all registers
 	csrr t6, mscratch
@@ -61,12 +61,4 @@ machine_trap_vector:
 		.set i, i+1
 	.endr
 
-	mret
-
-.global supervisor_trap_vector
-.align 4
-supervisor_trap_vector:
-	csrr a0, mcause
-	csrr a1, mtval
-	call supervisor_mode_trap
 	mret
