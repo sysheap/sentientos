@@ -1,4 +1,4 @@
-use crate::klibc::MMIO;
+use crate::{klibc::MMIO, sbi};
 
 pub const CLINT_BASE: usize = 0x2000000;
 pub const CLINT_SIZE: usize = 0x10000;
@@ -10,6 +10,7 @@ pub fn set_timer(milliseconds: u64) {
     unsafe {
         let current = TIMER_CURRENT_REGISTER.read();
         let next = current + (10000 * milliseconds);
-        TIMER_COMPARE_REGISTER.write(next);
+        // TIMER_COMPARE_REGISTER.write(next);
+        sbi::extensions::legacy_extension::sbi_set_timer(next).assert_success();
     }
 }

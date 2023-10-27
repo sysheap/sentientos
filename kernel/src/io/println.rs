@@ -16,6 +16,5 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    #[allow(const_item_mutation)]
-    uart::QEMU_UART.write_fmt(args).unwrap();
+    uart::SBI_UART.lock().write_fmt(args).unwrap();
 }

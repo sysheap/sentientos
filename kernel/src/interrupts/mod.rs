@@ -7,8 +7,8 @@ pub mod trap;
 
 static KERNEL_TRAP_FRAME: TrapFrame = TrapFrame::zero();
 
-pub fn set_mscratch_to_kernel_trap_frame() {
+pub fn set_sscratch_to_kernel_trap_frame() {
     unsafe {
-        asm!("csrw mscratch, {kernel_trap}", kernel_trap = in(reg)&KERNEL_TRAP_FRAME);
+        asm!("csrw sscratch, {kernel_trap}", kernel_trap = in(reg)&KERNEL_TRAP_FRAME);
     }
 }

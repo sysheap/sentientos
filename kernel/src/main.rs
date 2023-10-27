@@ -15,7 +15,6 @@ use alloc::rc::Rc;
 
 use crate::{
     interrupts::plic,
-    io::uart,
     memory::{
         heap, page_allocator,
         page_tables::{self, RootPageTableHolder},
@@ -30,6 +29,7 @@ mod klibc;
 mod memory;
 mod panic;
 mod processes;
+mod sbi;
 mod test;
 
 extern crate alloc;
@@ -41,10 +41,14 @@ extern "C" {
 
 #[no_mangle]
 extern "C" fn kernel_init() {
-    return;
-
-    uart::QEMU_UART.init();
     println!("Hello World from YaROS!\n");
+
+    let version = sbi::extensions::base_extension::sbi_get_spec_version();
+    println!("SBI version {}.{}", version.major, version.minor);
+    assert!(
+        (version.major == 0 && version.minor >= 2) || version.major > 0,
+        "Supported SBI Versions >= 0.2"
+    );
 
     unsafe {
         println!("Initializing page allocator");
@@ -56,10 +60,10 @@ extern "C" fn kernel_init() {
     test_main();
 
     page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
-    interrupts::set_mscratch_to_kernel_trap_frame();
+    interrupts::set_sscratch_to_kernel_trap_frame();
 
     plic::init_uart_interrupt();
 
     scheduler::SCHEDULER.lock().initialize();
-    timer::set_timer(1000);
+    // timer::set_timer(1000);
 }

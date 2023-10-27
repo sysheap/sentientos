@@ -4,7 +4,6 @@ use alloc::rc::Rc;
 
 use crate::{
     interrupts::plic,
-    io::uart::UART_BASE_ADDRESS,
     klibc::{
         elf,
         util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
@@ -68,13 +67,6 @@ impl RootPageTableHolder {
                 HEAP_SIZE,
                 XWRMode::ReadWrite,
                 "HEAP",
-            );
-
-            root_page_table_holder.map_identity_kernel(
-                UART_BASE_ADDRESS,
-                PAGE_SIZE,
-                XWRMode::ReadWrite,
-                "UART",
             );
 
             root_page_table_holder.map_identity_kernel(
