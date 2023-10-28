@@ -35,10 +35,10 @@ debug: build-debug
     tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "c"' \; attach
 
 debugf FUNC: build-debug
-    tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "break {{FUNC}}" -ex "c"' \; attach
+    tmux new-session -d '{{debugCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"' \; attach
 
 debug-release: build-release
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "c"' \; attach
 
 debug-releasef FUNC: build-release
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "break {{FUNC}}" -ex "c"' \; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"' \; attach

@@ -4,6 +4,7 @@ use self::trap::TrapFrame;
 
 pub mod plic;
 pub mod trap;
+mod trap_cause;
 
 static mut KERNEL_TRAP_FRAME: TrapFrame = TrapFrame::zero();
 

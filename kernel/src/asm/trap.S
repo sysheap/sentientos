@@ -19,10 +19,7 @@
 	fld	f\i, ((NUM_GP_REGS+(\i))*REG_SIZE)(\basereg)
 .endm
 
-.section .text
-.global supervisor_trap_vector
-.align 4
-supervisor_trap_vector:
+.macro save_regs
 	# Save all registers to the kernel trap frame
 	csrrw t6, sscratch, t6
 
@@ -44,15 +41,11 @@ supervisor_trap_vector:
 
 	# Restore trap frame pointer
 	csrw sscratch, t5
+.endm
 
-	csrr a0, scause
-	csrr a1, stval
-	csrr a2, sepc
-	csrr a3, sscratch
-	call supervisor_mode_trap
-
+.macro restore_regs
 	# Restore all registers
-	csrr t6, mscratch
+	csrr t6, sscratch
 
 	.set i,0
 	.rept 32
@@ -60,5 +53,21 @@ supervisor_trap_vector:
 		load_gp %i
 		.set i, i+1
 	.endr
+.endm
 
-	mret
+.section .text
+.global supervisor_trap_vector
+.align 4
+supervisor_trap_vector:
+	
+	save_regs
+
+	csrr a0, scause
+	csrr a1, stval
+	csrr a2, sepc
+	csrr a3, sscratch
+	call supervisor_mode_trap
+
+	restore_regs
+
+	sret

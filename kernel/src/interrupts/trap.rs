@@ -1,8 +1,14 @@
+use core::panic;
+
 use crate::{
     interrupts::plic::{self, InterruptSource},
     io::uart,
     print, println,
+    processes::timer,
 };
+
+use super::trap_cause::interrupt::*;
+use super::trap_cause::{exception::*, InterruptCause};
 
 #[repr(packed)]
 pub struct TrapFrame {
@@ -25,126 +31,133 @@ impl TrapFrame {
     }
 }
 
-#[repr(transparent)]
-struct MCause(usize);
-
-impl MCause {
-    fn is_asynchronous(&self) -> bool {
-        self.0 >> 63 == 1
-    }
-
-    fn get_exception_code(&self) -> usize {
-        self.0 << 1 >> 1
-    }
-
-    fn get_reason(&self) -> &'static str {
-        let is_asynchronous = self.is_asynchronous();
-
-        if is_asynchronous {
-            match self.get_exception_code() {
-                0 => "Reserved",
-                1 => "Supervisor software interrupt",
-                2 => "Reserved",
-                3 => "Machine software interrupt",
-                4 => "Reserved",
-                5 => "Supervisor timer interrupt",
-                6 => "Reserved",
-                7 => "Machine timer interrupt",
-                8 => "Reserved",
-                9 => "Supervisor external interrupt",
-                10 => "Reserved",
-                11 => "Machine external interrupt",
-                12..=15 => "Reserved",
-                _ => "Designated for platform use",
-            }
-        } else {
-            match self.get_exception_code() {
-                0 => "Instruction address misaligned",
-                1 => "Instruction access fault",
-                2 => "Illegal instruction",
-                3 => "Breakpoint",
-                4 => "Load address misaligned",
-                5 => "Load access fault",
-                6 => "Store/AMO address misaligned",
-                7 => "Store/AMO access fault",
-                8 => "Environment call from U-mode",
-                9 => "Environment call from S-mode",
-                10 => "Reserved",
-                11 => "Environment call from M-Mode",
-                12 => "Instruction page fault",
-                13 => "Load page fault",
-                14 => "Reserved",
-                15 => "Store/AMO page fault",
-                16..=23 => "Reserved",
-                24..=31 => "Designated for custom use",
-                32..=47 => "Reserved",
-                48..=63 => "Designated for custom use",
-                _ => "Reserved",
-            }
-        }
-    }
-}
-
-#[no_mangle]
-extern "C" fn machine_mode_trap(mcause: MCause, mtval: usize, mepc: usize, trap_fram: &TrapFrame) {
-    if mcause.is_asynchronous() {
-        println!(
-            "Asynchronous Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x}) (mepc: 0x{:x})",
-            mcause.get_exception_code(),
-            mcause.get_reason(),
-            mtval,
-            mepc
-        );
-        match mcause.get_exception_code() {
-            11 => {
-                let plic_interrupt =
-                    plic::get_next_pending().expect("There should be a pending interrupt.");
-                assert!(plic_interrupt == InterruptSource::Uart);
-
-                let input = uart::read().expect("There should be input from the uart.");
-
-                match input {
-                    8 => {
-                        // This is a backspace, so we
-                        // essentially have to write a space and
-                        // backup again:
-                        print!("{} {}", 8 as char, 8 as char);
-                    }
-                    10 | 13 => {
-                        // Newline or carriage-return
-                        println!();
-                    }
-                    _ => {
-                        print!("{}", input as char);
-                    }
-                };
-
-                plic::complete_interrupt(plic_interrupt);
-            }
-            _ => panic!("Inavlid external interrupt"),
-        };
-    } else {
-        panic!(
-            "Machine mode trap occurred! (mcause: {} (Reason: {})) (mtval: 0x{:x}) (mepc: 0x{:x})",
-            mcause.get_exception_code(),
-            mcause.get_reason(),
-            mtval,
-            mepc
-        );
-    }
-}
-
 #[no_mangle]
 extern "C" fn supervisor_mode_trap(
-    scause: MCause,
+    cause: InterruptCause,
     stval: usize,
     sepc: usize,
     trap_frame: &TrapFrame,
 ) {
-    panic!(
-        "Supervisor mode trap occurred! (scause: {} (Reason: {})) (stval: 0x{:x})",
-        scause.get_exception_code(),
-        scause.get_reason(),
-        stval
-    );
+    if cause.is_interrupt() {
+        handle_interrupt(cause, stval, sepc, trap_frame);
+    } else {
+        handle_exception(cause, stval, sepc, trap_frame);
+    }
+}
+
+fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
+    match cause.get_exception_code() {
+        INSTRUCTION_ADDRESS_MISALIGNED => {
+            panic!(
+                "Instruction address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        INSTRUCTION_ACCESS_FAULT => {
+            panic!(
+                "Instruction access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        ILLEGAL_INSTRUCTION => {
+            panic!(
+                "Illegal instruction! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        BREAKPOINT => {
+            panic!("Breakpoint! (stval: 0x{:x}) (sepc: 0x{:x})", stval, sepc);
+        }
+        LOAD_ADDRESS_MISALIGNED => {
+            panic!(
+                "Load address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        LOAD_ACCESS_FAULT => {
+            panic!(
+                "Load access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        STORE_AMO_ADDRESS_MISALIGNED => {
+            panic!(
+                "Store/AMO address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        STORE_AMO_ACCESS_FAULT => {
+            panic!(
+                "Store/AMO access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        ENVIRONMENT_CALL_FROM_U_MODE => {
+            panic!(
+                "Environment call from U-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        ENVIRONMENT_CALL_FROM_S_MODE => {
+            panic!(
+                "Environment call from S-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        ENVIRONMENT_CALL_FROM_M_MODE => {
+            panic!(
+                "Environment call from M-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
+                stval, sepc
+            );
+        }
+        _ => {
+            panic!(
+                "Unknown exception! (Name: {}) (stval: 0x{:x}) (sepc: 0x{:x})",
+                cause.get_reason(),
+                stval,
+                sepc
+            );
+        }
+    }
+}
+
+fn handle_interrupt(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
+    match cause.get_exception_code() {
+        SUPERVISOR_TIMER_INTERRUPT => handle_supervisor_timer_interrupt(),
+        SUPERVISOR_EXTERNAL_INTERRUPT => handle_external_interrupt(),
+        _ => {
+            panic!("Unknwon interrupt! (Name: {})", cause.get_reason());
+        }
+    }
+}
+
+fn handle_supervisor_timer_interrupt() {
+    println!("Supervisor timer interrupt occurred!");
+    timer::set_timer(1000);
+}
+
+fn handle_external_interrupt() {
+    println!("Handle external interrupt");
+    let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
+    assert!(plic_interrupt == InterruptSource::Uart);
+
+    let input = uart::read().expect("There should be input from the uart.");
+
+    match input {
+        8 => {
+            // This is a backspace, so we
+            // essentially have to write a space and
+            // backup again:
+            print!("{} {}", 8 as char, 8 as char);
+        }
+        10 | 13 => {
+            // Newline or carriage-return
+            println!();
+        }
+        _ => {
+            print!("{}", input as char);
+        }
+    };
+
+    plic::complete_interrupt(plic_interrupt);
 }

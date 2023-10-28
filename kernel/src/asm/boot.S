@@ -43,8 +43,6 @@ bss_cleared:
 
 	call kernel_init
 
-foo:
-
 	# Enable all interrupts
 	li t0, -1
 	csrw sie, t0
