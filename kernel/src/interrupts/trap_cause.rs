@@ -24,6 +24,9 @@ pub mod exception {
     pub const STORE_AMO_PAGE_FAULT: usize = 15;
 }
 
+use exception::*;
+use interrupt::*;
+
 #[repr(transparent)]
 pub struct InterruptCause(usize);
 

@@ -1,7 +1,7 @@
 use core::arch::asm;
 
 #[repr(i64)]
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum SbiError {
     SBI_SUCCESS = 0,
@@ -17,6 +17,7 @@ pub enum SbiError {
 }
 
 #[must_use]
+#[derive(Debug)]
 pub struct SbiRet {
     pub error: SbiError,
     pub value: i64,
@@ -31,7 +32,11 @@ impl SbiRet {
     }
 
     pub fn assert_success(&self) {
-        assert!(self.error == SbiError::SBI_SUCCESS);
+        assert!(
+            self.error == SbiError::SBI_SUCCESS,
+            "SBI call failed: {:?}",
+            self
+        );
     }
 }
 

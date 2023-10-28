@@ -14,3 +14,8 @@ pub fn sbi_get_spec_version() -> SbiSpecVersion {
         major: (result.value >> 24) as u32,
     }
 }
+
+pub fn sbi_probe_extension(extension_id: u64) -> bool {
+    let result = sbi_call(EID, 0x3);
+    result.value != 0
+}

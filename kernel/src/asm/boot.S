@@ -47,6 +47,7 @@ bss_cleared:
 	li t0, -1
 	csrw sie, t0
 
+	# Enable global interrupts
 	li t0, 0b10
 	csrs sstatus, t0
 
