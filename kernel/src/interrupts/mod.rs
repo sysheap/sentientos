@@ -5,7 +5,7 @@ use self::trap::TrapFrame;
 pub mod plic;
 pub mod trap;
 
-static KERNEL_TRAP_FRAME: TrapFrame = TrapFrame::zero();
+static mut KERNEL_TRAP_FRAME: TrapFrame = TrapFrame::zero();
 
 pub fn set_sscratch_to_kernel_trap_frame() {
     unsafe {

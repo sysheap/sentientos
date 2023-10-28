@@ -1,6 +1,6 @@
 use crate::klibc::MMIO;
 
-const TEST_DEVICE_ADDRESSS: usize = 0x100000;
+pub const TEST_DEVICE_ADDRESSS: usize = 0x100000;
 
 const EXIT_SUCCESS_CODE: u32 = 0x5555;
 const EXIT_FAILURE_CODE: u32 = 0x3333;

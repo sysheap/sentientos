@@ -12,6 +12,7 @@ use crate::{
     memory::page_allocator::PAGE_SIZE,
     println,
     processes::timer,
+    test::qemu_exit,
 };
 
 use super::page_allocator::{self, PagePointer};
@@ -82,6 +83,13 @@ impl RootPageTableHolder {
                 XWRMode::ReadWrite,
                 "CLINT",
             );
+
+            root_page_table_holder.map_identity_kernel(
+                qemu_exit::TEST_DEVICE_ADDRESSS,
+                PAGE_SIZE,
+                XWRMode::ReadWrite,
+                "Qemu Test Device",
+            );
         }
 
         root_page_table_holder
@@ -133,8 +141,14 @@ impl RootPageTableHolder {
         name: &str,
     ) {
         println!(
-            "Map {}\t{:#010x} -> {:#010x} (Size: {:#010x}) ({:?})",
-            name, virtual_address_start, physical_address_start, size, privileges
+            "Map {}\t{:#010x}-{:#010x} -> {:#010x}-{:#010x} (Size: {:#010x}) ({:?})",
+            name,
+            virtual_address_start,
+            virtual_address_start + size,
+            physical_address_start,
+            physical_address_start + size,
+            size,
+            privileges
         );
 
         assert_eq!(virtual_address_start % PAGE_SIZE, 0);

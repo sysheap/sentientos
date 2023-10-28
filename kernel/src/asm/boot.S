@@ -43,9 +43,14 @@ bss_cleared:
 
 	call kernel_init
 
+foo:
+
 	# Enable all interrupts
 	li t0, -1
 	csrw sie, t0
+
+	li t0, 0b10
+	csrs sstatus, t0
 
 loop:
 	wfi

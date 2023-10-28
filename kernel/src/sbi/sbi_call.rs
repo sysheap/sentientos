@@ -54,6 +54,16 @@ pub fn sbi_call(eid: u64, fid: u64) -> SbiRet {
     }
 }
 
+pub fn sbi_call_1(eid: u64, fid: u64, arg0: u64) -> SbiRet {
+    let mut error: i64;
+    let mut value: i64;
+
+    unsafe {
+        asm!("ecall", in("a7") eid, in("a6") fid, in("a0") arg0, lateout("a0") error, lateout("a1") value);
+        SbiRet::new(error, value)
+    }
+}
+
 pub fn sbi_legacy_call_1(eid: u64, arg0: u64) -> SbiRet {
     let mut error: i64;
 
