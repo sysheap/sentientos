@@ -168,9 +168,9 @@ impl RootPageTableHolder {
         println!(
             "Map \t{:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
             virtual_address_start,
-            virtual_address_start + size,
+            virtual_address_start - PAGE_SIZE + size,
             physical_address_start,
-            physical_address_start + size,
+            physical_address_start - PAGE_SIZE + size,
             size,
             privileges,
             name

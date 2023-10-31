@@ -21,8 +21,8 @@ pub struct Process {
 }
 
 impl Process {
-    const STACK_START: usize = 0x7ffffffffffff000;
-    const STACK_END: usize = Process::STACK_START + (PAGE_SIZE - 1);
+    const STACK_END: usize = 0xfffffffffffff000;
+    const STACK_START: usize = Process::STACK_END + (PAGE_SIZE - 1);
 
     pub fn register_state_ptr(&self) -> *const TrapFrame {
         self.register_state.as_ref() as *const TrapFrame
@@ -50,7 +50,7 @@ impl Process {
         allocated_pages.push(stack.clone());
 
         page_table.map_userspace(
-            Process::STACK_START,
+            Process::STACK_END,
             stack.addr_as_usize(),
             PAGE_SIZE,
             crate::memory::page_tables::XWRMode::ReadWrite,

@@ -74,6 +74,13 @@ extern "C" {
 }
 
 pub fn schedule() -> ! {
+    prepare_next_process();
+    unsafe {
+        restore_user_context();
+    }
+}
+
+fn prepare_next_process() {
     let mut scheduler = SCHEDULER.lock();
     let mut current_process = CURRENT_PROCESS.lock();
 
@@ -90,9 +97,5 @@ pub fn schedule() -> ! {
 
     page_tables::activate_page_table(page_table);
 
-    *current_process = Some(next_process);
-
-    unsafe {
-        restore_user_context();
-    }
+    current_process.replace(next_process);
 }
