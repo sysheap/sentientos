@@ -137,9 +137,12 @@ fn handle_supervisor_timer_interrupt() {
 }
 
 fn handle_external_interrupt() {
-    println!("Handle external interrupt");
+    print!("External interrupt occurred!");
     let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
-    assert!(plic_interrupt == InterruptSource::Uart);
+    assert!(
+        plic_interrupt == InterruptSource::Uart,
+        "Plic interrupt should be uart."
+    );
 
     let input = uart::read().expect("There should be input from the uart.");
 
