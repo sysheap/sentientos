@@ -42,3 +42,6 @@ debug-release: build-release
 
 debug-releasef FUNC: build-release
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/debug/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"' \; attach
+
+disassm-release: build-release
+    riscv64-unknown-elf-objdump -d target/riscv64gc-unknown-none-elf/release/kernel | less
