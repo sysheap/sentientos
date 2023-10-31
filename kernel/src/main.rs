@@ -15,6 +15,7 @@ use alloc::rc::Rc;
 
 use crate::{
     interrupts::plic,
+    io::uart::QEMU_UART,
     memory::{
         heap, page_allocator,
         page_tables::{self, RootPageTableHolder},
@@ -41,6 +42,8 @@ extern "C" {
 
 #[no_mangle]
 extern "C" fn kernel_init() {
+    QEMU_UART.lock().init();
+
     println!("Hello World from YaROS!\n");
 
     let version = sbi::extensions::base_extension::sbi_get_spec_version();
