@@ -4,7 +4,7 @@ use crate::{
     interrupts::plic::{self, InterruptSource},
     io::uart,
     print, println,
-    processes::timer,
+    processes::{scheduler, timer},
 };
 
 use super::trap_cause::interrupt::*;
@@ -41,6 +41,7 @@ extern "C" fn supervisor_mode_trap(
     if cause.is_interrupt() {
         handle_interrupt(cause, stval, sepc, trap_frame);
     } else {
+        loop {}
         handle_exception(cause, stval, sepc, trap_frame);
     }
 }
@@ -134,6 +135,7 @@ fn handle_interrupt(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
 fn handle_supervisor_timer_interrupt() {
     println!("Supervisor timer interrupt occurred!");
     timer::set_timer(1000);
+    scheduler::schedule();
 }
 
 fn handle_external_interrupt() {

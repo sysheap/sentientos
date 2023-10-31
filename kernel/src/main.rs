@@ -23,6 +23,8 @@ use crate::{
 };
 
 mod asm;
+mod assert;
+mod cpu;
 mod interrupts;
 mod io;
 mod klibc;

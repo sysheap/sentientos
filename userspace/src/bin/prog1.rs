@@ -3,13 +3,14 @@
 
 extern crate userspace;
 
-static mut _x: i32 = 0;
+// static mut X: i32 = 0;
 
 #[no_mangle]
 fn main() {
-    loop {
-        unsafe {
-            _x += 1;
-        }
-    }
+    loop {}
+    // loop {
+    //     unsafe {
+    //         X += 1;
+    //     }
+    // }
 }

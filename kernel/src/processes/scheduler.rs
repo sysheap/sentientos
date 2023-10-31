@@ -1,6 +1,8 @@
 use alloc::collections::VecDeque;
 
+use crate::cpu;
 use crate::klibc::macros::include_bytes_align_as;
+use crate::memory::page_tables;
 use crate::{
     klibc::{elf::ElfFile, Mutex},
     println,
@@ -67,6 +69,30 @@ impl Scheduler {
 pub static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
 static CURRENT_PROCESS: Mutex<Option<Process>> = Mutex::new(None);
 
-pub fn schedule() {
-    // TODO SCHEDULE
+extern "C" {
+    fn restore_user_context() -> !;
+}
+
+pub fn schedule() -> ! {
+    let mut scheduler = SCHEDULER.lock();
+    let mut current_process = CURRENT_PROCESS.lock();
+
+    assert!(current_process.is_none(), "Need to implement context save");
+
+    let next_process = scheduler.get_next().expect("No process to schedule!");
+
+    let trap_frame_ptr = next_process.register_state_ptr();
+    let pc = next_process.get_program_counter();
+    let page_table = next_process.get_page_table();
+
+    cpu::write_sscratch_register(trap_frame_ptr);
+    cpu::write_sepc_register(pc);
+
+    page_tables::activate_page_table(page_table);
+
+    *current_process = Some(next_process);
+
+    unsafe {
+        restore_user_context();
+    }
 }

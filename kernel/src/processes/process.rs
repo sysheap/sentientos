@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{boxed::Box, rc::Rc, vec::Vec};
 
 use crate::{
     interrupts::trap::TrapFrame,
@@ -14,21 +14,27 @@ use crate::{
 };
 
 pub struct Process {
-    register_state: TrapFrame,
-    page_table: RootPageTableHolder,
+    register_state: Box<TrapFrame>,
+    page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
     allocated_pages: Vec<PagePointer>,
-    status: ProcessStatus,
-}
-
-pub enum ProcessStatus {
-    Running,
-    ReadyToBeScheduled,
 }
 
 impl Process {
     const STACK_START: usize = 0x7ffffffffffff000;
     const STACK_END: usize = Process::STACK_START + (PAGE_SIZE - 1);
+
+    pub fn register_state_ptr(&self) -> *const TrapFrame {
+        self.register_state.as_ref() as *const TrapFrame
+    }
+
+    pub fn get_program_counter(&self) -> usize {
+        self.program_counter
+    }
+
+    pub fn get_page_table(&self) -> Rc<RootPageTableHolder> {
+        self.page_table.clone()
+    }
 
     pub fn from_elf(elf_file: &ElfFile) -> Self {
         println!("Create process from elf file");
@@ -77,14 +83,13 @@ impl Process {
             );
         }
 
-        println!("DONE");
+        println!("DONE (Entry: {:#x})", elf_header.entry_point);
 
         Self {
-            register_state,
-            page_table,
+            register_state: Box::new(register_state),
+            page_table: Rc::new(page_table),
             program_counter: elf_header.entry_point as usize,
             allocated_pages,
-            status: ProcessStatus::ReadyToBeScheduled,
         }
     }
 }
