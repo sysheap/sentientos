@@ -141,14 +141,14 @@ impl RootPageTableHolder {
         name: &str,
     ) {
         println!(
-            "Map {}\t{:#010x}-{:#010x} -> {:#010x}-{:#010x} (Size: {:#010x}) ({:?})",
-            name,
+            "Map \t{:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
             virtual_address_start,
             virtual_address_start + size,
             physical_address_start,
             physical_address_start + size,
             size,
-            privileges
+            privileges,
+            name
         );
 
         assert_eq!(virtual_address_start % PAGE_SIZE, 0);
