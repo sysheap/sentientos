@@ -3,10 +3,13 @@
 
 extern crate userspace;
 
+static mut _x: i32 = 0;
+
 #[no_mangle]
 fn main() {
-    let mut _x = 42;
     loop {
-        _x += 1;
+        unsafe {
+            _x += 1;
+        }
     }
 }
