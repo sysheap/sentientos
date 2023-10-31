@@ -3,12 +3,13 @@ use core::panic;
 use crate::{
     interrupts::plic::{self, InterruptSource},
     io::uart,
+    memory::page_tables,
     print, println,
     processes::{scheduler, timer},
 };
 
 use super::trap_cause::interrupt::*;
-use super::trap_cause::{exception::*, InterruptCause};
+use super::trap_cause::InterruptCause;
 
 #[repr(packed)]
 pub struct TrapFrame {
@@ -41,82 +42,20 @@ extern "C" fn supervisor_mode_trap(
     if cause.is_interrupt() {
         handle_interrupt(cause, stval, sepc, trap_frame);
     } else {
-        loop {}
         handle_exception(cause, stval, sepc, trap_frame);
     }
 }
 
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
     match cause.get_exception_code() {
-        INSTRUCTION_ADDRESS_MISALIGNED => {
-            panic!(
-                "Instruction address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        INSTRUCTION_ACCESS_FAULT => {
-            panic!(
-                "Instruction access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        ILLEGAL_INSTRUCTION => {
-            panic!(
-                "Illegal instruction! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        BREAKPOINT => {
-            panic!("Breakpoint! (stval: 0x{:x}) (sepc: 0x{:x})", stval, sepc);
-        }
-        LOAD_ADDRESS_MISALIGNED => {
-            panic!(
-                "Load address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        LOAD_ACCESS_FAULT => {
-            panic!(
-                "Load access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        STORE_AMO_ADDRESS_MISALIGNED => {
-            panic!(
-                "Store/AMO address misaligned! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        STORE_AMO_ACCESS_FAULT => {
-            panic!(
-                "Store/AMO access fault! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        ENVIRONMENT_CALL_FROM_U_MODE => {
-            panic!(
-                "Environment call from U-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        ENVIRONMENT_CALL_FROM_S_MODE => {
-            panic!(
-                "Environment call from S-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
-        ENVIRONMENT_CALL_FROM_M_MODE => {
-            panic!(
-                "Environment call from M-mode! (stval: 0x{:x}) (sepc: 0x{:x})",
-                stval, sepc
-            );
-        }
         _ => {
             panic!(
-                "Unknown exception! (Name: {}) (stval: 0x{:x}) (sepc: 0x{:x})",
+                "Unhandled exception! (Name: {}) (Exception code: {}) (stval: 0x{:x}) (sepc: 0x{:x}) (From Userspace: {})",
                 cause.get_reason(),
+                cause.get_exception_code(),
                 stval,
-                sepc
+                sepc,
+                page_tables::is_userspace_address(sepc)
             );
         }
     }

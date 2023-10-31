@@ -131,6 +131,31 @@ impl RootPageTableHolder {
         );
     }
 
+    fn get_page_table_entry_for_address(&self, address: usize) -> Option<&PageTableEntry> {
+        let root_page_table = self.0.lock();
+
+        let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
+        if !first_level_entry.get_validity() {
+            return None;
+        }
+
+        let second_level_entry = first_level_entry
+            .get_target_page_table()
+            .get_entry_for_virtual_address(address, 1);
+        if !second_level_entry.get_validity() {
+            return None;
+        }
+
+        let third_level_entry = second_level_entry
+            .get_target_page_table()
+            .get_entry_for_virtual_address(address, 0);
+        if !third_level_entry.get_validity() {
+            return None;
+        }
+
+        Some(&third_level_entry)
+    }
+
     fn map(
         &self,
         virtual_address_start: usize,
@@ -162,7 +187,7 @@ impl RootPageTableHolder {
             let current_physical_address = physical_address_start + offset;
 
             let first_level_entry =
-                root_page_table.get_entry_for_virtual_address(current_virtual_address, 2);
+                root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address() == 0 {
                 let new_page_table = PageTable::new();
                 first_level_entry.set_physical_address(new_page_table.get_physical_address());
@@ -171,7 +196,7 @@ impl RootPageTableHolder {
 
             let second_level_entry = first_level_entry
                 .get_target_page_table()
-                .get_entry_for_virtual_address(current_virtual_address, 1);
+                .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address() == 0 {
                 let new_page_table = PageTable::new();
                 second_level_entry.set_physical_address(new_page_table.get_physical_address());
@@ -180,7 +205,7 @@ impl RootPageTableHolder {
 
             let third_level_entry = second_level_entry
                 .get_target_page_table()
-                .get_entry_for_virtual_address(current_virtual_address, 0);
+                .get_entry_for_virtual_address_mut(current_virtual_address, 0);
 
             assert!(!third_level_entry.get_validity());
 
@@ -251,7 +276,7 @@ impl PageTable {
         self.get_physical_address().into()
     }
 
-    fn get_entry_for_virtual_address(
+    fn get_entry_for_virtual_address_mut(
         &mut self,
         virtual_address: usize,
         level: u8,
@@ -260,6 +285,13 @@ impl PageTable {
         let shifted_address = virtual_address >> (12 + 9 * level);
         let index = shifted_address & 0x1ff;
         &mut self.0[index]
+    }
+
+    fn get_entry_for_virtual_address(&self, virtual_address: usize, level: u8) -> &PageTableEntry {
+        assert!(level <= 2);
+        let shifted_address = virtual_address >> (12 + 9 * level);
+        let index = shifted_address & 0x1ff;
+        &self.0[index]
     }
 
     fn get_physical_address(&self) -> usize {
@@ -325,6 +357,10 @@ impl PageTableEntry {
         );
     }
 
+    fn get_user_mode_accessible(&self) -> bool {
+        get_bit(self.0, PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS)
+    }
+
     fn set_xwr_mode(&mut self, mode: XWRMode) {
         set_multiple_bits(&mut self.0, mode as u8, 3, PageTableEntry::READ_BIT_POS);
     }
@@ -383,6 +419,17 @@ pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
     CURRENT_PAGE_TABLE.lock().replace(page_table_holder);
 
     println!("Done!\n");
+}
+
+pub fn is_userspace_address(address: usize) -> bool {
+    let current_page_table = CURRENT_PAGE_TABLE.lock();
+    if let Some(ref current_page_table) = *current_page_table {
+        current_page_table
+            .get_page_table_entry_for_address(address)
+            .map_or(false, |entry| entry.get_user_mode_accessible())
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
