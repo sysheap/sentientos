@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![feature(panic_info_message)]
-#![feature(pointer_byte_offsets)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]
 #![feature(core_intrinsics)]
