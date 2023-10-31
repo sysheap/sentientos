@@ -56,9 +56,12 @@ where
 
 pub fn get_bit<DataType>(data: DataType, bit_position: usize) -> bool
 where
-    DataType: Shr<usize, Output = DataType> + PartialEq<DataType> + From<u8>,
+    DataType: Shr<usize, Output = DataType>
+        + BitAnd<DataType, Output = DataType>
+        + PartialEq<DataType>
+        + From<u8>,
 {
-    (data >> bit_position) == DataType::from(1)
+    ((data >> bit_position) & DataType::from(0x1)) == DataType::from(1)
 }
 
 pub fn set_multiple_bits<DataType, ValueType>(
@@ -103,4 +106,17 @@ where
     DataType: Shr<usize, Output = DataType> + BitAnd<u64, Output = ValueType>,
 {
     (data >> bit_position) & (2u64.pow(number_of_bits as u32) - 1)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test_case]
+    fn check_if_get_bit_returns_correct_value() {
+        let value: u64 = 0b1101101;
+        assert_eq!(super::get_bit(value, 0), true);
+        assert_eq!(super::get_bit(value, 1), false);
+        assert_eq!(super::get_bit(value, 2), true);
+    }
+
+    // TODO: Add more tests
 }
