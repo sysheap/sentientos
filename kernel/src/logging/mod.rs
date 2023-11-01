@@ -2,6 +2,8 @@ use core::fmt;
 
 use crate::io::uart;
 
+pub mod configuration;
+
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
@@ -19,7 +21,9 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
-        $crate::println!("[debug][{}] {}", module_path!(), format_args!($($arg)*));
+        if $crate::logging::configuration::should_log_module(module_path!()) {
+            $crate::println!("[debug][{}] {}", module_path!(), format_args!($($arg)*));
+        }
     };
 }
 
