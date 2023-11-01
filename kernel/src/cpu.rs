@@ -8,13 +8,13 @@ pub fn write_sscratch_register(value: *const TrapFrame) {
     }
 }
 
-pub fn write_sepc_register(value: usize) {
+pub fn write_sepc(value: usize) {
     unsafe {
         asm!("csrw sepc, {}", in(reg) value);
     }
 }
 
-pub fn get_sepc() -> usize {
+pub fn read_sepc() -> usize {
     let sepc: usize;
     unsafe {
         asm!("csrr {}, sepc", out(reg) sepc);

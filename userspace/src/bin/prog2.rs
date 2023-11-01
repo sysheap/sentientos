@@ -8,7 +8,7 @@ extern crate userspace;
 #[no_mangle]
 fn main() {
     loop {
-        write_char('a');
+        write_char('b');
         wait();
     }
 }

@@ -33,7 +33,7 @@ macro_rules! prog_bytes {
 }
 
 prog_bytes!(PROG1, "prog1");
-prog_bytes!(PROG2, "prog1");
+prog_bytes!(PROG2, "prog2");
 
 static PROGRAMS: [&[u8]; 2] = [PROG1, PROG2];
 
@@ -87,7 +87,7 @@ fn prepare_next_process() {
     let mut current_process = CURRENT_PROCESS.lock();
 
     if let Some(ref mut current_process) = *current_process {
-        current_process.set_program_counter(cpu::get_sepc());
+        current_process.set_program_counter(cpu::read_sepc());
         println!("Saved context to current process");
         println!("Current process: {:?}", current_process);
     }
@@ -99,7 +99,7 @@ fn prepare_next_process() {
     let page_table = next_process.get_page_table();
 
     cpu::write_sscratch_register(trap_frame_ptr);
-    cpu::write_sepc_register(pc);
+    cpu::write_sepc(pc);
 
     page_tables::activate_page_table(page_table);
 

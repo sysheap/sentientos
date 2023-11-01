@@ -32,6 +32,7 @@ mod memory;
 mod panic;
 mod processes;
 mod sbi;
+mod syscalls;
 mod test;
 
 extern crate alloc;
@@ -69,5 +70,5 @@ extern "C" fn kernel_init() {
     plic::init_uart_interrupt();
 
     scheduler::SCHEDULER.lock().initialize();
-    timer::set_timer(1000);
+    timer::set_timer(0);
 }

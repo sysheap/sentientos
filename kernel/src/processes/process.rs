@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 
 use crate::{
-    interrupts::trap::TrapFrame,
+    interrupts::trap::{Register, TrapFrame},
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
         util::{align_up_number_of_pages, copy_slice},
@@ -81,7 +81,7 @@ impl Process {
             "Stack",
         );
 
-        register_state.set_stack_pointer(Process::STACK_START);
+        register_state[Register::sp] = Process::STACK_START;
 
         // Map load program header
         let loadable_program_header = elf_file

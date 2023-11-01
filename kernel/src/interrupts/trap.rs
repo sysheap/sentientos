@@ -1,15 +1,17 @@
 use core::{fmt::Debug, panic};
 
 use crate::{
+    cpu,
     interrupts::plic::{self, InterruptSource},
     io::uart,
     memory::page_tables,
     print, println,
     processes::{scheduler, timer},
+    syscalls::handle_syscall,
 };
 
-use super::trap_cause::interrupt::*;
 use super::trap_cause::InterruptCause;
+use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*};
 
 #[repr(C)]
 pub struct TrapFrame {
@@ -91,18 +93,63 @@ impl Debug for TrapFrame {
     }
 }
 
-impl TrapFrame {
-    const STACK_POINTER_REGISTER_INDEX: usize = 2;
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Register {
+    zero = 0,
+    ra = 1,
+    sp = 2,
+    gp = 3,
+    tp = 4,
+    t0 = 5,
+    t1 = 6,
+    t2 = 7,
+    s0_fp = 8,
+    s1 = 9,
+    a0 = 10,
+    a1 = 11,
+    a2 = 12,
+    a3 = 13,
+    a4 = 14,
+    a5 = 15,
+    a6 = 16,
+    a7 = 17,
+    s2 = 18,
+    s3 = 19,
+    s4 = 20,
+    s5 = 21,
+    s6 = 22,
+    s7 = 23,
+    s8 = 24,
+    s9 = 25,
+    s10 = 26,
+    s11 = 27,
+    t3 = 28,
+    t4 = 29,
+    t5 = 30,
+    t6 = 31,
+}
 
+impl core::ops::Index<Register> for TrapFrame {
+    type Output = usize;
+
+    fn index(&self, index: Register) -> &Self::Output {
+        &self.registers[index as usize]
+    }
+}
+
+impl core::ops::IndexMut<Register> for TrapFrame {
+    fn index_mut(&mut self, index: Register) -> &mut Self::Output {
+        &mut self.registers[index as usize]
+    }
+}
+
+impl TrapFrame {
     pub const fn zero() -> Self {
         Self {
             registers: [0; 32],
             floating_registers: [0; 32],
         }
-    }
-
-    pub fn set_stack_pointer(&mut self, stack_pointer: usize) {
-        self.registers[TrapFrame::STACK_POINTER_REGISTER_INDEX] = stack_pointer;
     }
 }
 
@@ -111,7 +158,7 @@ extern "C" fn supervisor_mode_trap(
     cause: InterruptCause,
     stval: usize,
     sepc: usize,
-    trap_frame: &TrapFrame,
+    trap_frame: &mut TrapFrame,
 ) {
     if cause.is_interrupt() {
         handle_interrupt(cause, stval, sepc, trap_frame);
@@ -120,9 +167,12 @@ extern "C" fn supervisor_mode_trap(
     }
 }
 
-fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
-    #[allow(clippy::match_single_binding)]
+fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
     match cause.get_exception_code() {
+        ENVIRONMENT_CALL_FROM_U_MODE => {
+            handle_syscall(trap_frame);
+            cpu::write_sepc(sepc + 4); // Skip the ecall instruction
+        }
         _ => {
             panic!(
                 "Unhandled exception! (Name: {}) (Exception code: {}) (stval: 0x{:x}) (sepc: 0x{:x}) (From Userspace: {})",
