@@ -10,9 +10,9 @@ Implemented
 * Executing in supervisor mode  
 * Userspace processes
 * Scheduler
+* Systemcalls
 
 TODO
-* Systemcalls
 * VirtIO / Filesystem
 * Networkstack
 
