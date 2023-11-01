@@ -198,7 +198,7 @@ fn handle_interrupt(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
 
 fn handle_supervisor_timer_interrupt() {
     debug!("Supervisor timer interrupt occurred!");
-    timer::set_timer(1000);
+    timer::set_timer(1);
     scheduler::schedule();
 }
 
