@@ -8,10 +8,10 @@ Implemented
 * Interrupt handling (PLIC -> UART interrupts)
 * Testing harness
 * Executing in supervisor mode  
+* Userspace processes
+* Scheduler
 
 TODO
-* Scheduler
-* Userspace processes
 * Systemcalls
 * VirtIO / Filesystem
 * Networkstack
