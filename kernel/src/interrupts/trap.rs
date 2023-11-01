@@ -121,6 +121,7 @@ extern "C" fn supervisor_mode_trap(
 }
 
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
+    #[allow(clippy::match_single_binding)]
     match cause.get_exception_code() {
         _ => {
             panic!(

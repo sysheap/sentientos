@@ -7,6 +7,7 @@ extern crate userspace;
 
 #[no_mangle]
 fn main() {
+    #[allow(clippy::empty_loop)]
     loop {}
     // loop {
     //     unsafe {
