@@ -1,5 +1,6 @@
 use core::{
     cell::UnsafeCell,
+    fmt::Debug,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -7,6 +8,12 @@ use core::{
 pub struct Mutex<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
+}
+
+impl<T: Debug> Debug for Mutex<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.lock().fmt(f)
+    }
 }
 
 impl<T> Mutex<T> {

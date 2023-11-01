@@ -21,6 +21,13 @@ static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(N
 
 pub struct RootPageTableHolder(Mutex<&'static mut PageTable>);
 
+impl Debug for RootPageTableHolder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let page_table = self.0.lock();
+        write!(f, "RootPageTableHolder({:p})", &*page_table)
+    }
+}
+
 impl RootPageTableHolder {
     fn empty() -> Self {
         Self(Mutex::new(PageTable::new()))
@@ -153,7 +160,7 @@ impl RootPageTableHolder {
             return None;
         }
 
-        Some(&third_level_entry)
+        Some(third_level_entry)
     }
 
     fn map(
@@ -263,6 +270,7 @@ impl Drop for RootPageTableHolder {
 }
 
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct PageTable([PageTableEntry; 512]);
 
 impl PageTable {
@@ -300,6 +308,7 @@ impl PageTable {
 }
 
 #[repr(transparent)]
+#[derive(Debug)]
 struct PageTableEntry(u64);
 
 #[repr(u8)]

@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 
 use crate::cpu;
@@ -37,7 +38,7 @@ prog_bytes!(PROG2, "prog1");
 static PROGRAMS: [&[u8]; 2] = [PROG1, PROG2];
 
 pub struct Scheduler {
-    queue: VecDeque<Process>,
+    queue: VecDeque<Box<Process>>,
 }
 
 impl Scheduler {
@@ -53,27 +54,28 @@ impl Scheduler {
         for progam in PROGRAMS {
             let elf = ElfFile::parse(progam).expect("Cannot parse ELF file");
             let process = Process::from_elf(&elf);
-            self.queue.push_back(process);
+            self.queue.push_back(Box::new(process));
         }
     }
 
-    pub fn get_next(&mut self) -> Option<Process> {
+    pub fn get_next(&mut self) -> Option<Box<Process>> {
         self.queue.pop_front()
     }
 
-    pub fn enqueue(&mut self, process: Process) {
+    pub fn enqueue(&mut self, process: Box<Process>) {
         self.queue.push_back(process);
     }
 }
 
 pub static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
-static CURRENT_PROCESS: Mutex<Option<Process>> = Mutex::new(None);
+static CURRENT_PROCESS: Mutex<Option<Box<Process>>> = Mutex::new(None);
 
 extern "C" {
     fn restore_user_context() -> !;
 }
 
 pub fn schedule() -> ! {
+    println!("Schedule next process");
     prepare_next_process();
     unsafe {
         restore_user_context();
@@ -84,7 +86,11 @@ fn prepare_next_process() {
     let mut scheduler = SCHEDULER.lock();
     let mut current_process = CURRENT_PROCESS.lock();
 
-    assert!(current_process.is_none(), "Need to implement context save");
+    if let Some(ref mut current_process) = *current_process {
+        current_process.set_program_counter(cpu::get_sepc());
+        println!("Saved context to current process");
+        println!("Current process: {:?}", current_process);
+    }
 
     let next_process = scheduler.get_next().expect("No process to schedule!");
 
@@ -97,5 +103,11 @@ fn prepare_next_process() {
 
     page_tables::activate_page_table(page_table);
 
-    current_process.replace(next_process);
+    println!("Next process: {:?}", next_process);
+
+    let old_process = current_process.replace(next_process);
+
+    if let Some(old_process) = old_process {
+        scheduler.enqueue(old_process);
+    }
 }

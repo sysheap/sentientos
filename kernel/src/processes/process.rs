@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 
 use crate::{
@@ -20,6 +22,24 @@ pub struct Process {
     allocated_pages: Vec<PagePointer>,
 }
 
+impl Debug for Process {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "Process [
+            Registers: {:?},
+            Page Table: {:?},
+            Program Counter: {:#x},
+            Number of allocated pages: {}
+        ]",
+            self.register_state,
+            self.page_table,
+            self.program_counter,
+            self.allocated_pages.len()
+        )
+    }
+}
+
 impl Process {
     const STACK_END: usize = 0xfffffffffffff000;
     const STACK_START: usize = Process::STACK_END + (PAGE_SIZE - 1);
@@ -30,6 +50,10 @@ impl Process {
 
     pub fn get_program_counter(&self) -> usize {
         self.program_counter
+    }
+
+    pub fn set_program_counter(&mut self, program_counter: usize) {
+        self.program_counter = program_counter;
     }
 
     pub fn get_page_table(&self) -> Rc<RootPageTableHolder> {

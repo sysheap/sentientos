@@ -13,3 +13,11 @@ pub fn write_sepc_register(value: usize) {
         asm!("csrw sepc, {}", in(reg) value);
     }
 }
+
+pub fn get_sepc() -> usize {
+    let sepc: usize;
+    unsafe {
+        asm!("csrr {}, sepc", out(reg) sepc);
+    }
+    sepc
+}
