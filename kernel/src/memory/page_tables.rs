@@ -3,6 +3,7 @@ use core::{arch::asm, fmt::Debug, ptr::NonNull, u8};
 use alloc::rc::Rc;
 
 use crate::{
+    debug,
     interrupts::plic,
     klibc::{
         elf,
@@ -10,7 +11,6 @@ use crate::{
         Mutex,
     },
     memory::page_allocator::PAGE_SIZE,
-    println,
     processes::timer,
     test::qemu_exit,
 };
@@ -172,7 +172,7 @@ impl RootPageTableHolder {
         is_user_mode_accessible: bool,
         name: &str,
     ) {
-        println!(
+        debug!(
             "Map \t{:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
             virtual_address_start,
             virtual_address_start - PAGE_SIZE + size,
@@ -412,7 +412,7 @@ impl PageTableEntry {
 pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
     let page_table_address = page_table_holder.0.lock().get_physical_address();
 
-    println!(
+    debug!(
         "Activate new page mapping (Addr of page tables 0x{:x})",
         page_table_address
     );
@@ -426,8 +426,6 @@ pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
     }
 
     CURRENT_PAGE_TABLE.lock().replace(page_table_holder);
-
-    println!("Done!\n");
 }
 
 pub fn is_userspace_address(address: usize) -> bool {

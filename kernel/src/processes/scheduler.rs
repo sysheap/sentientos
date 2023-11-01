@@ -1,13 +1,10 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 
-use crate::cpu;
 use crate::klibc::macros::include_bytes_align_as;
+use crate::klibc::{elf::ElfFile, Mutex};
 use crate::memory::page_tables;
-use crate::{
-    klibc::{elf::ElfFile, Mutex},
-    println,
-};
+use crate::{cpu, debug, info};
 
 use super::process::Process;
 
@@ -49,7 +46,7 @@ impl Scheduler {
     }
 
     pub fn initialize(&mut self) {
-        println!("Initializing scheduler");
+        info!("Initializing scheduler");
 
         for progam in PROGRAMS {
             let elf = ElfFile::parse(progam).expect("Cannot parse ELF file");
@@ -75,7 +72,7 @@ extern "C" {
 }
 
 pub fn schedule() -> ! {
-    println!("Schedule next process");
+    debug!("Schedule next process");
     prepare_next_process();
     unsafe {
         restore_user_context();
@@ -88,8 +85,8 @@ fn prepare_next_process() {
 
     if let Some(ref mut current_process) = *current_process {
         current_process.set_program_counter(cpu::read_sepc());
-        println!("Saved context to current process");
-        println!("Current process: {:?}", current_process);
+        debug!("Saved context to current process");
+        debug!("Current process: {:?}", current_process);
     }
 
     let next_process = scheduler.get_next().expect("No process to schedule!");
@@ -103,7 +100,7 @@ fn prepare_next_process() {
 
     page_tables::activate_page_table(page_table);
 
-    println!("Next process: {:?}", next_process);
+    debug!("Next process: {:?}", next_process);
 
     let old_process = current_process.replace(next_process);
 

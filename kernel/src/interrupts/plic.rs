@@ -1,4 +1,4 @@
-use crate::{klibc::MMIO, println};
+use crate::{info, klibc::MMIO};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x1000_0000;
@@ -62,7 +62,7 @@ pub fn complete_interrupt(source: InterruptSource) {
 }
 
 pub fn init_uart_interrupt() {
-    println!("Initializing plic uart interrupt");
+    info!("Initializing plic uart interrupt");
     set_threshold(0);
     enable(UART_INTERRUPT_NUMBER);
     set_priority(UART_INTERRUPT_NUMBER, 1);

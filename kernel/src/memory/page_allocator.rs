@@ -4,8 +4,8 @@ use core::{
 };
 
 use crate::{
+    debug, info,
     klibc::{util::align_up, Mutex},
-    print, println,
 };
 
 pub const PAGE_SIZE: usize = 4096;
@@ -52,10 +52,10 @@ impl PageAllocator {
             }
         }
 
-        println!("Page allocator initalized");
-        println!("Metadata start:\t\t{:p}", self.metadata);
-        println!("Heap start:\t\t{:p}", self.heap);
-        println!("Number of pages:\t{}\n", self.number_of_pages);
+        info!("Page allocator initalized");
+        info!("Metadata start:\t\t{:p}", self.metadata);
+        info!("Heap start:\t\t{:p}", self.heap);
+        info!("Number of pages:\t{}\n", self.number_of_pages);
     }
 
     fn page_idx_to_page_pointer(&self, page_index: usize, number_of_pages: usize) -> PagePointer {
@@ -109,11 +109,11 @@ impl PageAllocator {
     }
 
     fn dump(&self) {
-        println!("###############");
-        println!("Page allocator dump");
-        println!("Metadata start:\t\t{:p}", self.metadata);
-        println!("Heap start:\t\t{:p}", self.heap);
-        println!("Number of pages:\t{}", self.number_of_pages);
+        debug!("###############");
+        debug!("Page allocator dump");
+        debug!("Metadata start:\t\t{:p}", self.metadata);
+        debug!("Heap start:\t\t{:p}", self.heap);
+        debug!("Number of pages:\t{}", self.number_of_pages);
         for idx in 0..self.number_of_pages {
             let status = unsafe {
                 match *self.metadata.add(idx) {
@@ -122,13 +122,13 @@ impl PageAllocator {
                     PageStatus::Last => "L",
                 }
             };
-            print!("{} ", status);
+            debug!("{} ", status);
 
             if (idx + 1) % 80 == 0 {
-                print!("\n");
+                debug!("\n");
             }
         }
-        println!("\n###############");
+        debug!("\n###############");
     }
 }
 

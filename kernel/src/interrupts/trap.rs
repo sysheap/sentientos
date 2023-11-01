@@ -1,7 +1,7 @@
 use core::{fmt::Debug, panic};
 
 use crate::{
-    cpu,
+    cpu, debug,
     interrupts::plic::{self, InterruptSource},
     io::uart,
     memory::page_tables,
@@ -197,13 +197,13 @@ fn handle_interrupt(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
 }
 
 fn handle_supervisor_timer_interrupt() {
-    println!("Supervisor timer interrupt occurred!");
+    debug!("Supervisor timer interrupt occurred!");
     timer::set_timer(1000);
     scheduler::schedule();
 }
 
 fn handle_external_interrupt() {
-    print!("External interrupt occurred!");
+    debug!("External interrupt occurred!");
     let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
     assert!(
         plic_interrupt == InterruptSource::Uart,

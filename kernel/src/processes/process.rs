@@ -3,6 +3,7 @@ use core::fmt::Debug;
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 
 use crate::{
+    debug,
     interrupts::trap::{Register, TrapFrame},
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
@@ -12,7 +13,6 @@ use crate::{
         page_allocator::{dealloc, zalloc, PagePointer, PAGE_SIZE},
         page_tables::RootPageTableHolder,
     },
-    println,
 };
 
 pub struct Process {
@@ -61,7 +61,7 @@ impl Process {
     }
 
     pub fn from_elf(elf_file: &ElfFile) -> Self {
-        println!("Create process from elf file");
+        debug!("Create process from elf file");
 
         let page_table = RootPageTableHolder::new_with_kernel_mapping();
         let mut register_state = TrapFrame::zero();
@@ -107,7 +107,7 @@ impl Process {
             );
         }
 
-        println!("DONE (Entry: {:#x})", elf_header.entry_point);
+        debug!("DONE (Entry: {:#x})", elf_header.entry_point);
 
         Self {
             register_state: Box::new(register_state),

@@ -28,6 +28,7 @@ mod cpu;
 mod interrupts;
 mod io;
 mod klibc;
+mod logging;
 mod memory;
 mod panic;
 mod processes;
@@ -49,14 +50,14 @@ extern "C" fn kernel_init() {
     println!("Hello World from YaROS!\n");
 
     let version = sbi::extensions::base_extension::sbi_get_spec_version();
-    println!("SBI version {}.{}", version.major, version.minor);
+    info!("SBI version {}.{}", version.major, version.minor);
     assert!(
         (version.major == 0 && version.minor >= 2) || version.major > 0,
         "Supported SBI Versions >= 0.2"
     );
 
     unsafe {
-        println!("Initializing page allocator");
+        info!("Initializing page allocator");
         page_allocator::init(HEAP_START, HEAP_SIZE);
         heap::init();
     }

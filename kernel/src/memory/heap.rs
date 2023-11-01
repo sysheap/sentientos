@@ -1,8 +1,8 @@
 use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
 use crate::{
+    debug, info,
     klibc::{util::align_up, Mutex},
-    println,
 };
 
 use super::page_allocator;
@@ -54,9 +54,9 @@ impl Heap {
     }
 
     fn dump(&self) {
-        println!("{}", DELIMITER);
-        println!("Heap DUMP of free blocks");
-        println!("START\t\t\tEND\t\t\tSIZE");
+        debug!("{}", DELIMITER);
+        debug!("Heap DUMP of free blocks");
+        debug!("START\t\t\tEND\t\t\tSIZE");
 
         let mut free_block_holder = self.inner.borrow().free_list;
 
@@ -66,7 +66,7 @@ impl Heap {
                 let free_block = free_block.as_ref();
                 let size = free_block.size;
 
-                println!(
+                debug!(
                     "{:p}\t\t{:p}\t\t0x{:x}",
                     free_block_addr,
                     (free_block_addr.byte_add(size)),
@@ -76,7 +76,7 @@ impl Heap {
                 free_block_holder = free_block.next;
             }
         }
-        println!("{}", DELIMITER);
+        debug!("{}", DELIMITER);
     }
 
     unsafe fn alloc_impl(&self, layout: core::alloc::Layout) -> *mut u8 {
@@ -178,7 +178,7 @@ pub fn init() {
     OS_HEAP
         .lock()
         .init(heap_start.addr().cast().as_ptr(), page_allocator::PAGE_SIZE);
-    println!(
+    info!(
         "Heap initialized! (Start: 0x{:p} Size: 0x{:x})\n",
         heap_start.addr().as_ptr(),
         page_allocator::PAGE_SIZE
@@ -189,7 +189,7 @@ unsafe impl GlobalAlloc for Mutex<Heap> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let heap = self.lock();
         let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
-        // println!(
+        // debug!(
         //     "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
         //     size,
         //     layout.size()
@@ -200,7 +200,7 @@ unsafe impl GlobalAlloc for Mutex<Heap> {
 
         // If the heap is empty we try to allocate more from the page allocator
         if ptr.is_null() {
-            println!("Try to allocate from page_allocator");
+            debug!("Try to allocate from page_allocator");
 
             let number_of_pages =
                 align_up(size, page_allocator::PAGE_SIZE) / page_allocator::PAGE_SIZE;
@@ -214,7 +214,7 @@ unsafe impl GlobalAlloc for Mutex<Heap> {
             ptr = free_block.get_data_ptr();
         }
 
-        // println!("AFTER ALLOC (received {:p})", ptr);
+        // debug!("AFTER ALLOC (received {:p})", ptr);
         // heap.dump();
 
         ptr
@@ -222,10 +222,10 @@ unsafe impl GlobalAlloc for Mutex<Heap> {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
         let heap = self.lock();
-        // println!("BEFORE DEALLOC: {:p}", ptr);
+        // debug!("BEFORE DEALLOC: {:p}", ptr);
         // heap.dump();
         heap.dealloc_impl(ptr, layout);
-        // println!("AFTER DEALLOC");
+        // debug!("AFTER DEALLOC");
         // heap.dump();
     }
 }
