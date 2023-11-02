@@ -19,16 +19,17 @@ TODO
 ## How do I run it?
 To run the operating system you need to have the following tools installed:
 * Rust
-* Just (just a command runner)
 * qemu-system-riscv64  
 
 To install them on Ubuntu you can execute the following commands
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-cargo install just
 sudo apt install qemu-system-riscv64
 ```
 To run the operating system execute
 ```
-just run
+cargo run --release
 ```
+## Justfile
+The justfile contains useful commands which I often use. To run them you first need to install just (just a command runner).
+`cargo install just`. To get a list of all commands execute `just -l`.
