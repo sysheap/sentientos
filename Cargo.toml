@@ -8,6 +8,7 @@ members = [
     "src/kernel",
     "src/userspace"
 ]
+default-members = ["src/kernel"]
 
 [[bin]]
 name = "kernel"
