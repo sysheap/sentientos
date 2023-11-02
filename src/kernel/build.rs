@@ -2,8 +2,8 @@ use std::error::Error;
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=src/kernel/qemu.ld");
-    println!("cargo:rerun-if-changed=src/userspace/");
+    println!("cargo:rerun-if-changed=qemu.ld");
+    println!("cargo:rerun-if-changed=../userspace/");
     println!("cargo:rustc-link-arg-bin=kernel=-Tsrc/kernel/qemu.ld");
 
     build_userspace_programs()?;
@@ -24,7 +24,7 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
         "--root",
         "../kernel/compiled_userspace",
         "--target-dir",
-        "./target",
+        "../../target-userspace",
     ]);
 
     if profile == "debug" {
