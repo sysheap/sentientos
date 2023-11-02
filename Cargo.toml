@@ -5,3 +5,8 @@ members = [
 ]
 default-members = ["src/kernel"]
 resolver = "2"
+
+[workspace.package]
+description = "Yet Another Risc/Rust Operating System"
+authors = ["Maurice Hieronymus <yaros@ilovebinary.com>"]
+version = "0.1.0"
