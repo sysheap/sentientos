@@ -5,11 +5,11 @@ edition = "2021"
 
 [workspace]
 members = [
-    "kernel",
-    "userspace"
+    "src/kernel",
+    "src/userspace"
 ]
 
 [[bin]]
 name = "kernel"
-path = "kernel/src/main.rs"
+path = "src/kernel/src/main.rs"
 test = true

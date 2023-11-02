@@ -11,14 +11,14 @@ use super::process::Process;
 #[cfg(debug_assertions)]
 macro_rules! path_to_compiled_binaries {
     () => {
-        "../../../target/riscv64gc-unknown-none-elf/debug/"
+        "../../../../target/riscv64gc-unknown-none-elf/debug/"
     };
 }
 
 #[cfg(not(debug_assertions))]
 macro_rules! path_to_compiled_binaries {
     () => {
-        "../../../target/riscv64gc-unknown-none-elf/release/"
+        "../../../../target/riscv64gc-unknown-none-elf/release/"
     };
 }
 

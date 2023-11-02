@@ -1,13 +1,13 @@
 build-debug:
-    cd userspace && cargo build    
+    cd src/userspace && cargo build    
     cargo build
 
 build-release:
-    cd userspace && cargo build --release
+    cd src/userspace && cargo build --release
     cargo build --release
 
 clippy:
-    cd userspace && cargo build && cargo clippy -- -D warnings
+    cd src/userspace && cargo build && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
 
 clean:
