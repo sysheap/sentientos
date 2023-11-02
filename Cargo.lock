@@ -3,10 +3,6 @@
 version = 3
 
 [[package]]
-name = "kernel"
-version = "0.1.0"
-
-[[package]]
 name = "userspace"
 version = "0.1.0"
 

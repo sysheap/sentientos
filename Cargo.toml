@@ -1,16 +1,7 @@
-[package]
-name = "yaros"
-version = "0.1.0"
-edition = "2021"
-
 [workspace]
 members = [
     "src/kernel",
     "src/userspace"
 ]
 default-members = ["src/kernel"]
-
-[[bin]]
-name = "kernel"
-path = "src/kernel/src/main.rs"
-test = true
+resolver = "2"
