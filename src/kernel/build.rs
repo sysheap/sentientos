@@ -12,17 +12,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
-    let status = Command::new("cargo")
-        .args([
-            "install",
-            "--path",
-            ".",
-            "--root",
-            "../kernel/compiled_userspace",
-        ])
-        .current_dir("../userspace")
-        .status()?;
+    let profile = std::env::var("PROFILE")?;
 
+    let mut command = Command::new("cargo");
+    command.current_dir("../userspace");
+
+    command.args([
+        "install",
+        "--path",
+        ".",
+        "--root",
+        "../kernel/compiled_userspace",
+        "--target-dir",
+        "./target",
+    ]);
+
+    if profile == "debug" {
+        command.arg("--debug");
+    }
+
+    let status = command.status()?;
     if !status.success() {
         return Err(From::from("Failed to build userspace programs"));
     }
