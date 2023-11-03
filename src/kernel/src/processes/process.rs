@@ -7,7 +7,7 @@ use crate::{
     interrupts::trap::{Register, TrapFrame},
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{align_up_number_of_pages, copy_slice},
+        util::{align_up_and_get_number_of_pages, copy_slice},
     },
     memory::{
         page_allocator::{dealloc, zalloc, PagePointer, PAGE_SIZE},
@@ -91,7 +91,7 @@ impl Process {
 
         for program_header in loadable_program_header {
             let data = elf_file.get_program_header_data(program_header);
-            let size_in_pages = align_up_number_of_pages(data.len());
+            let size_in_pages = align_up_and_get_number_of_pages(data.len());
             let mut pages =
                 zalloc(size_in_pages).expect("Could not allocate memory for program header.");
             allocated_pages.push(pages.clone());

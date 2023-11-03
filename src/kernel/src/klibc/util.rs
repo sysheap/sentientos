@@ -11,7 +11,7 @@ pub fn align_up(value: usize, alignment: usize) -> usize {
     }
 }
 
-pub fn align_up_number_of_pages(value: usize) -> usize {
+pub fn align_up_and_get_number_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE
 }
 
@@ -78,9 +78,9 @@ pub fn set_multiple_bits<DataType, ValueType>(
     ValueType: Copy + BitAnd + From<u8> + Shl<usize, Output = ValueType>,
     <ValueType as BitAnd>::Output: PartialOrd<ValueType>,
 {
-    let mut mask: DataType = !(DataType::from(1) << bit_position);
+    let mut mask: DataType = !(DataType::from(0));
 
-    for idx in 1..=number_of_bits {
+    for idx in 0..number_of_bits {
         mask &= !(DataType::from(1) << (bit_position + idx));
     }
 
@@ -110,13 +110,92 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::memory::page_allocator::PAGE_SIZE;
+
     #[test_case]
-    fn check_if_get_bit_returns_correct_value() {
+    fn align_up() {
+        assert_eq!(super::align_up(26, 4), 28);
+        assert_eq!(super::align_up(37, 3), 39);
+        assert_eq!(super::align_up(64, 2), 64);
+    }
+
+    #[test_case]
+    fn align_up_number_of_pages() {
+        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE - 15), 1);
+        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE + 15), 2);
+        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE * 2), 2);
+    }
+
+    #[test_case]
+    fn align_down() {
+        assert_eq!(super::align_down(26, 4), 24);
+        assert_eq!(super::align_down(37, 3), 36);
+        assert_eq!(super::align_down(64, 2), 64);
+    }
+
+    #[test_case]
+    fn copy_from_slice() {
+        let src = [1, 2, 3, 4, 5];
+        let mut dst = [0, 0, 0, 0, 0, 0, 0];
+        super::copy_slice(&src, &mut dst);
+        assert_eq!(dst, [1, 2, 3, 4, 5, 0, 0]);
+    }
+
+    #[test_case]
+    fn set_or_clear_bit() {
+        let mut value: u64 = 0b1101101;
+        super::set_or_clear_bit(&mut value, true, 1);
+        assert_eq!(value, 0b1101111);
+        super::set_or_clear_bit(&mut value, false, 1);
+        assert_eq!(value, 0b1101101);
+        super::set_or_clear_bit(&mut value, false, 0);
+        assert_eq!(value, 0b1101100);
+    }
+
+    #[test_case]
+    fn set_bit() {
+        let mut value: u64 = 0b1101110;
+        super::set_bit(&mut value, 0);
+        assert_eq!(value, 0b1101111);
+        super::set_bit(&mut value, 4);
+        assert_eq!(value, 0b1111111);
+    }
+
+    #[test_case]
+    fn clear_bit() {
+        let mut value: u64 = 0b1101111;
+        super::clear_bit(&mut value, 0);
+        assert_eq!(value, 0b1101110);
+        super::clear_bit(&mut value, 5);
+        assert_eq!(value, 0b1001110);
+        super::clear_bit(&mut value, 0);
+        assert_eq!(value, 0b1001110);
+    }
+
+    #[test_case]
+    fn get_bit() {
         let value: u64 = 0b1101101;
         assert_eq!(super::get_bit(value, 0), true);
         assert_eq!(super::get_bit(value, 1), false);
         assert_eq!(super::get_bit(value, 2), true);
     }
 
-    // TODO: Add more tests
+    #[test_case]
+    fn set_multiple_bits() {
+        let mut value: u64 = 0b1101101;
+        super::set_multiple_bits(&mut value, 0b111, 3, 0);
+        assert_eq!(value, 0b1101111);
+        super::set_multiple_bits(&mut value, 0b110, 3, 1);
+        assert_eq!(value, 0b1101101);
+        super::set_multiple_bits(&mut value, 0b011, 3, 2);
+        assert_eq!(value, 0b1101101);
+    }
+
+    #[test_case]
+    fn get_multiple_bits() {
+        let value: u64 = 0b1101101;
+        assert_eq!(super::get_multiple_bits(value, 3, 0), 0b101);
+        assert_eq!(super::get_multiple_bits(value, 3, 1), 0b110);
+        assert_eq!(super::get_multiple_bits(value, 3, 2), 0b011);
+    }
 }
