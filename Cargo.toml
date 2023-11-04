@@ -1,7 +1,9 @@
 [workspace]
-members = [
+members = [ "src/common",
     "src/kernel",
-    "src/userspace"
+    "src/userspace",
+    "src/common",
+    "src/macros"
 ]
 default-members = ["src/kernel"]
 resolver = "2"
