@@ -17,9 +17,13 @@ pub mod trap_frame;
 //     0
 // }
 
+// syscalls!(
+//     WRITE_CHAR(c: char);
+//     // SHARE_VEC(vec: &mut Vec<u8>, additional_data: usize);
+// );
+
 syscalls!(
-    WRITE_CHAR(c: char);
-    SHARE_VEC(vec: &mut Vec<u8>, additional_data: usize);
+    WRITE_CHAR(c: u8);
 );
 
 // mod userspace {

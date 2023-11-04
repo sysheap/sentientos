@@ -2,6 +2,7 @@
 
 extern crate proc_macro;
 
+use core::panic;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
@@ -58,10 +59,91 @@ pub fn syscalls(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
 fn syscalls_impl(syscalls: Vec<Syscall>) -> Result<proc_macro::TokenStream, ()> {
     check_for_duplicates_and_report_error(&syscalls)?;
-    let userspace_functions = generate_userspace_functions(&syscalls)?;
-    let userspace_module = generate_userspace_module(userspace_functions);
+    let userspace_syscall_functions = generate_userspace_functions(&syscalls)?;
+    let userspace_module = generate_userspace_module(userspace_syscall_functions);
 
-    Ok(proc_macro::TokenStream::from(userspace_module))
+    let kernel_syscall_functions = generate_kernel_functions(&syscalls)?;
+    let kernel_syscall_matcharms = generate_kernel_matcharms(&syscalls)?;
+    let kernel_module = generate_kernel_module(kernel_syscall_functions, kernel_syscall_matcharms)?;
+
+    let all = quote! {
+        #userspace_module
+        #kernel_module
+    };
+
+    Ok(proc_macro::TokenStream::from(all))
+}
+
+fn generate_kernel_matcharms(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, ()> {
+    let mut kernel_syscall_matcharms = Vec::new();
+
+    for syscall in syscalls {
+        let syscall_nr = syscall.id;
+        let syscall_name = &syscall.name;
+        let syscall_arguments = &syscall.args;
+        let matcharm_arguments = generate_kernel_matcharms_arguments(syscall_arguments)?;
+
+        kernel_syscall_matcharms.push(quote! {
+            #syscall_nr => Self::#syscall_name(#matcharm_arguments),
+        });
+    }
+    Ok(kernel_syscall_matcharms)
+}
+
+fn generate_kernel_matcharms_arguments(arguments: &Vec<FnArg>) -> Result<TokenStream, ()> {
+    let mut argument_tokens = Vec::<TokenStream>::new();
+    for (index, argument) in arguments.iter().enumerate() {
+        let argument_type = get_argument_type(argument)?;
+        let register_index = format_ident!("a{}", index);
+        let argument_token = match argument_type {
+            ArgumentType::Value => quote! { trap_frame[Register::#register_index] as _ },
+            _ => panic!(),
+        };
+        argument_tokens.push(argument_token);
+    }
+    Ok(quote!(#(#argument_tokens),*))
+}
+
+fn generate_kernel_functions(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, ()> {
+    let mut kernel_functions = Vec::new();
+
+    for syscall in syscalls {
+        let syscall_name = &syscall.name;
+        let syscall_arguments = &syscall.args;
+
+        kernel_functions.push(quote! {
+            #[allow(non_snake_case)]
+            fn #syscall_name(#(#syscall_arguments),*) -> isize;
+        });
+    }
+    Ok(kernel_functions)
+}
+
+fn generate_kernel_module(
+    kernel_functions: Vec<TokenStream>,
+    match_arms: Vec<TokenStream>,
+) -> Result<TokenStream, ()> {
+    Ok(quote! {
+        pub mod kernel {
+            extern crate alloc;
+
+            use alloc::vec::Vec;
+            use crate::syscalls::trap_frame::TrapFrame;
+            use crate::syscalls::trap_frame::Register;
+
+            pub trait Syscalls {
+                #(#kernel_functions)*
+
+                fn handle(trap_frame: &mut TrapFrame) -> isize {
+                    let syscall_nr = trap_frame[Register::a7];
+                    match syscall_nr {
+                        #(#match_arms)*
+                        _ => panic!("Unknown syscall number {}", syscall_nr),
+                    }
+                }
+            }
+        }
+    })
 }
 
 fn generate_userspace_module(userspace_functions: Vec<TokenStream>) -> TokenStream {
@@ -209,17 +291,7 @@ fn is_ident_value_type(ident: &Ident) -> bool {
     let token_stream_type = ident.to_string();
     matches!(
         token_stream_type.as_str(),
-        "u8" | "u16"
-            | "u32"
-            | "u64"
-            | "u128"
-            | "usize"
-            | "i8"
-            | "i16"
-            | "i32"
-            | "i64"
-            | "i128"
-            | "char"
+        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128"
     )
 }
 
