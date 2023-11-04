@@ -16,7 +16,6 @@ struct Syscalls {
 struct Syscall {
     id: usize,
     name: syn::Ident,
-    handler: syn::Ident,
     args: Vec<syn::FnArg>,
 }
 
@@ -28,11 +27,6 @@ impl Parse for Syscalls {
         while !input.is_empty() {
             let syscall_name = input.parse::<Ident>()?;
 
-            let handler_content;
-            parenthesized!(handler_content in input);
-
-            let handler = handler_content.parse::<Ident>()?;
-
             let args_content;
             parenthesized!(args_content in input);
 
@@ -43,7 +37,6 @@ impl Parse for Syscalls {
             syscalls.push(Syscall {
                 id: next_syscall_id,
                 name: syscall_name,
-                handler,
                 args: args.into_iter().collect(),
             });
             next_syscall_id += 1;

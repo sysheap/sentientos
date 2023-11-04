@@ -3,6 +3,8 @@ extern crate macros;
 
 use macros::syscalls;
 
+pub mod trap_frame;
+
 // pub struct UserpointerMut<T> {
 //     ptr: *mut T,
 // }
@@ -16,8 +18,8 @@ use macros::syscalls;
 // }
 
 syscalls!(
-    WRITE_CHAR(handle_write_char)(c: char);
-    SHARE_VEC(handle_share_vec)(vec: &mut Vec<u8>, additional_data: usize);
+    WRITE_CHAR(c: char);
+    SHARE_VEC(vec: &mut Vec<u8>, additional_data: usize);
 );
 
 // mod userspace {

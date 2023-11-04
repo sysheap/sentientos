@@ -1,7 +1,6 @@
-use crate::{
-    interrupts::trap::{Register, TrapFrame},
-    println,
-};
+use common::syscalls::trap_frame::{Register, TrapFrame};
+
+use crate::println;
 
 const SYSCALL_NR_REG: Register = Register::a7;
 const SYSCALL_ARG1_REG: Register = Register::a0;

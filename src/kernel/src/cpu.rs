@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use crate::interrupts::trap::TrapFrame;
+use common::syscalls::trap_frame::TrapFrame;
 
 pub fn write_sscratch_register(value: *const TrapFrame) {
     unsafe {

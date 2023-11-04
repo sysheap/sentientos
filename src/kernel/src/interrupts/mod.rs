@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use self::trap::TrapFrame;
+use common::syscalls::trap_frame::TrapFrame;
 
 pub mod plic;
 pub mod trap;

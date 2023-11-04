@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
+use common::syscalls::trap_frame::{Register, TrapFrame};
 
 use crate::{
     debug,
-    interrupts::trap::{Register, TrapFrame},
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
         util::{align_up_and_get_number_of_pages, copy_slice},
