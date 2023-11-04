@@ -123,7 +123,6 @@ fn generate_userspace_functions(syscalls: &[Syscall]) -> Result<Vec<proc_macro2:
     let mut userspace_functions = Vec::new();
 
     for syscall in syscalls {
-        // check_userspace_arg(&syscall.args)?;
         let syscall_name = &syscall.name;
         let syscall_arguments = &syscall.args;
         let ecall = generate_ecall(syscall.id, &syscall_arguments);
