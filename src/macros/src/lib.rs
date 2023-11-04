@@ -6,6 +6,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashSet;
 use syn::parse::Parse;
+use syn::spanned::Spanned;
 use syn::{parenthesized, parse_macro_input, FnArg, Ident, Token};
 
 struct Syscalls {
@@ -63,18 +64,7 @@ pub fn syscalls(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 fn syscalls_impl(syscalls: Vec<Syscall>) -> Result<proc_macro::TokenStream, ()> {
-    let duplicates = find_syscall_name_duplicates(&syscalls);
-    if duplicates.len() > 0 {
-        for duplicate in duplicates {
-            duplicate
-                .span()
-                .unwrap()
-                .error(format!("duplicate syscall name `{}`", duplicate))
-                .emit();
-        }
-        return Err(());
-    }
-
+    check_for_duplicates_and_report_error(&syscalls)?;
     let userspace_functions = generate_userspace_functions(&syscalls)?;
     let userspace_module = generate_userspace_module(userspace_functions);
 
@@ -125,7 +115,7 @@ fn generate_userspace_functions(syscalls: &[Syscall]) -> Result<Vec<proc_macro2:
     for syscall in syscalls {
         let syscall_name = &syscall.name;
         let syscall_arguments = &syscall.args;
-        let ecall = generate_ecall(syscall.id, &syscall_arguments);
+        let ecall = generate_ecall(syscall.id, syscall_arguments)?;
 
         userspace_functions.push(quote! {
             #[allow(non_snake_case)]
@@ -137,31 +127,34 @@ fn generate_userspace_functions(syscalls: &[Syscall]) -> Result<Vec<proc_macro2:
     Ok(userspace_functions)
 }
 
-fn generate_ecall(syscall_number: usize, arguments: &[FnArg]) -> proc_macro2::TokenStream {
+fn generate_ecall(
+    syscall_number: usize,
+    arguments: &[FnArg],
+) -> Result<proc_macro2::TokenStream, ()> {
     match arguments.len() {
         1 => {
-            let arg0 = cast_argument(&arguments[0]);
-            quote! {
+            let arg0 = cast_argument(&arguments[0])?;
+            Ok(quote! {
                 ecall_1(#syscall_number, #arg0)
-            }
+            })
         }
         2 => {
-            let arg0 = cast_argument(&arguments[0]);
-            let arg1 = cast_argument(&arguments[1]);
-            quote! {
+            let arg0 = cast_argument(&arguments[0])?;
+            let arg1 = cast_argument(&arguments[1])?;
+            Ok(quote! {
                 ecall_2(#syscall_number, #arg0, #arg1)
-            }
+            })
         }
         _ => panic!("Not implemented yet"),
     }
 }
 
-fn cast_argument(argument: &FnArg) -> TokenStream {
+fn cast_argument(argument: &FnArg) -> Result<TokenStream, ()> {
     let argument_name = format_ident!("{}", get_argument_name(argument));
-    match get_argument_type(argument) {
-        ArgumentType::Reference => quote! { #argument_name as *const _ as usize },
-        ArgumentType::MutableReference => quote! { #argument_name as *const _ as usize },
-        ArgumentType::Value => quote! { #argument_name as usize },
+    match get_argument_type(argument)? {
+        ArgumentType::Reference => Ok(quote! { #argument_name as *const _ as usize }),
+        ArgumentType::MutableReference => Ok(quote! { #argument_name as *const _ as usize }),
+        ArgumentType::Value => Ok(quote! { #argument_name as usize }),
     }
 }
 
@@ -171,32 +164,42 @@ enum ArgumentType {
     Value,
 }
 
-fn get_argument_type(argument: &FnArg) -> ArgumentType {
-    match argument {
+fn get_argument_type(argument: &FnArg) -> Result<ArgumentType, ()> {
+    let result = match argument {
         FnArg::Typed(typed) => match *typed.ty.clone() {
             syn::Type::Reference(reference) => {
                 if reference.mutability.is_some() {
-                    ArgumentType::MutableReference
+                    Ok(ArgumentType::MutableReference)
                 } else {
-                    ArgumentType::Reference
+                    Ok(ArgumentType::Reference)
                 }
             }
             syn::Type::Path(path) => {
                 if path.path.segments.len() == 1 {
                     let segment = &path.path.segments[0];
-                    if is_tokenstream_value_type(&segment.ident) {
-                        ArgumentType::Value
+                    if is_ident_value_type(&segment.ident) {
+                        Ok(ArgumentType::Value)
                     } else {
-                        panic!("Cannot get type of argument {:?}", argument)
+                        Err(())
                     }
                 } else {
-                    panic!("Cannot get type of argument {:?}", argument)
+                    Err(())
                 }
             }
-            _ => panic!("Cannot get type of argument {:?}", argument),
+            _ => Err(()),
         },
-        _ => panic!("Cannot get type of argument {:?}", argument),
+        _ => Err(()),
+    };
+
+    if result.is_err() {
+        argument
+            .span()
+            .unwrap()
+            .error(format!("unsupported argument type {:?}", argument))
+            .emit();
     }
+
+    result
 }
 
 fn get_argument_name(argument: &FnArg) -> String {
@@ -209,13 +212,39 @@ fn get_argument_name(argument: &FnArg) -> String {
     }
 }
 
-fn is_tokenstream_value_type(ident: &Ident) -> bool {
+fn is_ident_value_type(ident: &Ident) -> bool {
     let token_stream_type = ident.to_string();
-    match token_stream_type.as_str() {
-        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128"
-        | "char" => true,
-        _ => false,
+    matches!(
+        token_stream_type.as_str(),
+        "u8" | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "char"
+    )
+}
+
+fn check_for_duplicates_and_report_error(syscalls: &[Syscall]) -> Result<(), ()> {
+    let duplicates = find_syscall_name_duplicates(syscalls);
+
+    if duplicates.is_empty() {
+        return Ok(());
     }
+
+    for duplicate in duplicates {
+        duplicate
+            .span()
+            .unwrap()
+            .error(format!("duplicate syscall name `{}`", duplicate))
+            .emit();
+    }
+    Err(())
 }
 
 fn find_syscall_name_duplicates(syscalls: &[Syscall]) -> Vec<&Ident> {
