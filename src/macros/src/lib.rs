@@ -83,7 +83,7 @@ fn syscalls_impl(syscalls: Vec<Syscall>) -> Result<proc_macro::TokenStream, ()> 
 
 fn generate_userspace_module(userspace_functions: Vec<TokenStream>) -> TokenStream {
     quote! {
-        mod userspace {
+        pub mod userspace {
             extern crate alloc;
 
             use alloc::vec::Vec;
