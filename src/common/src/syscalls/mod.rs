@@ -16,7 +16,7 @@ use macros::syscalls;
 // }
 
 syscalls!(
-    WRITE_CHAR(handle_write_char)(c: u8);
+    WRITE_CHAR(handle_write_char)(c: char);
     SHARE_VEC(handle_share_vec)(vec: &mut Vec<u8>, additional_data: usize);
 );
 

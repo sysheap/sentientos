@@ -213,9 +213,8 @@ fn get_argument_name(argument: &FnArg) -> String {
 fn is_tokenstream_value_type(ident: &Ident) -> bool {
     let token_stream_type = ident.to_string();
     match token_stream_type.as_str() {
-        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128" => {
-            true
-        }
+        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128"
+        | "char" => true,
         _ => false,
     }
 }
