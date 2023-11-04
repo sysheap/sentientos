@@ -1,7 +1,6 @@
 extern crate alloc;
 extern crate macros;
 
-use alloc::vec::Vec;
 use macros::syscalls;
 
 // pub struct UserpointerMut<T> {
@@ -20,33 +19,6 @@ syscalls!(
     WRITE_CHAR(handle_write_char)(c: u8);
     SHARE_VEC(handle_share_vec)(vec: &mut Vec<u8>, additional_data: usize);
 );
-
-use core::arch::asm;
-
-pub fn syscall_1(nr: usize, arg1: usize) -> isize {
-    let ret: isize;
-    unsafe {
-        asm!("ecall",
-            in("a7") nr,
-            in("a0") arg1,
-            lateout("a0") ret,
-        );
-    }
-    ret
-}
-
-pub fn syscall_2(nr: usize, arg1: usize, arg2: usize) -> isize {
-    let ret: isize;
-    unsafe {
-        asm!("ecall",
-            in("a7") nr,
-            in("a0") arg1,
-            in("a1") arg2,
-            lateout("a0") ret,
-        );
-    }
-    ret
-}
 
 // mod userspace {
 //     extern crate alloc;
