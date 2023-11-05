@@ -9,3 +9,6 @@ version.workspace = true
 
 [dependencies]
 macros = { path = "../macros" }
+
+[features]
+test = []

@@ -1,6 +1,6 @@
 use core::panic;
 
-use common::syscalls::trap_frame::TrapFrame;
+use common::syscalls::trap_frame::{Register, TrapFrame};
 
 use crate::{
     cpu, debug,
@@ -22,6 +22,12 @@ extern "C" fn supervisor_mode_trap(
     sepc: usize,
     trap_frame: &mut TrapFrame,
 ) {
+    debug!(
+        "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})\nTrap Frame: {:?}",
+        sepc,
+        cause.get_reason(),
+        trap_frame
+    );
     if cause.is_interrupt() {
         handle_interrupt(cause, stval, sepc, trap_frame);
     } else {
@@ -32,17 +38,18 @@ extern "C" fn supervisor_mode_trap(
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
     match cause.get_exception_code() {
         ENVIRONMENT_CALL_FROM_U_MODE => {
-            handle_syscall(trap_frame);
+            trap_frame[Register::a0] = handle_syscall(trap_frame) as usize;
             cpu::write_sepc(sepc + 4); // Skip the ecall instruction
         }
         _ => {
             panic!(
-                "Unhandled exception! (Name: {}) (Exception code: {}) (stval: 0x{:x}) (sepc: 0x{:x}) (From Userspace: {})",
+                "Unhandled exception! (Name: {}) (Exception code: {}) (stval: 0x{:x}) (sepc: 0x{:x}) (From Userspace: {})\nTrap Frame: {:?}",
                 cause.get_reason(),
                 cause.get_exception_code(),
                 stval,
                 sepc,
-                page_tables::is_userspace_address(sepc)
+                page_tables::is_userspace_address(sepc),
+                trap_frame
             );
         }
     }

@@ -12,3 +12,9 @@ resolver = "2"
 description = "Yet Another Risc/Rust Operating System"
 authors = ["Maurice Hieronymus <yaros@ilovebinary.com>"]
 version = "0.1.0"
+
+[profile.release]
+panic = 'abort'
+
+[profile.dev]
+panic = 'abort'

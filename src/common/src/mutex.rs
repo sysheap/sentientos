@@ -34,6 +34,16 @@ impl<T> Mutex<T> {
         }
         MutexGuard { mutex: self }
     }
+
+    #[cfg(feature = "test")]
+    pub fn get_locked(&self) -> &AtomicBool {
+        &self.locked
+    }
+
+    #[cfg(feature = "test")]
+    pub fn get_data(&self) -> &UnsafeCell<T> {
+        &self.data
+    }
 }
 
 unsafe impl<T> Sync for Mutex<T> {}
@@ -60,33 +70,5 @@ impl<'a, T> Deref for MutexGuard<'a, T> {
 impl<'a, T> DerefMut for MutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use core::sync::atomic::Ordering;
-
-    use crate::klibc::Mutex;
-
-    #[test_case]
-    fn check_lock_and_unlock() {
-        let mutex = Mutex::new(42);
-        assert_eq!(mutex.locked.load(Ordering::Acquire), false);
-        {
-            let mut locked = mutex.lock();
-            assert_eq!(mutex.locked.load(Ordering::Acquire), true);
-            *locked = 1;
-        }
-        assert_eq!(mutex.locked.load(Ordering::Acquire), false);
-        unsafe {
-            assert_eq!(*mutex.data.get(), 1);
-        }
-        let mut locked = mutex.lock();
-        *locked = 42;
-        assert_eq!(mutex.locked.load(Ordering::Acquire), true);
-        unsafe {
-            assert_eq!(*mutex.data.get(), 42);
-        }
     }
 }

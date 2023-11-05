@@ -1,9 +1,8 @@
 use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
-use crate::{
-    debug, info,
-    klibc::{util::align_up, Mutex},
-};
+use common::mutex::{Mutex, MutexGuard};
+
+use crate::{debug, info, klibc::util::align_up};
 
 use super::page_allocator;
 
@@ -30,8 +29,24 @@ impl FreeBlock {
     }
 }
 
+struct MutexHeap {
+    inner: Mutex<Heap>,
+}
+
+impl MutexHeap {
+    const fn new() -> Self {
+        Self {
+            inner: Mutex::new(Heap::new()),
+        }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Heap> {
+        self.inner.lock()
+    }
+}
+
 #[global_allocator]
-static OS_HEAP: Mutex<Heap> = Mutex::new(Heap::new());
+static OS_HEAP: MutexHeap = MutexHeap::new();
 
 impl Heap {
     const fn new() -> Self {
@@ -185,7 +200,7 @@ pub fn init() {
     );
 }
 
-unsafe impl GlobalAlloc for Mutex<Heap> {
+unsafe impl GlobalAlloc for MutexHeap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let heap = self.lock();
         let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());

@@ -1,3 +1,5 @@
+use crate::debug;
+
 use super::macros::static_assert_size;
 
 const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
@@ -252,14 +254,18 @@ impl<'a> ElfFile<'a> {
                 <= self.data.len()
         );
 
-        unsafe {
+        let data = unsafe {
             let program_header_pointer = self
                 .data
                 .as_ptr()
                 .byte_add(position_program_header as usize)
                 as *const ElfProgramHeaderEntry;
             core::slice::from_raw_parts(program_header_pointer, number_of_entries as usize)
-        }
+        };
+
+        debug!("Program headers: {:#x?}", data);
+
+        data
     }
 
     pub fn get_program_header_data(&self, program_header: &ElfProgramHeaderEntry) -> &[u8] {

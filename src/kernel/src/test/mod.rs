@@ -1,5 +1,6 @@
 use crate::{print, println};
 
+mod mutex;
 pub mod qemu_exit;
 
 // Inspired by https://os.phil-opp.com/testing/

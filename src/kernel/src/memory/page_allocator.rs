@@ -3,10 +3,9 @@ use core::{
     slice,
 };
 
-use crate::{
-    debug, info,
-    klibc::{util::align_up, Mutex},
-};
+use common::mutex::Mutex;
+
+use crate::{debug, info, klibc::util::align_up};
 
 pub const PAGE_SIZE: usize = 4096;
 type Page = [u8; PAGE_SIZE];

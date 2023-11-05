@@ -91,7 +91,8 @@ impl Process {
 
         for program_header in loadable_program_header {
             let data = elf_file.get_program_header_data(program_header);
-            let size_in_pages = align_up_and_get_number_of_pages(data.len());
+            let real_size = program_header.memory_size;
+            let size_in_pages = align_up_and_get_number_of_pages(real_size as usize);
             let mut pages =
                 zalloc(size_in_pages).expect("Could not allocate memory for program header.");
             allocated_pages.push(pages.clone());

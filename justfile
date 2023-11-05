@@ -1,8 +1,8 @@
-build-debug:
-    cargo build
-
 build-release:
     cargo build --release
+
+build-debug:
+    cargo build
 
 clippy:
     cd src/userspace && cargo clippy -- -D warnings
@@ -21,7 +21,7 @@ run-debug:
     cargo run
 
 test:
-    cargo test --release
+    cargo test --release --features commonlib-test
 
 run-vscode:
     cargo run -- -s -S && echo "DONE"

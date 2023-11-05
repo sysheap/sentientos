@@ -3,9 +3,9 @@ ENTRY( _start )
 
 SECTIONS
 {
-	. = 0x1000;
+	. = 0x1000; /* Keeps the zero page empty */
 	
-	.text : {
+	.text ALIGN(4K) : {
 		*(.text .text.*)
 	}
 	

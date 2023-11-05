@@ -8,7 +8,7 @@ use crate::test;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("");
-    println!("Panic Occured!");
+    println!("KERNEL Panic Occured!");
     if let Some(message) = info.message() {
         println!("Message: {}", message);
     }

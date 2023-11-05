@@ -1,6 +1,7 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull, u8};
 
 use alloc::rc::Rc;
+use common::mutex::Mutex;
 
 use crate::{
     debug,
@@ -8,7 +9,6 @@ use crate::{
     klibc::{
         elf,
         util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
-        Mutex,
     },
     memory::page_allocator::PAGE_SIZE,
     processes::timer,

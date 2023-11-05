@@ -1,24 +1,17 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
+use common::mutex::Mutex;
 
+use crate::klibc::elf::ElfFile;
 use crate::klibc::macros::include_bytes_align_as;
-use crate::klibc::{elf::ElfFile, Mutex};
 use crate::memory::page_tables;
 use crate::{cpu, debug, info};
 
 use super::process::Process;
 
-#[cfg(debug_assertions)]
 macro_rules! path_to_compiled_binaries {
     () => {
-        "../../compiled_userspace/bin/"
-    };
-}
-
-#[cfg(not(debug_assertions))]
-macro_rules! path_to_compiled_binaries {
-    () => {
-        "../../compiled_userspace/bin/"
+        "../../compiled_userspace/"
     };
 }
 

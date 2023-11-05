@@ -18,17 +18,18 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
     command.current_dir("../userspace");
 
     command.args([
-        "install",
-        "--path",
-        ".",
-        "--root",
-        "../kernel/compiled_userspace",
+        "build",
+        "--bins",
         "--target-dir",
         "../../target-userspace",
+        "--out-dir",
+        "../kernel/compiled_userspace",
+        "-Z",
+        "unstable-options",
     ]);
 
-    if profile == "debug" {
-        command.arg("--debug");
+    if profile == "release" {
+        command.arg("--release");
     }
 
     let status = command.status()?;

@@ -1,16 +1,12 @@
 #![no_std]
 #![no_main]
 
-use common::syscalls::userspace::WRITE_CHAR;
+use userspace::println;
 
 extern crate userspace;
 
 #[no_mangle]
 fn main() {
-    WRITE_CHAR(b's');
-    WRITE_CHAR(b'h');
-    WRITE_CHAR(b'e');
-    WRITE_CHAR(b'l');
-    WRITE_CHAR(b'l');
+    println!("YaSH - Yet another Shell");
     loop {}
 }
