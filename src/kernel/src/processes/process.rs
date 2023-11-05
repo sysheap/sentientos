@@ -1,7 +1,10 @@
 use core::fmt::Debug;
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
-use common::syscalls::trap_frame::{Register, TrapFrame};
+use common::{
+    mutex::Mutex,
+    syscalls::trap_frame::{Register, TrapFrame},
+};
 
 use crate::{
     debug,
@@ -16,6 +19,7 @@ use crate::{
 };
 
 pub struct Process {
+    pid: usize,
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
@@ -27,11 +31,13 @@ impl Debug for Process {
         write!(
             f,
             "Process [
+            PID: {},
             Registers: {:?},
             Page Table: {:?},
             Program Counter: {:#x},
             Number of allocated pages: {}
         ]",
+            self.pid,
             self.register_state,
             self.page_table,
             self.program_counter,
@@ -110,7 +116,13 @@ impl Process {
 
         debug!("DONE (Entry: {:#x})", elf_header.entry_point);
 
+        static PID_COUNTER: Mutex<usize> = Mutex::new(0);
+        let mut pid_counter = PID_COUNTER.lock();
+        let next_pid = *pid_counter;
+        *pid_counter += 1;
+
         Self {
+            pid: next_pid,
             register_state: Box::new(register_state),
             page_table: Rc::new(page_table),
             program_counter: elf_header.entry_point as usize,
@@ -121,6 +133,10 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
+        debug!(
+            "Drop process (PID: {}) (Allocated pages: {:?})",
+            self.pid, self.allocated_pages
+        );
         for allocated_page in &self.allocated_pages {
             dealloc(allocated_page.clone());
         }

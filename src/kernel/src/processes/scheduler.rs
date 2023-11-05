@@ -97,8 +97,14 @@ fn prepare_next_process() -> bool {
 
     let mut current_process = CURRENT_PROCESS.lock();
 
+    // No more processes to schedule
     if current_process.is_none() && scheduler.is_empty() {
         return false;
+    }
+
+    // Current process is the only process; We can skip the save and restore part
+    if scheduler.is_empty() && current_process.is_some() {
+        return true;
     }
 
     if let Some(ref mut current_process) = *current_process {
