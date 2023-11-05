@@ -45,14 +45,9 @@ impl Scheduler {
     pub fn initialize(&mut self) {
         info!("Initializing scheduler");
 
-        // let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
-        // let process = Process::from_elf(&elf);
-        // self.queue.push_back(Box::new(process));
-        for (_, p) in PROGRAMS.iter() {
-            let elf = ElfFile::parse(p).expect("Cannot parse ELF file");
-            let process = Process::from_elf(&elf);
-            self.queue.push_back(Box::new(process));
-        }
+        let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
+        let process = Process::from_elf(&elf);
+        self.queue.push_back(Box::new(process));
     }
 
     pub fn get_next(&mut self) -> Option<Box<Process>> {
