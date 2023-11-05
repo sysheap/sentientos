@@ -1,7 +1,10 @@
 #![no_std]
 #![no_main]
 
-use common::{mutex::Mutex, syscalls::SYSCALL_WAIT};
+use common::{
+    mutex::Mutex,
+    syscalls::{SYSCALL_SUCCESS, SYSCALL_WAIT},
+};
 use userspace::{print, println, util::wait};
 
 extern crate userspace;
@@ -44,6 +47,7 @@ fn main() {
 
 fn parse_command_and_execute(command: &str) {
     match command {
+        "" => {}
         "exit" => {
             println!("Exiting...");
             common::syscalls::userspace::EXIT(0);
@@ -54,7 +58,12 @@ fn parse_command_and_execute(command: &str) {
             println!("help - Print this help message");
         }
         program => {
-            println!("Executing program: {}", program);
+            let reference = unsafe { &*program.as_ptr() };
+
+            let result = common::syscalls::userspace::EXECUTE(reference, program.len());
+            if result != SYSCALL_SUCCESS {
+                println!("Error executing program: {}", result);
+            }
         }
     }
 }

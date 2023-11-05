@@ -439,6 +439,24 @@ pub fn is_userspace_address(address: usize) -> bool {
     }
 }
 
+pub fn translate_userspace_address_to_physical_address<T>(address: *const T) -> Option<*const T> {
+    let address = address as usize;
+    if !is_userspace_address(address) {
+        return None;
+    }
+    let current_page_table = CURRENT_PAGE_TABLE.lock();
+    if let Some(ref current_page_table) = *current_page_table {
+        let offset_from_page_start = address % PAGE_SIZE;
+        current_page_table
+            .get_page_table_entry_for_address(address)
+            .map(|entry| {
+                (entry.get_physical_address() as usize + offset_from_page_start) as *const T
+            })
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::RootPageTableHolder;

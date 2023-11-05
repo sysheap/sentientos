@@ -151,7 +151,7 @@ mod tests {
 
     #[test_case]
     fn create_process_from_elf() {
-        let elf = ElfFile::parse(scheduler::PROG1).expect("Cannot parse elf file");
+        let elf = ElfFile::parse(scheduler::PROG1.1).expect("Cannot parse elf file");
         let process = Process::from_elf(&elf);
         drop(process);
     }

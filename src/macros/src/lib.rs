@@ -139,24 +139,28 @@ fn generate_kernel_matcharms(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
 
 fn generate_kernel_matcharms_arguments(arguments: &[FnArg]) -> Result<TokenStream, ()> {
     let mut argument_tokens = Vec::<TokenStream>::new();
-    for (index, argument) in arguments.iter().enumerate() {
-        let argument_type = get_argument_type(argument)?;
-        let register_index = format_ident!("a{}", index);
-        let argument_token = match argument_type {
-            ArgumentType::Value => quote! { self, trap_frame[Register::#register_index] as _ },
-            ArgumentType::Reference => {
-                quote! { self, Userpointer::new(trap_frame[Register::#register_index] as _) }
-            }
-            ArgumentType::MutableReference => {
-                quote! { self, UserpointerMut::new(trap_frame[Register::#register_index] as _) }
-            }
-        };
-        argument_tokens.push(argument_token);
-    }
     if argument_tokens.is_empty() {
         argument_tokens.push(quote! {
             self
         });
+    } else {
+        argument_tokens.push(quote! {
+            self,
+        });
+    }
+    for (index, argument) in arguments.iter().enumerate() {
+        let argument_type = get_argument_type(argument)?;
+        let register_index = format_ident!("a{}", index);
+        let argument_token = match argument_type {
+            ArgumentType::Value => quote! { trap_frame[Register::#register_index] as _ },
+            ArgumentType::Reference => {
+                quote! { Userpointer::new(trap_frame[Register::#register_index] as _) }
+            }
+            ArgumentType::MutableReference => {
+                quote! { UserpointerMut::new(trap_frame[Register::#register_index] as _) }
+            }
+        };
+        argument_tokens.push(argument_token);
     }
     Ok(quote!(#(#argument_tokens),*))
 }

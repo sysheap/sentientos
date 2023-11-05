@@ -17,8 +17,10 @@ macro_rules! path_to_compiled_binaries {
 
 macro_rules! prog_bytes {
     ($prog_ident:ident, $prog_name:literal) => {
-        pub static $prog_ident: &[u8] =
-            include_bytes_align_as!(u64, concat!(path_to_compiled_binaries!(), $prog_name));
+        pub static $prog_ident: (&str, &[u8]) = (
+            $prog_name,
+            include_bytes_align_as!(u64, concat!(path_to_compiled_binaries!(), $prog_name)),
+        );
     };
 }
 
@@ -26,8 +28,8 @@ prog_bytes!(PROG1, "prog1");
 prog_bytes!(PROG2, "prog2");
 prog_bytes!(SHELL, "shell");
 
-static PROGRAMS: [&[u8]; 3] = [PROG1, PROG2, SHELL];
-static INIT_PROGRAM: &[u8] = SHELL;
+static PROGRAMS: [(&str, &[u8]); 3] = [PROG1, PROG2, SHELL];
+static INIT_PROGRAM: &[u8] = SHELL.1;
 
 pub struct Scheduler {
     queue: VecDeque<Box<Process>>,
@@ -46,7 +48,7 @@ impl Scheduler {
         // let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
         // let process = Process::from_elf(&elf);
         // self.queue.push_back(Box::new(process));
-        for p in PROGRAMS.iter() {
+        for (_, p) in PROGRAMS.iter() {
             let elf = ElfFile::parse(p).expect("Cannot parse ELF file");
             let process = Process::from_elf(&elf);
             self.queue.push_back(Box::new(process));
@@ -90,6 +92,19 @@ pub fn kill_current_process() {
         current_process.take();
     }
     schedule();
+}
+
+pub fn schedule_program(name: &str) -> bool {
+    for (prog_name, elf) in PROGRAMS {
+        if name == prog_name {
+            let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
+            let process = Process::from_elf(&elf);
+            let mut scheduler = SCHEDULER.lock();
+            scheduler.enqueue(Box::new(process));
+            return true;
+        }
+    }
+    false
 }
 
 fn prepare_next_process() -> bool {
