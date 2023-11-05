@@ -125,7 +125,7 @@ fn generate_kernel_matcharms(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
     Ok(kernel_syscall_matcharms)
 }
 
-fn generate_kernel_matcharms_arguments(arguments: &Vec<FnArg>) -> Result<TokenStream, ()> {
+fn generate_kernel_matcharms_arguments(arguments: &[FnArg]) -> Result<TokenStream, ()> {
     let mut argument_tokens = Vec::<TokenStream>::new();
     for (index, argument) in arguments.iter().enumerate() {
         let argument_type = get_argument_type(argument)?;
@@ -163,9 +163,9 @@ fn change_arguments_to_userpointer(arguments: &Vec<FnArg>) -> Result<Vec<TokenSt
     let mut new_arguments = Vec::new();
     for argument in arguments {
         match argument {
-            FnArg::Typed(typed) => match *typed.ty.clone() {
-                syn::Type::Reference(reference) => match *reference.elem {
-                    Type::Path(ref path) => {
+            FnArg::Typed(typed) => match &*typed.ty {
+                Type::Reference(reference) => match &*reference.elem {
+                    Type::Path(path) => {
                         let name = &typed.pat;
                         let typ = &path;
                         if reference.mutability.is_none() {
@@ -178,21 +178,21 @@ fn change_arguments_to_userpointer(arguments: &Vec<FnArg>) -> Result<Vec<TokenSt
                             });
                         }
                     }
-                    _ => panic!("change_arguments_to_userpointer: unsupported argument type"),
+                    _ => {
+                        argument
+                            .span()
+                            .unwrap()
+                            .error(format!(
+                                "change_arguments_to_userpointer: unsupported argument type {:?}",
+                                argument
+                            ))
+                            .emit();
+                        return Err(());
+                    }
                 },
                 _ => new_arguments.push(quote! { #argument }),
             },
-            _ => {
-                argument
-                    .span()
-                    .unwrap()
-                    .error(format!(
-                        "change_arguments_to_userpointer: unsupported argument type {:?}",
-                        argument
-                    ))
-                    .emit();
-                return Err(());
-            }
+            FnArg::Receiver(s) => new_arguments.push(quote! { #s }),
         }
     }
     Ok(new_arguments)
@@ -332,7 +332,7 @@ enum ArgumentType {
 
 fn get_argument_type(argument: &FnArg) -> Result<ArgumentType, ()> {
     let result = match argument {
-        FnArg::Typed(typed) => match *typed.ty.clone() {
+        FnArg::Typed(typed) => match &*typed.ty {
             syn::Type::Reference(reference) => {
                 if reference.mutability.is_some() {
                     Ok(ArgumentType::MutableReference)
@@ -371,7 +371,7 @@ fn get_argument_type(argument: &FnArg) -> Result<ArgumentType, ()> {
 fn get_argument_name(argument: &FnArg) -> String {
     match argument {
         FnArg::Receiver(_) => "self".into(),
-        FnArg::Typed(typed) => match *typed.pat.clone() {
+        FnArg::Typed(typed) => match &*typed.pat {
             syn::Pat::Ident(pat_ident) => pat_ident.ident.to_string(),
             _ => panic!("Cannot get name of argument {:?}", argument),
         },
