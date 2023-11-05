@@ -1,14 +1,15 @@
 #![no_std]
 #![no_main]
 
-use userspace::{wait, write_char};
+use common::syscalls::userspace::WRITE_CHAR;
+use userspace::wait;
 
 extern crate userspace;
 
 #[no_mangle]
 fn main() {
     loop {
-        write_char('a');
+        WRITE_CHAR(b'a');
         wait();
     }
 }

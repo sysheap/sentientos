@@ -1,4 +1,3 @@
-extern crate alloc;
 extern crate macros;
 
 use macros::syscalls;
