@@ -373,7 +373,10 @@ fn get_argument_type(argument: &FnArg) -> Result<ArgumentType, ()> {
         argument
             .span()
             .unwrap()
-            .error(format!("unsupported argument type {:?}", argument))
+            .error(format!(
+                "get_argument_type: unsupported argument type {:?}",
+                argument
+            ))
             .emit();
     }
 
@@ -394,7 +397,17 @@ fn is_ident_value_type(ident: &Ident) -> bool {
     let token_stream_type = ident.to_string();
     matches!(
         token_stream_type.as_str(),
-        "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128"
+        "u8" | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "isize"
     )
 }
 

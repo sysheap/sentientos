@@ -8,5 +8,4 @@ extern crate userspace;
 #[no_mangle]
 fn main() {
     println!("YaSH - Yet another Shell");
-    loop {}
 }

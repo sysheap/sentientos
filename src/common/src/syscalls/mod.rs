@@ -9,4 +9,5 @@ pub const SYSCALL_SUCCESS: isize = 0;
 
 syscalls!(
     WRITE_CHAR(c: u8);
+    EXIT(status: isize);
 );

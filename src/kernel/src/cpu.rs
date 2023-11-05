@@ -21,3 +21,10 @@ pub fn read_sepc() -> usize {
     }
     sepc
 }
+
+pub fn wfi() -> ! {
+    unsafe {
+        asm!("wfi");
+    }
+    loop {}
+}

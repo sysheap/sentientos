@@ -7,8 +7,6 @@ extern crate userspace;
 
 #[no_mangle]
 fn main() {
-    loop {
-        println!("a");
-        wait();
-    }
+    println!("Hello from Prog1");
+    wait();
 }

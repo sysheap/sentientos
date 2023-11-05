@@ -7,6 +7,6 @@ pub extern "C" fn _start() -> ! {
     unsafe {
         main();
     }
-    #[allow(clippy::empty_loop)]
+    common::syscalls::userspace::EXIT(0);
     loop {}
 }

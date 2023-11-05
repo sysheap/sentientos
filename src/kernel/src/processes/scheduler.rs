@@ -43,9 +43,14 @@ impl Scheduler {
     pub fn initialize(&mut self) {
         info!("Initializing scheduler");
 
-        let elf = ElfFile::parse(SHELL).expect("Cannot parse ELF file");
-        let process = Process::from_elf(&elf);
-        self.queue.push_back(Box::new(process));
+        // let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
+        // let process = Process::from_elf(&elf);
+        // self.queue.push_back(Box::new(process));
+        for p in PROGRAMS.iter() {
+            let elf = ElfFile::parse(p).expect("Cannot parse ELF file");
+            let process = Process::from_elf(&elf);
+            self.queue.push_back(Box::new(process));
+        }
     }
 
     pub fn get_next(&mut self) -> Option<Box<Process>> {
@@ -74,17 +79,27 @@ pub fn schedule() {
         unsafe {
             restore_user_context();
         }
+    } else {
+        panic!("All processes died... ");
     }
+}
+
+pub fn kill_current_process() {
+    {
+        let mut current_process = CURRENT_PROCESS.lock();
+        current_process.take();
+    }
+    schedule();
 }
 
 fn prepare_next_process() -> bool {
     let mut scheduler = SCHEDULER.lock();
 
-    if scheduler.is_empty() {
+    let mut current_process = CURRENT_PROCESS.lock();
+
+    if current_process.is_none() && scheduler.is_empty() {
         return false;
     }
-
-    let mut current_process = CURRENT_PROCESS.lock();
 
     if let Some(ref mut current_process) = *current_process {
         current_process.set_program_counter(cpu::read_sepc());
