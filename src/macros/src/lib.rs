@@ -8,7 +8,8 @@ use quote::{format_ident, quote};
 use std::collections::HashSet;
 use syn::parse::Parse;
 use syn::spanned::Spanned;
-use syn::{parenthesized, parse_macro_input, FnArg, Ident, Token};
+use syn::Type;
+use syn::{parenthesized, parse_macro_input, FnArg, Ident, Path, Token};
 
 struct Syscalls {
     syscalls: Vec<Syscall>,
@@ -97,7 +98,12 @@ fn generate_kernel_matcharms_arguments(arguments: &Vec<FnArg>) -> Result<TokenSt
         let register_index = format_ident!("a{}", index);
         let argument_token = match argument_type {
             ArgumentType::Value => quote! { trap_frame[Register::#register_index] as _ },
-            _ => panic!(),
+            ArgumentType::Reference => {
+                quote! { Userpointer::new(trap_frame[Register::#register_index] as _) }
+            }
+            ArgumentType::MutableReference => {
+                quote! { UserpointerMut::new(trap_frame[Register::#register_index] as _) }
+            }
         };
         argument_tokens.push(argument_token);
     }
@@ -109,7 +115,7 @@ fn generate_kernel_functions(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
 
     for syscall in syscalls {
         let syscall_name = &syscall.name;
-        let syscall_arguments = &syscall.args;
+        let syscall_arguments = change_arguments_to_userpointer(&syscall.args)?;
 
         kernel_functions.push(quote! {
             #[allow(non_snake_case)]
@@ -117,6 +123,53 @@ fn generate_kernel_functions(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
         });
     }
     Ok(kernel_functions)
+}
+
+fn change_arguments_to_userpointer(arguments: &Vec<FnArg>) -> Result<Vec<TokenStream>, ()> {
+    let mut new_arguments = Vec::new();
+    for argument in arguments {
+        eprintln!(
+            "Current argument: {:?}",
+            argument.span().unwrap().source_text().unwrap()
+        );
+        match argument {
+            FnArg::Typed(typed) => match *typed.ty.clone() {
+                syn::Type::Reference(reference) => match *reference.elem {
+                    Type::Path(ref path) => {
+                        let name = &typed.pat;
+                        let typ = &path;
+                        if reference.mutability.is_none() {
+                            new_arguments.push(quote! {
+                                #name: Userpointer<#typ>
+                            });
+                        } else {
+                            new_arguments.push(quote! {
+                                #name: UserpointerMut<#typ>
+                            });
+                        }
+                    }
+                    _ => panic!("change_arguments_to_userpointer: unsupported argument type"),
+                },
+                _ => new_arguments.push(quote! { #argument }),
+            },
+            _ => {
+                argument
+                    .span()
+                    .unwrap()
+                    .error(format!(
+                        "change_arguments_to_userpointer: unsupported argument type {:?}",
+                        argument
+                    ))
+                    .emit();
+                return Err(());
+            }
+        }
+        eprintln!(
+            "Transformed to: {:?}",
+            new_arguments.last().unwrap().to_string()
+        );
+    }
+    Ok(new_arguments)
 }
 
 fn generate_kernel_module(
@@ -130,6 +183,8 @@ fn generate_kernel_module(
             use alloc::vec::Vec;
             use crate::syscalls::trap_frame::TrapFrame;
             use crate::syscalls::trap_frame::Register;
+            use crate::syscalls::Userpointer;
+            use crate::syscalls::UserpointerMut;
 
             pub trait Syscalls {
                 #(#kernel_functions)*
@@ -138,7 +193,7 @@ fn generate_kernel_module(
                     let syscall_nr = trap_frame[Register::a7];
                     match syscall_nr {
                         #(#match_arms)*
-                        _ => panic!("Unknown syscall number {}", syscall_nr),
+                        _ => panic!("generate_kernel_module: Unknown syscall number {}", syscall_nr),
                     }
                 }
             }
@@ -220,7 +275,10 @@ fn generate_ecall(
                 ecall_2(#syscall_number, #arg0, #arg1)
             })
         }
-        _ => panic!("Not implemented yet"),
+        _ => panic!(
+            "Number of syscall arguments ({}) not implemented yet",
+            arguments.len()
+        ),
     }
 }
 
