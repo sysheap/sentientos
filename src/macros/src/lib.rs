@@ -223,8 +223,8 @@ fn generate_kernel_module(
 
             use crate::syscalls::trap_frame::TrapFrame;
             use crate::syscalls::trap_frame::Register;
-            use crate::syscalls::Userpointer;
-            use crate::syscalls::UserpointerMut;
+            use crate::syscalls::userpointer::Userpointer;
+            use crate::syscalls::userpointer::UserpointerMut;
 
             pub trait Syscalls {
                 #(#kernel_functions)*

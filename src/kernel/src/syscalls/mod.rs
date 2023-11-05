@@ -1,4 +1,4 @@
-use common::syscalls::{kernel::Syscalls, trap_frame::TrapFrame};
+use common::syscalls::{kernel::Syscalls, trap_frame::TrapFrame, SYSCALL_SUCCESS};
 
 use crate::println;
 
@@ -8,7 +8,7 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
     #[allow(non_snake_case)]
     fn WRITE_CHAR(c: u8) -> isize {
         println!("Process prints: {}", c as char);
-        0
+        SYSCALL_SUCCESS
     }
 }
 

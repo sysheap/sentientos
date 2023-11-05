@@ -4,26 +4,9 @@ extern crate macros;
 use macros::syscalls;
 
 pub mod trap_frame;
+pub mod userpointer;
 
-pub struct Userpointer<T> {
-    ptr: *const T,
-}
-
-impl<T> Userpointer<T> {
-    pub fn new(ptr: *const T) -> Self {
-        Self { ptr }
-    }
-}
-
-pub struct UserpointerMut<T> {
-    ptr: *mut T,
-}
-
-impl<T> UserpointerMut<T> {
-    pub fn new(ptr: *mut T) -> Self {
-        Self { ptr }
-    }
-}
+pub const SYSCALL_SUCCESS: isize = 0;
 
 syscalls!(
     WRITE_CHAR(c: u8);
