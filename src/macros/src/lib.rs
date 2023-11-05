@@ -8,10 +8,12 @@ use quote::{format_ident, quote};
 use std::collections::HashSet;
 use syn::parse::Parse;
 use syn::spanned::Spanned;
-use syn::Type;
-use syn::{parenthesized, parse_macro_input, FnArg, Ident, Path, Token};
+use syn::{parenthesized, parse_macro_input, FnArg, Ident, ItemExternCrate, ItemUse, Token};
+use syn::{token, Type};
 
 struct Syscalls {
+    extern_imports: Vec<syn::ItemExternCrate>,
+    imports: Vec<syn::ItemUse>,
     syscalls: Vec<Syscall>,
 }
 
@@ -24,9 +26,23 @@ struct Syscall {
 impl Parse for Syscalls {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut syscalls = Vec::<Syscall>::new();
+        let mut imports = Vec::<syn::ItemUse>::new();
+        let mut extern_imports = Vec::<syn::ItemExternCrate>::new();
         let mut next_syscall_id = 0;
 
         while !input.is_empty() {
+            if input.peek(token::Extern) {
+                let extern_import = input.parse::<syn::ItemExternCrate>()?;
+                extern_imports.push(extern_import);
+                continue;
+            }
+
+            if input.peek(token::Use) {
+                let import = input.parse::<syn::ItemUse>()?;
+                imports.push(import);
+                continue;
+            }
+
             let syscall_name = input.parse::<Ident>()?;
 
             let args_content;
@@ -44,28 +60,46 @@ impl Parse for Syscalls {
             next_syscall_id += 1;
         }
 
-        Ok(Self { syscalls })
+        Ok(Self {
+            extern_imports,
+            imports,
+            syscalls,
+        })
     }
 }
 
 #[proc_macro]
 pub fn syscalls(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let Syscalls { syscalls } = parse_macro_input!(input as Syscalls);
+    let Syscalls {
+        extern_imports,
+        imports,
+        syscalls,
+    } = parse_macro_input!(input as Syscalls);
 
-    match syscalls_impl(syscalls) {
+    match syscalls_impl(extern_imports, imports, syscalls) {
         Ok(tokens) => tokens,
         Err(_) => proc_macro::TokenStream::new(),
     }
 }
 
-fn syscalls_impl(syscalls: Vec<Syscall>) -> Result<proc_macro::TokenStream, ()> {
+fn syscalls_impl(
+    extern_imports: Vec<ItemExternCrate>,
+    imports: Vec<ItemUse>,
+    syscalls: Vec<Syscall>,
+) -> Result<proc_macro::TokenStream, ()> {
     check_for_duplicates_and_report_error(&syscalls)?;
     let userspace_syscall_functions = generate_userspace_functions(&syscalls)?;
-    let userspace_module = generate_userspace_module(userspace_syscall_functions);
+    let userspace_module =
+        generate_userspace_module(&extern_imports, &imports, userspace_syscall_functions);
 
     let kernel_syscall_functions = generate_kernel_functions(&syscalls)?;
     let kernel_syscall_matcharms = generate_kernel_matcharms(&syscalls)?;
-    let kernel_module = generate_kernel_module(kernel_syscall_functions, kernel_syscall_matcharms)?;
+    let kernel_module = generate_kernel_module(
+        &extern_imports,
+        &imports,
+        kernel_syscall_functions,
+        kernel_syscall_matcharms,
+    )?;
 
     let all = quote! {
         #userspace_module
@@ -128,10 +162,6 @@ fn generate_kernel_functions(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
 fn change_arguments_to_userpointer(arguments: &Vec<FnArg>) -> Result<Vec<TokenStream>, ()> {
     let mut new_arguments = Vec::new();
     for argument in arguments {
-        eprintln!(
-            "Current argument: {:?}",
-            argument.span().unwrap().source_text().unwrap()
-        );
         match argument {
             FnArg::Typed(typed) => match *typed.ty.clone() {
                 syn::Type::Reference(reference) => match *reference.elem {
@@ -164,23 +194,21 @@ fn change_arguments_to_userpointer(arguments: &Vec<FnArg>) -> Result<Vec<TokenSt
                 return Err(());
             }
         }
-        eprintln!(
-            "Transformed to: {:?}",
-            new_arguments.last().unwrap().to_string()
-        );
     }
     Ok(new_arguments)
 }
 
 fn generate_kernel_module(
+    extern_imports: &Vec<ItemExternCrate>,
+    imports: &Vec<ItemUse>,
     kernel_functions: Vec<TokenStream>,
     match_arms: Vec<TokenStream>,
 ) -> Result<TokenStream, ()> {
     Ok(quote! {
         pub mod kernel {
-            extern crate alloc;
+            #(#extern_imports)*
+            #(#imports)*
 
-            use alloc::vec::Vec;
             use crate::syscalls::trap_frame::TrapFrame;
             use crate::syscalls::trap_frame::Register;
             use crate::syscalls::Userpointer;
@@ -201,12 +229,17 @@ fn generate_kernel_module(
     })
 }
 
-fn generate_userspace_module(userspace_functions: Vec<TokenStream>) -> TokenStream {
+fn generate_userspace_module(
+    extern_imports: &Vec<ItemExternCrate>,
+    imports: &Vec<ItemUse>,
+    userspace_functions: Vec<TokenStream>,
+) -> TokenStream {
     quote! {
         pub mod userspace {
-            extern crate alloc;
 
-            use alloc::vec::Vec;
+            #(#extern_imports)*
+            #(#imports)*
+
             use core::arch::asm;
 
             fn ecall_1(nr: usize, arg0: usize) -> isize {

@@ -26,6 +26,10 @@ impl<T> UserpointerMut<T> {
 }
 
 syscalls!(
+    extern crate alloc;
+
+    use alloc::vec::Vec;
+
     WRITE_CHAR(c: u8);
     SHARE_VEC(vec: &mut Vec<u8>, additional_data: usize);
 );
