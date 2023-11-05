@@ -31,8 +31,10 @@ macro_rules! prog_bytes {
 
 prog_bytes!(PROG1, "prog1");
 prog_bytes!(PROG2, "prog2");
+prog_bytes!(SHELL, "shell");
 
-static PROGRAMS: [&[u8]; 2] = [PROG1, PROG2];
+static PROGRAMS: [&[u8]; 3] = [PROG1, PROG2, SHELL];
+static INIT_PROGRAM: &[u8] = SHELL;
 
 pub struct Scheduler {
     queue: VecDeque<Box<Process>>,
@@ -48,15 +50,17 @@ impl Scheduler {
     pub fn initialize(&mut self) {
         info!("Initializing scheduler");
 
-        for progam in PROGRAMS {
-            let elf = ElfFile::parse(progam).expect("Cannot parse ELF file");
-            let process = Process::from_elf(&elf);
-            self.queue.push_back(Box::new(process));
-        }
+        let elf = ElfFile::parse(SHELL).expect("Cannot parse ELF file");
+        let process = Process::from_elf(&elf);
+        self.queue.push_back(Box::new(process));
     }
 
     pub fn get_next(&mut self) -> Option<Box<Process>> {
         self.queue.pop_front()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
     }
 
     pub fn enqueue(&mut self, process: Box<Process>) {
@@ -71,16 +75,22 @@ extern "C" {
     fn restore_user_context() -> !;
 }
 
-pub fn schedule() -> ! {
+pub fn schedule() {
     debug!("Schedule next process");
-    prepare_next_process();
-    unsafe {
-        restore_user_context();
+    if prepare_next_process() {
+        unsafe {
+            restore_user_context();
+        }
     }
 }
 
-fn prepare_next_process() {
+fn prepare_next_process() -> bool {
     let mut scheduler = SCHEDULER.lock();
+
+    if scheduler.is_empty() {
+        return false;
+    }
+
     let mut current_process = CURRENT_PROCESS.lock();
 
     if let Some(ref mut current_process) = *current_process {
@@ -107,4 +117,6 @@ fn prepare_next_process() {
     if let Some(old_process) = old_process {
         scheduler.enqueue(old_process);
     }
+
+    true
 }

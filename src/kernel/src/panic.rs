@@ -7,6 +7,7 @@ use crate::test;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    println!("");
     println!("Panic Occured!");
     if let Some(message) = info.message() {
         println!("Message: {}", message);
