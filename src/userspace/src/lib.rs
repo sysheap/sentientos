@@ -1,4 +1,6 @@
 #![no_std]
+#![allow(dead_code)]
+#![allow(unused_variables)]
 
 use core::{arch::asm, panic::PanicInfo};
 

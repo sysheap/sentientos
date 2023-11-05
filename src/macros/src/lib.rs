@@ -68,6 +68,18 @@ impl Parse for Syscalls {
     }
 }
 
+/// Generates boilerplate code for the provided syscalls
+/// # Example
+/// ```
+/// syscalls!(
+///     extern crate alloc;
+///
+///     use alloc::vec::Vec;
+///
+///     WRITE_CHAR(c: u8);
+///     SHARE_VEC(vec: &mut Vec<u8>, additional_data: usize);
+/// )
+/// ```
 #[proc_macro]
 pub fn syscalls(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let Syscalls {
