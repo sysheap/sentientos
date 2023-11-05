@@ -2,7 +2,7 @@
 #![no_main]
 
 use common::syscalls::userspace::WRITE_CHAR;
-use userspace::wait;
+use userspace::util::wait;
 
 extern crate userspace;
 
