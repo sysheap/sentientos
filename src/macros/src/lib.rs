@@ -143,12 +143,12 @@ fn generate_kernel_matcharms_arguments(arguments: &[FnArg]) -> Result<TokenStrea
         let argument_type = get_argument_type(argument)?;
         let register_index = format_ident!("a{}", index);
         let argument_token = match argument_type {
-            ArgumentType::Value => quote! { trap_frame[Register::#register_index] as _ },
+            ArgumentType::Value => quote! { self, trap_frame[Register::#register_index] as _ },
             ArgumentType::Reference => {
-                quote! { Userpointer::new(trap_frame[Register::#register_index] as _) }
+                quote! { self, Userpointer::new(trap_frame[Register::#register_index] as _) }
             }
             ArgumentType::MutableReference => {
-                quote! { UserpointerMut::new(trap_frame[Register::#register_index] as _) }
+                quote! { self, UserpointerMut::new(trap_frame[Register::#register_index] as _) }
             }
         };
         argument_tokens.push(argument_token);
@@ -165,7 +165,7 @@ fn generate_kernel_functions(syscalls: &[Syscall]) -> Result<Vec<TokenStream>, (
 
         kernel_functions.push(quote! {
             #[allow(non_snake_case)]
-            fn #syscall_name(#(#syscall_arguments),*) -> isize;
+            fn #syscall_name(&self, #(#syscall_arguments),*) -> isize;
         });
     }
     Ok(kernel_functions)
@@ -229,7 +229,7 @@ fn generate_kernel_module(
             pub trait Syscalls {
                 #(#kernel_functions)*
 
-                fn handle(trap_frame: &mut TrapFrame) -> isize {
+                fn handle(&self, trap_frame: &mut TrapFrame) -> isize {
                     let syscall_nr = trap_frame[Register::a7];
                     match syscall_nr {
                         #(#match_arms)*

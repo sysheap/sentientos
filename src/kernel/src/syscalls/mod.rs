@@ -6,13 +6,13 @@ struct SyscallHandler;
 
 impl common::syscalls::kernel::Syscalls for SyscallHandler {
     #[allow(non_snake_case)]
-    fn WRITE_CHAR(c: u8) -> isize {
+    fn WRITE_CHAR(&self, c: u8) -> isize {
         print!("{}", c as char);
         SYSCALL_SUCCESS
     }
 
     #[allow(non_snake_case)]
-    fn EXIT(status: isize) -> isize {
+    fn EXIT(&self, status: isize) -> isize {
         debug!("Exit process with status: {}\n", status);
         scheduler::kill_current_process();
         SYSCALL_SUCCESS
@@ -20,5 +20,6 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
 }
 
 pub fn handle_syscall(trap_frame: &mut TrapFrame) -> isize {
-    SyscallHandler::handle(trap_frame)
+    let handler = SyscallHandler;
+    SyscallHandler::handle(&handler, trap_frame)
 }
