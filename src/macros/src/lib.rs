@@ -153,6 +153,11 @@ fn generate_kernel_matcharms_arguments(arguments: &[FnArg]) -> Result<TokenStrea
         };
         argument_tokens.push(argument_token);
     }
+    if argument_tokens.is_empty() {
+        argument_tokens.push(quote! {
+            self
+        });
+    }
     Ok(quote!(#(#argument_tokens),*))
 }
 
@@ -254,6 +259,17 @@ fn generate_userspace_module(
 
             use core::arch::asm;
 
+            fn ecall_0(nr: usize) -> isize {
+                let ret: isize;
+                unsafe {
+                    asm!("ecall",
+                        in("a7") nr,
+                        lateout("a0") ret,
+                    );
+                }
+                ret
+            }
+
             fn ecall_1(nr: usize, arg0: usize) -> isize {
                 let ret: isize;
                 unsafe {
@@ -307,6 +323,9 @@ fn generate_ecall(
     arguments: &[FnArg],
 ) -> Result<proc_macro2::TokenStream, ()> {
     match arguments.len() {
+        0 => Ok(quote! {
+            ecall_0(#syscall_number)
+        }),
         1 => {
             let arg0 = cast_argument(&arguments[0])?;
             Ok(quote! {

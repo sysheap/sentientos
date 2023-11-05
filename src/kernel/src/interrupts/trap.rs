@@ -5,9 +5,8 @@ use common::syscalls::trap_frame::{Register, TrapFrame};
 use crate::{
     cpu, debug,
     interrupts::plic::{self, InterruptSource},
-    io::uart,
+    io::{stdin_buf::STDIN_BUFFER, uart},
     memory::page_tables,
-    print, println,
     processes::{scheduler, timer},
     syscalls::handle_syscall,
 };
@@ -80,22 +79,7 @@ fn handle_external_interrupt() {
     );
 
     let input = uart::read().expect("There should be input from the uart.");
-
-    match input {
-        8 => {
-            // This is a backspace, so we
-            // essentially have to write a space and
-            // backup again:
-            print!("{} {}", 8 as char, 8 as char);
-        }
-        10 | 13 => {
-            // Newline or carriage-return
-            println!();
-        }
-        _ => {
-            print!("{}", input as char);
-        }
-    };
+    STDIN_BUFFER.lock().push(input);
 
     plic::complete_interrupt(plic_interrupt);
 }
