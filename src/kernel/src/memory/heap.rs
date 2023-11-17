@@ -1,4 +1,4 @@
-use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
+use core::{alloc::GlobalAlloc, cmp::Ordering, ptr::NonNull};
 
 use common::mutex::{Mutex, MutexGuard};
 
@@ -12,12 +12,8 @@ use super::page_allocator;
 
 const DELIMITER: &str = "######################################################";
 
-struct HeapInner {
-    free_list: Option<NonNull<FreeBlock>>,
-}
-
 struct Heap {
-    inner: RefCell<HeapInner>,
+    free_list: Option<NonNull<FreeBlock>>,
 }
 
 #[repr(packed)]
@@ -54,9 +50,7 @@ static OS_HEAP: MutexHeap = MutexHeap::new();
 
 impl Heap {
     const fn new() -> Self {
-        Self {
-            inner: RefCell::new(HeapInner { free_list: None }),
-        }
+        Self { free_list: None }
     }
 
     fn init(&mut self, start: *mut u8, size: usize) {
@@ -69,7 +63,7 @@ impl Heap {
         free_block.next = None;
         free_block.size = size;
 
-        self.inner.borrow_mut().free_list = NonNull::new(free_block);
+        self.free_list = NonNull::new(free_block);
     }
 
     fn dump(&self) {
@@ -77,7 +71,7 @@ impl Heap {
         debug!("Heap DUMP of free blocks");
         debug!("START\t\t\tEND\t\t\tSIZE");
 
-        let mut free_block_holder = self.inner.borrow().free_list;
+        let mut free_block_holder = self.free_list;
 
         unsafe {
             while let Some(free_block) = free_block_holder {
@@ -98,12 +92,12 @@ impl Heap {
         debug!("{}", DELIMITER);
     }
 
-    unsafe fn alloc_impl(&self, layout: core::alloc::Layout) -> *mut u8 {
+    unsafe fn alloc_impl(&mut self, layout: core::alloc::Layout) -> *mut u8 {
         let mut size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
 
         let mut previous_free_block = None;
 
-        let mut free_block_option = self.inner.borrow_mut().free_list;
+        let mut free_block_option = self.free_list;
 
         // Find free block which is large enough
         unsafe {
@@ -136,7 +130,7 @@ impl Heap {
         return match size.cmp(&free_block_size) {
             Ordering::Equal => {
                 match previous_free_block {
-                    None => self.inner.borrow_mut().free_list = free_block_ref.next,
+                    None => self.free_list = free_block_ref.next,
                     Some(mut previous_free_block) => {
                         previous_free_block.as_mut().next = free_block_ref.next
                     }
@@ -157,7 +151,7 @@ impl Heap {
                 free_block_ref.next = None;
 
                 match previous_free_block {
-                    None => self.inner.borrow_mut().free_list = NonNull::new(new_free_block),
+                    None => self.free_list = NonNull::new(new_free_block),
                     Some(mut previous_free_block) => {
                         previous_free_block.as_mut().next = NonNull::new(new_free_block)
                     }
@@ -169,12 +163,12 @@ impl Heap {
         };
     }
 
-    unsafe fn dealloc_impl(&self, ptr: *mut u8, _layout: core::alloc::Layout) {
+    unsafe fn dealloc_impl(&mut self, ptr: *mut u8, _layout: core::alloc::Layout) {
         let freeblock = &mut *(ptr.sub(core::mem::size_of::<FreeBlock>()) as *mut FreeBlock);
 
-        freeblock.next = self.inner.borrow().free_list;
+        freeblock.next = self.free_list;
 
-        self.inner.borrow_mut().free_list = NonNull::new(freeblock);
+        self.free_list = NonNull::new(freeblock);
     }
 }
 
@@ -207,7 +201,7 @@ pub fn init() {
 
 unsafe impl GlobalAlloc for MutexHeap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        let heap = self.lock();
+        let mut heap = self.lock();
         let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
         // debug!(
         //     "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
@@ -241,7 +235,7 @@ unsafe impl GlobalAlloc for MutexHeap {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
-        let heap = self.lock();
+        let mut heap = self.lock();
         // debug!("BEFORE DEALLOC: {:p}", ptr);
         // heap.dump();
         heap.dealloc_impl(ptr, layout);
