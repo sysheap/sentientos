@@ -2,7 +2,7 @@ use core::{alloc::GlobalAlloc, cell::RefCell, cmp::Ordering, ptr::NonNull};
 
 use common::mutex::{Mutex, MutexGuard};
 
-use crate::{debug, info, klibc::util::align_up};
+use crate::{debug, info, klibc::util::align_up, memory::page_allocator::EthernalPages};
 
 use super::page_allocator;
 
@@ -188,7 +188,7 @@ pub fn dump() {
 }
 
 pub fn init() {
-    let heap_start = page_allocator::zalloc(1).unwrap();
+    let heap_start = EthernalPages::zalloc(1).unwrap();
 
     OS_HEAP
         .lock()
@@ -219,7 +219,7 @@ unsafe impl GlobalAlloc for MutexHeap {
 
             let number_of_pages =
                 align_up(size, page_allocator::PAGE_SIZE) / page_allocator::PAGE_SIZE;
-            let pages = match page_allocator::zalloc(number_of_pages) {
+            let pages = match EthernalPages::zalloc(number_of_pages) {
                 None => return ptr,
                 Some(pages) => pages,
             };

@@ -9,10 +9,7 @@ use common::{
 use crate::{
     debug,
     klibc::elf::ElfFile,
-    memory::{
-        page_allocator::{dealloc, PagePointer},
-        page_tables::RootPageTableHolder,
-    },
+    memory::{page_allocator::AllocatedPages, page_tables::RootPageTableHolder},
     processes::loader::{self, LoadedElf},
 };
 
@@ -29,7 +26,7 @@ pub struct Process {
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
-    allocated_pages: Vec<PagePointer>,
+    allocated_pages: Vec<AllocatedPages>,
 }
 
 impl Debug for Process {
@@ -97,9 +94,6 @@ impl Drop for Process {
             "Drop process (PID: {}) (Allocated pages: {:?})",
             self.pid, self.allocated_pages
         );
-        for allocated_page in &self.allocated_pages {
-            dealloc(allocated_page.clone());
-        }
     }
 }
 

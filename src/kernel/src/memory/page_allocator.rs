@@ -1,4 +1,5 @@
 use core::{
+    hint::black_box,
     ptr::{null_mut, NonNull},
     slice,
 };
@@ -8,7 +9,7 @@ use common::mutex::Mutex;
 use crate::{debug, info, klibc::util::align_up};
 
 pub const PAGE_SIZE: usize = 4096;
-type Page = [u8; PAGE_SIZE];
+pub type Page = [u8; PAGE_SIZE];
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
@@ -57,18 +58,18 @@ impl PageAllocator {
         info!("Number of pages:\t{}\n", self.number_of_pages);
     }
 
-    fn page_idx_to_page_pointer(&self, page_index: usize, number_of_pages: usize) -> PagePointer {
+    fn page_idx_to_pointer(&self, page_index: usize, number_of_pages: usize) -> NonNull<Page> {
         assert!(page_index < self.number_of_pages);
-        unsafe { PagePointer::new(self.heap.add(page_index), number_of_pages) }
+        unsafe { NonNull::new(self.heap.add(page_index)).unwrap() }
     }
 
-    fn page_pointer_to_page_idx(&self, page_pointer: &PagePointer) -> usize {
-        let distance = page_pointer.addr.as_ptr() as usize - self.heap as usize;
+    fn page_pointer_to_page_idx(&self, page_pointer: &AllocatedPages) -> usize {
+        let distance = page_pointer.ptr.as_ptr() as usize - self.heap as usize;
         assert!(distance % 4096 == 0);
         distance / 4096
     }
 
-    fn zalloc(&self, number_of_pages_requested: usize) -> Option<PagePointer> {
+    fn alloc(&self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
         'outer: for idx in 0..self.number_of_pages {
             unsafe {
                 // Check if this page is free and also if we have enough pages left where we can check consecutiveness
@@ -87,16 +88,14 @@ impl PageAllocator {
                     *self.metadata.add(mark_idx) = PageStatus::Used;
                 }
                 *self.metadata.add(idx + number_of_pages_requested - 1) = PageStatus::Last;
-                let mut page_pointer =
-                    self.page_idx_to_page_pointer(idx, number_of_pages_requested);
-                page_pointer.zero();
+                let page_pointer = self.page_idx_to_pointer(idx, number_of_pages_requested);
                 return Some(page_pointer);
             }
         }
         None
     }
 
-    fn dealloc(&self, page: PagePointer) {
+    fn dealloc(&self, page: &mut AllocatedPages) {
         let mut idx = self.page_pointer_to_page_idx(&page);
         unsafe {
             while *self.metadata.add(idx) != PageStatus::Last {
@@ -105,6 +104,8 @@ impl PageAllocator {
             }
             *self.metadata.add(idx) = PageStatus::Free;
         }
+        page.number_of_pages = 0;
+        page.ptr = NonNull::dangling();
     }
 
     fn dump(&self) {
@@ -131,27 +132,61 @@ impl PageAllocator {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PagePointer {
-    addr: NonNull<Page>,
+#[derive(Debug)]
+pub struct EthernalPages {
+    ptr: NonNull<Page>,
     number_of_pages: usize,
 }
 
-impl PagePointer {
-    fn new(free_page: *mut Page, number_of_pages: usize) -> Self {
-        let addr = NonNull::new(free_page).unwrap();
-        Self {
-            addr,
-            number_of_pages,
+impl EthernalPages {
+    pub fn zalloc(number_of_pages: usize) -> Option<Self> {
+        PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
+            let mut allocated_page = Self {
+                ptr,
+                number_of_pages,
+            };
+            allocated_page.zero();
+            allocated_page
+        })
+    }
+
+    pub fn zero(&mut self) {
+        for offset in 0..self.number_of_pages {
+            unsafe {
+                self.ptr.as_ptr().add(offset).as_mut().unwrap().fill(0);
+            }
         }
     }
 
-    pub fn addr(&self) -> NonNull<[u8; PAGE_SIZE]> {
-        self.addr
+    pub fn addr(&self) -> NonNull<Page> {
+        self.ptr
+    }
+}
+
+#[derive(Debug)]
+pub struct AllocatedPages {
+    ptr: NonNull<Page>,
+    number_of_pages: usize,
+}
+
+impl AllocatedPages {
+    pub fn zalloc(number_of_pages: usize) -> Option<Self> {
+        PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
+            let mut allocated_page = Self {
+                ptr,
+                number_of_pages,
+            };
+            allocated_page.zero();
+            allocated_page
+        })
+    }
+
+    pub fn addr(&self) -> NonNull<Page> {
+        self.ptr
     }
 
     fn u8(&self) -> *mut u8 {
-        self.addr.cast().as_ptr()
+        self.ptr.cast().as_ptr()
     }
 
     pub fn slice(&mut self) -> &mut [u8] {
@@ -159,41 +194,40 @@ impl PagePointer {
     }
 
     pub fn addr_as_usize(&self) -> usize {
-        self.addr.as_ptr() as usize
+        self.ptr.as_ptr() as usize
     }
 
     pub fn zero(&mut self) {
-        unsafe {
-            self.addr.as_mut().fill(0);
+        for offset in 0..self.number_of_pages {
+            unsafe {
+                self.ptr.as_ptr().add(offset).as_mut().unwrap().fill(0);
+            }
         }
     }
 }
 
-impl From<usize> for PagePointer {
-    fn from(pointer: usize) -> Self {
-        assert_eq!(pointer % PAGE_SIZE, 0);
-        assert!(pointer != 0);
+impl Drop for AllocatedPages {
+    fn drop(&mut self) {
+        static mut FOO: usize = 0;
+        debug!("Drop allocated page at {:p}", self.ptr.as_ptr());
         unsafe {
-            Self {
-                addr: NonNull::new_unchecked(pointer as *mut Page),
-                number_of_pages: 0, // TODO: Should count how many pages are actually allocated
+            FOO += 1;
+            if FOO < 10 {
+                return;
             }
         }
+        PAGE_ALLOCATOR.lock().dealloc(self);
     }
+}
+
+fn call_me() {
+    black_box(())
 }
 
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
 pub fn init(heap_start: usize, heap_size: usize) {
     PAGE_ALLOCATOR.lock().init(heap_start, heap_size);
-}
-
-pub fn zalloc(number_of_pages: usize) -> Option<PagePointer> {
-    PAGE_ALLOCATOR.lock().zalloc(number_of_pages)
-}
-
-pub fn dealloc(page: PagePointer) {
-    PAGE_ALLOCATOR.lock().dealloc(page);
 }
 
 pub fn dump() {

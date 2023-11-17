@@ -1,6 +1,6 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull, u8};
 
-use alloc::rc::Rc;
+use alloc::{rc::Rc, vec::Vec};
 use common::mutex::Mutex;
 
 use crate::{
@@ -15,26 +15,36 @@ use crate::{
     test::qemu_exit,
 };
 
-use super::page_allocator::{self, PagePointer};
+use super::page_allocator::{AllocatedPages, Page};
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
-pub struct RootPageTableHolder(Mutex<&'static mut PageTable>);
+pub struct RootPageTableHolder {
+    table: Mutex<&'static mut PageTable>,
+    allocated_pages: Vec<AllocatedPages>,
+}
 
 impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let page_table = self.0.lock();
+        let page_table = self.table.lock();
         write!(f, "RootPageTableHolder({:p})", &*page_table)
     }
 }
 
 impl RootPageTableHolder {
     fn empty() -> Self {
-        Self(Mutex::new(PageTable::new()))
+        let root_page = AllocatedPages::zalloc(1).unwrap();
+        let root_page_addr = root_page.addr();
+        let mut allocated_pages = Vec::with_capacity(1);
+        allocated_pages.push(root_page);
+        Self {
+            table: Mutex::new(PageTable::from(root_page_addr)),
+            allocated_pages,
+        }
     }
 
     pub fn new_with_kernel_mapping() -> Self {
-        let root_page_table_holder = RootPageTableHolder::empty();
+        let mut root_page_table_holder = RootPageTableHolder::empty();
 
         extern "C" {
             static mut TEXT_START: usize;
@@ -103,7 +113,7 @@ impl RootPageTableHolder {
     }
 
     pub fn map_kernel(
-        &self,
+        &mut self,
         virtual_address_start: usize,
         physical_address_start: usize,
         size: usize,
@@ -121,7 +131,7 @@ impl RootPageTableHolder {
     }
 
     pub fn map_userspace(
-        &self,
+        &mut self,
         virtual_address_start: usize,
         physical_address_start: usize,
         size: usize,
@@ -139,7 +149,7 @@ impl RootPageTableHolder {
     }
 
     fn get_page_table_entry_for_address(&self, address: usize) -> Option<&PageTableEntry> {
-        let root_page_table = self.0.lock();
+        let root_page_table = self.table.lock();
 
         let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
         if !first_level_entry.get_validity() {
@@ -164,7 +174,7 @@ impl RootPageTableHolder {
     }
 
     fn map(
-        &self,
+        &mut self,
         virtual_address_start: usize,
         physical_address_start: usize,
         size: usize,
@@ -187,7 +197,7 @@ impl RootPageTableHolder {
         assert_eq!(physical_address_start % PAGE_SIZE, 0);
         assert_eq!(size % PAGE_SIZE, 0);
 
-        let mut root_page_table = self.0.lock();
+        let mut root_page_table = self.table.lock();
 
         for offset in (0..size).step_by(PAGE_SIZE) {
             let current_virtual_address = virtual_address_start + offset;
@@ -196,7 +206,9 @@ impl RootPageTableHolder {
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address() == 0 {
-                let new_page_table = PageTable::new();
+                let page = AllocatedPages::zalloc(1).unwrap();
+                let new_page_table = PageTable::from(page.addr());
+                self.allocated_pages.push(page);
                 first_level_entry.set_physical_address(new_page_table.get_physical_address());
                 first_level_entry.set_validity(true);
             }
@@ -205,7 +217,9 @@ impl RootPageTableHolder {
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address() == 0 {
-                let new_page_table = PageTable::new();
+                let page = AllocatedPages::zalloc(1).unwrap();
+                let new_page_table = PageTable::from(page.addr());
+                self.allocated_pages.push(page);
                 second_level_entry.set_physical_address(new_page_table.get_physical_address());
                 second_level_entry.set_validity(true);
             }
@@ -224,7 +238,7 @@ impl RootPageTableHolder {
     }
 
     pub fn map_identity_kernel(
-        &self,
+        &mut self,
         virtual_address_start: usize,
         size: usize,
         privileges: XWRMode,
@@ -234,7 +248,7 @@ impl RootPageTableHolder {
     }
 
     fn map_identity(
-        &self,
+        &mut self,
         virtual_address_start: usize,
         size: usize,
         privileges: XWRMode,
@@ -252,36 +266,13 @@ impl RootPageTableHolder {
     }
 }
 
-impl Drop for RootPageTableHolder {
-    fn drop(&mut self) {
-        let root_page_table = self.0.lock();
-        drop_recursive(&root_page_table);
-        fn drop_recursive(page_table: &PageTable) {
-            // Iterate through all childs
-            for entry in &page_table.0 {
-                if entry.get_validity() && !entry.is_leaf() {
-                    drop_recursive(entry.get_target_page_table());
-                }
-            }
-
-            page_allocator::dealloc(page_table.get_page_pointer());
-        }
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug)]
 struct PageTable([PageTableEntry; 512]);
 
 impl PageTable {
-    fn new() -> &'static mut PageTable {
-        let page = page_allocator::zalloc(1).expect("Memory should be available.");
-        let mut page_table: NonNull<PageTable> = page.addr().cast();
-        unsafe { page_table.as_mut() }
-    }
-
-    fn get_page_pointer(&self) -> PagePointer {
-        self.get_physical_address().into()
+    fn from(ptr: NonNull<Page>) -> &'static mut PageTable {
+        unsafe { ptr.cast().as_mut() }
     }
 
     fn get_entry_for_virtual_address_mut(
@@ -410,7 +401,7 @@ impl PageTableEntry {
 }
 
 pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
-    let page_table_address = page_table_holder.0.lock().get_physical_address();
+    let page_table_address = page_table_holder.table.lock().get_physical_address();
 
     debug!(
         "Activate new page mapping (Addr of page tables 0x{:x})",
