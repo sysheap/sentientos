@@ -8,18 +8,24 @@ use common::{
 
 use crate::{
     debug,
-    klibc::{
-        elf::{ElfFile, ProgramHeaderType},
-        util::{align_up_and_get_number_of_pages, copy_slice},
-    },
+    klibc::elf::ElfFile,
     memory::{
-        page_allocator::{dealloc, zalloc, PagePointer, PAGE_SIZE},
+        page_allocator::{dealloc, PagePointer},
         page_tables::RootPageTableHolder,
     },
+    processes::loader::{self, LoadedElf},
 };
 
+fn get_next_pid() -> u64 {
+    static PID_COUNTER: Mutex<u64> = Mutex::new(0);
+    let mut pid_counter = PID_COUNTER.lock();
+    let next_pid = *pid_counter;
+    *pid_counter += 1;
+    next_pid
+}
+
 pub struct Process {
-    pid: usize,
+    pid: u64,
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
@@ -47,9 +53,6 @@ impl Debug for Process {
 }
 
 impl Process {
-    const STACK_END: usize = 0xfffffffffffff000;
-    const STACK_START: usize = Process::STACK_END + (PAGE_SIZE - 1);
-
     pub fn register_state_ptr(&self) -> *const TrapFrame {
         self.register_state.as_ref() as *const TrapFrame
     }
@@ -69,64 +72,21 @@ impl Process {
     pub fn from_elf(elf_file: &ElfFile) -> Self {
         debug!("Create process from elf file");
 
-        let page_table = RootPageTableHolder::new_with_kernel_mapping();
+        let LoadedElf {
+            entry_address,
+            page_tables,
+            allocated_pages,
+        } = loader::load_elf(elf_file);
+
         let mut register_state = TrapFrame::zero();
-
-        let elf_header = elf_file.get_header();
-        let mut allocated_pages = Vec::new();
-
-        // Map 4KB stack
-        let stack = zalloc(PAGE_SIZE).expect("Could not allocate memory for stack");
-        allocated_pages.push(stack.clone());
-
-        page_table.map_userspace(
-            Process::STACK_END,
-            stack.addr_as_usize(),
-            PAGE_SIZE,
-            crate::memory::page_tables::XWRMode::ReadWrite,
-            "Stack",
-        );
-
-        register_state[Register::sp] = Process::STACK_START;
-
-        // Map load program header
-        let loadable_program_header = elf_file
-            .get_program_headers()
-            .iter()
-            .filter(|header| header.header_type == ProgramHeaderType::PT_LOAD);
-
-        for program_header in loadable_program_header {
-            let data = elf_file.get_program_header_data(program_header);
-            let real_size = program_header.memory_size;
-            let size_in_pages = align_up_and_get_number_of_pages(real_size as usize);
-            let mut pages =
-                zalloc(size_in_pages).expect("Could not allocate memory for program header.");
-            allocated_pages.push(pages.clone());
-            let page_slice = pages.slice();
-            copy_slice(data, page_slice);
-
-            page_table.map_userspace(
-                program_header.virtual_address as usize,
-                pages.addr_as_usize(),
-                size_in_pages * PAGE_SIZE,
-                program_header.access_flags.into(),
-                "LOAD",
-            );
-        }
-
-        debug!("DONE (Entry: {:#x})", elf_header.entry_point);
-
-        static PID_COUNTER: Mutex<usize> = Mutex::new(0);
-        let mut pid_counter = PID_COUNTER.lock();
-        let next_pid = *pid_counter;
-        *pid_counter += 1;
+        register_state[Register::sp] = loader::STACK_START;
 
         Self {
-            pid: next_pid,
+            pid: get_next_pid(),
             register_state: Box::new(register_state),
-            page_table: Rc::new(page_table),
-            program_counter: elf_header.entry_point as usize,
-            allocated_pages,
+            page_table: Rc::new(page_tables),
+            program_counter: entry_address,
+            allocated_pages: allocated_pages,
         }
     }
 }

@@ -271,7 +271,7 @@ impl Drop for RootPageTableHolder {
 
 #[repr(transparent)]
 #[derive(Debug)]
-pub struct PageTable([PageTableEntry; 512]);
+struct PageTable([PageTableEntry; 512]);
 
 impl PageTable {
     fn new() -> &'static mut PageTable {
