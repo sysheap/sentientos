@@ -14,7 +14,7 @@ use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
     memory::{
-        heap, page_allocator,
+        page_allocator,
         page_tables::{self, RootPageTableHolder},
     },
     processes::{scheduler, timer},
@@ -60,7 +60,6 @@ extern "C" fn kernel_init() {
     unsafe {
         info!("Initializing page allocator");
         page_allocator::init(HEAP_START, HEAP_SIZE);
-        heap::init();
     }
 
     #[cfg(test)]

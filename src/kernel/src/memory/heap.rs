@@ -3,7 +3,7 @@ use core::{alloc::GlobalAlloc, cmp::Ordering, ptr::NonNull};
 use common::mutex::{Mutex, MutexGuard};
 
 use crate::{
-    debug, info,
+    debug,
     klibc::util::align_up,
     memory::page_allocator::{AllocatedPages, Ethernal},
 };
@@ -24,8 +24,8 @@ struct FreeBlock {
 
 impl FreeBlock {
     fn get_data_ptr(&self) -> *mut u8 {
-        let free_block_ptr = self as *const FreeBlock as *const u8 as *mut u8;
-        unsafe { free_block_ptr.byte_add(core::mem::size_of::<FreeBlock>()) }
+        let free_block_ptr = self as *const FreeBlock;
+        unsafe { free_block_ptr.add(1) as *mut u8 }
     }
 }
 
@@ -51,19 +51,6 @@ static OS_HEAP: MutexHeap = MutexHeap::new();
 impl Heap {
     const fn new() -> Self {
         Self { free_list: None }
-    }
-
-    fn init(&mut self, start: *mut u8, size: usize) {
-        let align_start = align_to(start as usize);
-        let difference = align_start - start as usize;
-        let size = size - difference;
-
-        let free_block: &mut FreeBlock = unsafe { &mut *(align_start as *mut FreeBlock) };
-
-        free_block.next = None;
-        free_block.size = size;
-
-        self.free_list = NonNull::new(free_block);
     }
 
     fn dump(&self) {
@@ -184,19 +171,6 @@ fn align_to(value: usize) -> usize {
 #[allow(dead_code)]
 pub fn dump() {
     OS_HEAP.lock().dump();
-}
-
-pub fn init() {
-    let heap_start = AllocatedPages::<Ethernal>::zalloc(1).unwrap();
-
-    OS_HEAP
-        .lock()
-        .init(heap_start.addr().cast().as_ptr(), page_allocator::PAGE_SIZE);
-    info!(
-        "Heap initialized! (Start: 0x{:p} Size: 0x{:x})\n",
-        heap_start.addr().as_ptr(),
-        page_allocator::PAGE_SIZE
-    );
 }
 
 unsafe impl GlobalAlloc for MutexHeap {
