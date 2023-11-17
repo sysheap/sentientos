@@ -14,15 +14,15 @@ pub type Page = [u8; PAGE_SIZE];
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
 enum PageStatus {
-    Free = 1 << 0,
-    Used = 1 << 1,
-    Last = 1 << 2,
+    Free,
+    Used,
+    Last,
 }
 
 struct PageAllocator {
     metadata: *mut PageStatus,
     heap: *mut Page,
-    number_of_pages: usize,
+    total_heap_pages: usize,
 }
 
 impl PageAllocator {
@@ -30,7 +30,7 @@ impl PageAllocator {
         Self {
             metadata: null_mut(),
             heap: null_mut(),
-            number_of_pages: 0,
+            total_heap_pages: 0,
         }
     }
 
@@ -39,7 +39,7 @@ impl PageAllocator {
 
         self.metadata = heap_start as *mut PageStatus;
         self.heap = align_up(heap_start + number_of_pages, PAGE_SIZE) as *mut Page;
-        self.number_of_pages = number_of_pages;
+        self.total_heap_pages = number_of_pages;
 
         assert!(self.metadata as usize % PAGE_SIZE == 0);
         assert!(self.heap as usize % PAGE_SIZE == 0);
@@ -55,11 +55,11 @@ impl PageAllocator {
         info!("Page allocator initalized");
         info!("Metadata start:\t\t{:p}", self.metadata);
         info!("Heap start:\t\t{:p}", self.heap);
-        info!("Number of pages:\t{}\n", self.number_of_pages);
+        info!("Number of pages:\t{}\n", self.total_heap_pages);
     }
 
     fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<Page> {
-        assert!(page_index < self.number_of_pages);
+        assert!(page_index < self.total_heap_pages);
         unsafe { NonNull::new(self.heap.add(page_index)).unwrap() }
     }
 
@@ -70,29 +70,31 @@ impl PageAllocator {
     }
 
     fn alloc(&self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
-        'outer: for idx in 0..self.number_of_pages {
+        (0..self.total_heap_pages)
+            .find(|&idx| self.is_range_free(idx, number_of_pages_requested))
+            .map(|start_idx| {
+                self.mark_range_as_used(start_idx, number_of_pages_requested);
+                self.page_idx_to_pointer(start_idx)
+            })
+    }
+
+    fn is_range_free(&self, start_idx: usize, length: usize) -> bool {
+        start_idx + length <= self.total_heap_pages
+            && (start_idx..start_idx + length)
+                .all(|idx| unsafe { *self.metadata.add(idx) == PageStatus::Free })
+    }
+
+    fn mark_range_as_used(&self, start_idx: usize, length: usize) {
+        for idx in start_idx..start_idx + length {
+            let status = if idx == start_idx + length - 1 {
+                PageStatus::Last
+            } else {
+                PageStatus::Used
+            };
             unsafe {
-                // Check if this page is free and also if we have enough pages left where we can check consecutiveness
-                if *self.metadata.add(idx) != PageStatus::Free
-                    || (idx + number_of_pages_requested) > self.number_of_pages
-                {
-                    continue;
-                }
-                for consecutive_idx in idx..(idx + number_of_pages_requested) {
-                    if *self.metadata.add(consecutive_idx) != PageStatus::Free {
-                        continue 'outer;
-                    }
-                }
-                // Got it! We have enough free consecutive pages. Mark the as used
-                for mark_idx in idx..(idx + number_of_pages_requested - 1) {
-                    *self.metadata.add(mark_idx) = PageStatus::Used;
-                }
-                *self.metadata.add(idx + number_of_pages_requested - 1) = PageStatus::Last;
-                let page_pointer = self.page_idx_to_pointer(idx);
-                return Some(page_pointer);
+                *self.metadata.add(idx) = status;
             }
         }
-        None
     }
 
     fn dealloc(&self, page: &mut AllocatedPages<Ephemeral>) {
@@ -113,8 +115,8 @@ impl PageAllocator {
         debug!("Page allocator dump");
         debug!("Metadata start:\t\t{:p}", self.metadata);
         debug!("Heap start:\t\t{:p}", self.heap);
-        debug!("Number of pages:\t{}", self.number_of_pages);
-        for idx in 0..self.number_of_pages {
+        debug!("Number of pages:\t{}", self.total_heap_pages);
+        for idx in 0..self.total_heap_pages {
             let status = unsafe {
                 match *self.metadata.add(idx) {
                     PageStatus::Free => "F",
@@ -161,14 +163,18 @@ pub struct AllocatedPages<Dropper: PageDropper> {
 impl<Dropper: PageDropper> AllocatedPages<Dropper> {
     pub fn zalloc(number_of_pages: usize) -> Option<Self> {
         PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
-            let mut allocated_page = Self {
-                ptr,
-                number_of_pages,
-                phantom: PhantomData,
-            };
+            let mut allocated_page = Self::new(ptr, number_of_pages);
             allocated_page.zero();
             allocated_page
         })
+    }
+
+    fn new(ptr: NonNull<Page>, number_of_pages: usize) -> Self {
+        Self {
+            ptr,
+            number_of_pages,
+            phantom: PhantomData,
+        }
     }
 
     pub fn addr(&self) -> NonNull<Page> {
