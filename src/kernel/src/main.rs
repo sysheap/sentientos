@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-#![allow(dead_code)]
-#![allow(unused_variables)]
 #![feature(panic_info_message)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]
@@ -34,6 +32,8 @@ mod panic;
 mod processes;
 mod sbi;
 mod syscalls;
+
+#[cfg(test)]
 mod test;
 
 extern crate alloc;

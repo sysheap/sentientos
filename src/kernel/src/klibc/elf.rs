@@ -6,6 +6,7 @@ const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum BitFormat {
     Bit32 = 1,
     Bit64 = 2,
@@ -13,6 +14,7 @@ pub enum BitFormat {
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Endianess {
     Little = 1,
     Big = 2,
@@ -21,6 +23,7 @@ pub enum Endianess {
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum OsAbi {
     SystemV = 0x0,
     HP_UX = 0x1,
@@ -46,6 +49,7 @@ pub enum OsAbi {
 #[allow(non_camel_case_types)]
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum FileType {
     None = 0x0,
     RelocatableFile = 0x1,
@@ -61,6 +65,7 @@ pub enum FileType {
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Machine {
     NoSpecificInstructionSet = 0x0,
     AT_T_WE_32100 = 0x01,
@@ -161,6 +166,7 @@ static_assert_size!(ElfHeader, 64);
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum ProgramHeaderType {
     PT_NULL = 0x0,
     PT_LOAD = 0x1,
@@ -179,6 +185,7 @@ pub enum ProgramHeaderType {
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(clippy::upper_case_acronyms)]
+#[allow(dead_code)]
 pub enum ProgramHeaderFlags {
     X = 0x1,
     W = 0x2,

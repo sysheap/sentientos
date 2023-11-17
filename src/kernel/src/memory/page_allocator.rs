@@ -1,5 +1,4 @@
 use core::{
-    hint::black_box,
     ptr::{null_mut, NonNull},
     slice,
 };
@@ -58,7 +57,7 @@ impl PageAllocator {
         info!("Number of pages:\t{}\n", self.number_of_pages);
     }
 
-    fn page_idx_to_pointer(&self, page_index: usize, number_of_pages: usize) -> NonNull<Page> {
+    fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<Page> {
         assert!(page_index < self.number_of_pages);
         unsafe { NonNull::new(self.heap.add(page_index)).unwrap() }
     }
@@ -88,7 +87,7 @@ impl PageAllocator {
                     *self.metadata.add(mark_idx) = PageStatus::Used;
                 }
                 *self.metadata.add(idx + number_of_pages_requested - 1) = PageStatus::Last;
-                let page_pointer = self.page_idx_to_pointer(idx, number_of_pages_requested);
+                let page_pointer = self.page_idx_to_pointer(idx);
                 return Some(page_pointer);
             }
         }
@@ -220,16 +219,13 @@ impl Drop for AllocatedPages {
     }
 }
 
-fn call_me() {
-    black_box(())
-}
-
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
 pub fn init(heap_start: usize, heap_size: usize) {
     PAGE_ALLOCATOR.lock().init(heap_start, heap_size);
 }
 
+#[allow(dead_code)]
 pub fn dump() {
     PAGE_ALLOCATOR.lock().dump();
 }

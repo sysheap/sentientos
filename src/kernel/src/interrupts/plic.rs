@@ -6,6 +6,7 @@ pub const PLIC_SIZE: usize = 0x1000_0000;
 // These constants are set to interrupt context 1 which corresponds to Supervisor Mode on Hart 0
 // If we support multiple harts, we will need to change these constants to be configurable
 const PRIORITY_REGISTER_BASE: MMIO<u32> = MMIO::new(PLIC_BASE);
+#[allow(dead_code)]
 const PENDING_REGISTER: MMIO<u32> = MMIO::new(PLIC_BASE + 0x1000);
 const ENABLE_REGISTER: MMIO<u32> = MMIO::new(PLIC_BASE + 0x2080);
 const THRESHOLD_REGISTER: MMIO<u32> = MMIO::new(PLIC_BASE + 0x20_1000);

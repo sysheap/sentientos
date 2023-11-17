@@ -3,6 +3,7 @@ use core::arch::asm;
 #[repr(i64)]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum SbiError {
     SBI_SUCCESS = 0,
     SBI_ERR_FAILED = -1,

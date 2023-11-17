@@ -15,11 +15,6 @@ pub fn align_up_and_get_number_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE
 }
 
-pub fn align_down(value: usize, alignment: usize) -> usize {
-    let multiples = value / alignment;
-    multiples * alignment
-}
-
 pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
     assert!(dst.len() >= src.len());
     dst[..src.len()].copy_from_slice(src);
@@ -124,13 +119,6 @@ mod tests {
         assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE - 15), 1);
         assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE + 15), 2);
         assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE * 2), 2);
-    }
-
-    #[test_case]
-    fn align_down() {
-        assert_eq!(super::align_down(26, 4), 24);
-        assert_eq!(super::align_down(37, 3), 36);
-        assert_eq!(super::align_down(64, 2), 64);
     }
 
     #[test_case]

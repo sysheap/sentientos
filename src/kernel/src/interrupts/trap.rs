@@ -54,7 +54,7 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
     }
 }
 
-fn handle_interrupt(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &TrapFrame) {
+fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_frame: &TrapFrame) {
     match cause.get_exception_code() {
         SUPERVISOR_TIMER_INTERRUPT => handle_supervisor_timer_interrupt(),
         SUPERVISOR_EXTERNAL_INTERRUPT => handle_external_interrupt(),

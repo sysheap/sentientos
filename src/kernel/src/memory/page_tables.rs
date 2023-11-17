@@ -6,13 +6,13 @@ use common::mutex::Mutex;
 use crate::{
     debug,
     interrupts::plic,
+    io::TEST_DEVICE_ADDRESSS,
     klibc::{
         elf,
         util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
     },
     memory::page_allocator::PAGE_SIZE,
     processes::timer,
-    test::qemu_exit,
 };
 
 use super::page_allocator::{AllocatedPages, Page};
@@ -102,7 +102,7 @@ impl RootPageTableHolder {
             );
 
             root_page_table_holder.map_identity_kernel(
-                qemu_exit::TEST_DEVICE_ADDRESSS,
+                TEST_DEVICE_ADDRESSS,
                 PAGE_SIZE,
                 XWRMode::ReadWrite,
                 "Qemu Test Device",
@@ -110,24 +110,6 @@ impl RootPageTableHolder {
         }
 
         root_page_table_holder
-    }
-
-    pub fn map_kernel(
-        &mut self,
-        virtual_address_start: usize,
-        physical_address_start: usize,
-        size: usize,
-        privileges: XWRMode,
-        name: &str,
-    ) {
-        self.map(
-            virtual_address_start,
-            physical_address_start,
-            size,
-            privileges,
-            false,
-            name,
-        );
     }
 
     pub fn map_userspace(
@@ -336,7 +318,9 @@ impl From<elf::ProgramHeaderFlags> for XWRMode {
 impl PageTableEntry {
     const VALID_BIT_POS: usize = 0;
     const READ_BIT_POS: usize = 1;
+    #[allow(dead_code)]
     const WRITE_BIT_POS: usize = 2;
+    #[allow(dead_code)]
     const EXECUTE_BIT_POS: usize = 3;
     const USER_MODE_ACCESSIBLE_BIT_POS: usize = 4;
     const PHYSICAL_PAGE_BIT_POS: usize = 10;
@@ -393,10 +377,6 @@ impl PageTableEntry {
         assert!(self.get_physical_address() != 0);
         let phyiscal_address = self.get_physical_address();
         unsafe { &mut *(phyiscal_address as *const PageTable as *mut PageTable) }
-    }
-
-    fn clear(&mut self) {
-        self.0 = 0;
     }
 }
 

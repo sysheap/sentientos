@@ -165,7 +165,7 @@ impl Heap {
         };
     }
 
-    unsafe fn dealloc_impl(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+    unsafe fn dealloc_impl(&self, ptr: *mut u8, _layout: core::alloc::Layout) {
         let freeblock = &mut *(ptr.sub(core::mem::size_of::<FreeBlock>()) as *mut FreeBlock);
 
         freeblock.next = self.inner.borrow().free_list;
@@ -183,6 +183,7 @@ fn align_to(value: usize) -> usize {
     }
 }
 
+#[allow(dead_code)]
 pub fn dump() {
     OS_HEAP.lock().dump();
 }
