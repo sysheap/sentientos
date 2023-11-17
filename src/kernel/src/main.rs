@@ -36,6 +36,7 @@ mod syscalls;
 #[cfg(test)]
 mod test;
 
+#[macro_use]
 extern crate alloc;
 
 extern "C" {

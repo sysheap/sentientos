@@ -15,13 +15,13 @@ use crate::{
     processes::timer,
 };
 
-use super::page_allocator::{AllocatedPages, Page};
+use super::page_allocator::{AllocatedPages, Ephemeral, Page};
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
 pub struct RootPageTableHolder {
     table: Mutex<&'static mut PageTable>,
-    allocated_pages: Vec<AllocatedPages>,
+    allocated_pages: Vec<AllocatedPages<Ephemeral>>,
 }
 
 impl Debug for RootPageTableHolder {
@@ -35,8 +35,7 @@ impl RootPageTableHolder {
     fn empty() -> Self {
         let root_page = AllocatedPages::zalloc(1).unwrap();
         let root_page_addr = root_page.addr();
-        let mut allocated_pages = Vec::with_capacity(1);
-        allocated_pages.push(root_page);
+        let allocated_pages = vec![root_page];
         Self {
             table: Mutex::new(PageTable::from(root_page_addr)),
             allocated_pages,

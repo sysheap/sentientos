@@ -6,7 +6,7 @@ use crate::{
         util::{align_up_and_get_number_of_pages, copy_slice},
     },
     memory::{
-        page_allocator::{AllocatedPages, PAGE_SIZE},
+        page_allocator::{AllocatedPages, Ephemeral, PAGE_SIZE},
         page_tables::RootPageTableHolder,
     },
 };
@@ -18,7 +18,7 @@ pub const STACK_START: usize = STACK_END + (PAGE_SIZE - 1);
 pub struct LoadedElf {
     pub entry_address: usize,
     pub page_tables: RootPageTableHolder,
-    pub allocated_pages: Vec<AllocatedPages>,
+    pub allocated_pages: Vec<AllocatedPages<Ephemeral>>,
 }
 
 pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {

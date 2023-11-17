@@ -1,4 +1,5 @@
 use core::{
+    marker::PhantomData,
     ptr::{null_mut, NonNull},
     slice,
 };
@@ -62,7 +63,7 @@ impl PageAllocator {
         unsafe { NonNull::new(self.heap.add(page_index)).unwrap() }
     }
 
-    fn page_pointer_to_page_idx(&self, page_pointer: &AllocatedPages) -> usize {
+    fn page_pointer_to_page_idx<T: PageDropper>(&self, page_pointer: &AllocatedPages<T>) -> usize {
         let distance = page_pointer.ptr.as_ptr() as usize - self.heap as usize;
         assert!(distance % 4096 == 0);
         distance / 4096
@@ -94,8 +95,8 @@ impl PageAllocator {
         None
     }
 
-    fn dealloc(&self, page: &mut AllocatedPages) {
-        let mut idx = self.page_pointer_to_page_idx(&page);
+    fn dealloc(&self, page: &mut AllocatedPages<Ephemeral>) {
+        let mut idx = self.page_pointer_to_page_idx(page);
         unsafe {
             while *self.metadata.add(idx) != PageStatus::Last {
                 *self.metadata.add(idx) = PageStatus::Free;
@@ -131,49 +132,39 @@ impl PageAllocator {
     }
 }
 
-#[derive(Debug)]
-pub struct EthernalPages {
-    ptr: NonNull<Page>,
-    number_of_pages: usize,
+#[derive(Debug, Default)]
+pub struct Ephemeral;
+#[derive(Debug, Default)]
+pub struct Ethernal;
+
+pub trait PageDropper: Sized {
+    fn drop(page: &mut AllocatedPages<Self>);
 }
 
-impl EthernalPages {
+impl PageDropper for Ephemeral {
+    fn drop(page: &mut AllocatedPages<Self>) {
+        debug!("Drop allocated page at {:p}", page.ptr.as_ptr());
+        PAGE_ALLOCATOR.lock().dealloc(page);
+    }
+}
+impl PageDropper for Ethernal {
+    fn drop(_page: &mut AllocatedPages<Self>) {}
+}
+
+#[derive(Debug)]
+pub struct AllocatedPages<Dropper: PageDropper> {
+    ptr: NonNull<Page>,
+    number_of_pages: usize,
+    phantom: PhantomData<Dropper>,
+}
+
+impl<Dropper: PageDropper> AllocatedPages<Dropper> {
     pub fn zalloc(number_of_pages: usize) -> Option<Self> {
         PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
             let mut allocated_page = Self {
                 ptr,
                 number_of_pages,
-            };
-            allocated_page.zero();
-            allocated_page
-        })
-    }
-
-    pub fn zero(&mut self) {
-        for offset in 0..self.number_of_pages {
-            unsafe {
-                self.ptr.as_ptr().add(offset).as_mut().unwrap().fill(0);
-            }
-        }
-    }
-
-    pub fn addr(&self) -> NonNull<Page> {
-        self.ptr
-    }
-}
-
-#[derive(Debug)]
-pub struct AllocatedPages {
-    ptr: NonNull<Page>,
-    number_of_pages: usize,
-}
-
-impl AllocatedPages {
-    pub fn zalloc(number_of_pages: usize) -> Option<Self> {
-        PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
-            let mut allocated_page = Self {
-                ptr,
-                number_of_pages,
+                phantom: PhantomData,
             };
             allocated_page.zero();
             allocated_page
@@ -205,17 +196,9 @@ impl AllocatedPages {
     }
 }
 
-impl Drop for AllocatedPages {
+impl<Dropper: PageDropper> Drop for AllocatedPages<Dropper> {
     fn drop(&mut self) {
-        static mut FOO: usize = 0;
-        debug!("Drop allocated page at {:p}", self.ptr.as_ptr());
-        unsafe {
-            FOO += 1;
-            if FOO < 10 {
-                return;
-            }
-        }
-        PAGE_ALLOCATOR.lock().dealloc(self);
+        Dropper::drop(self);
     }
 }
 
