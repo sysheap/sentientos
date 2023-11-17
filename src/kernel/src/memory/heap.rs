@@ -173,12 +173,6 @@ unsafe impl GlobalAlloc for MutexHeap {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let mut heap = self.lock();
         let size = align_to(layout.size() + core::mem::size_of::<FreeBlock>());
-        // debug!(
-        //     "BEFORE ALLOC: 0x{:x} (Original: 0x{:x})",
-        //     size,
-        //     layout.size()
-        // );
-        // heap.dump();
 
         let mut ptr = heap.alloc_impl(layout);
 
@@ -198,18 +192,11 @@ unsafe impl GlobalAlloc for MutexHeap {
             ptr = free_block.get_data_ptr();
         }
 
-        // debug!("AFTER ALLOC (received {:p})", ptr);
-        // heap.dump();
-
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
         let mut heap = self.lock();
-        // debug!("BEFORE DEALLOC: {:p}", ptr);
-        // heap.dump();
         heap.dealloc_impl(ptr, layout);
-        // debug!("AFTER DEALLOC");
-        // heap.dump();
     }
 }
