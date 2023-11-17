@@ -10,8 +10,6 @@ use crate::{
 
 use super::page_allocator;
 
-const DELIMITER: &str = "######################################################";
-
 struct Heap {
     free_list: Option<NonNull<FreeBlock>>,
 }
@@ -54,7 +52,6 @@ impl Heap {
     }
 
     fn dump(&self) {
-        debug!("{}", DELIMITER);
         debug!("Heap DUMP of free blocks");
         debug!("START\t\t\tEND\t\t\tSIZE");
 
@@ -76,7 +73,6 @@ impl Heap {
                 free_block_holder = free_block.next;
             }
         }
-        debug!("{}", DELIMITER);
     }
 
     unsafe fn alloc_impl(&mut self, layout: core::alloc::Layout) -> *mut u8 {
