@@ -5,6 +5,7 @@
 #![feature(nonzero_ops)]
 #![feature(core_intrinsics)]
 #![feature(custom_test_frameworks)]
+#![feature(const_mut_refs)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
