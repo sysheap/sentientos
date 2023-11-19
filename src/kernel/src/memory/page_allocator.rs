@@ -146,27 +146,6 @@ impl<'a> PageAllocator<'a> {
         }
         self.metadata[idx] = PageStatus::Free;
     }
-
-    fn dump(&self) {
-        debug!("###############");
-        debug!("Page allocator dump");
-        debug!("Metadata start:\t\t{:p}", self.metadata);
-        debug!("Heap start:\t\t{:p}", self.pages);
-        debug!("Number of pages:\t{}", self.total_heap_pages());
-        for idx in 0..self.total_heap_pages() {
-            let status = match self.metadata[idx] {
-                PageStatus::Free => "F",
-                PageStatus::Used => "U",
-                PageStatus::Last => "L",
-            };
-            debug!("{} ", status);
-
-            if (idx + 1) % 80 == 0 {
-                debug!("\n");
-            }
-        }
-        debug!("\n###############");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -250,11 +229,6 @@ static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 pub fn init(heap_start: *mut u8, heap_size: usize) {
     let memory: &'static mut [u8] = unsafe { from_raw_parts_mut(heap_start, heap_size) };
     PAGE_ALLOCATOR.lock().init(memory);
-}
-
-#[allow(dead_code)]
-pub fn dump() {
-    PAGE_ALLOCATOR.lock().dump();
 }
 
 #[cfg(test)]
