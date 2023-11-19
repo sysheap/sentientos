@@ -7,7 +7,7 @@ use core::{
 
 use common::mutex::Mutex;
 
-use crate::{debug, info, klibc::util::align_up};
+use crate::{debug, info};
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -49,26 +49,26 @@ impl PageAllocator {
         }
     }
 
-    fn init(&mut self, heap_start: usize, heap_size: usize) {
-        assert!(heap_start % PAGE_SIZE == 0);
-        assert!(heap_size % PAGE_SIZE == 0);
-
+    fn init(&mut self, memory: &'static mut [u8]) {
+        let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
-        let metadata = unsafe { from_raw_parts_mut(heap_start as *mut _, number_of_heap_pages) };
+        let (metadata, heap) = memory.split_at_mut(number_of_heap_pages);
 
-        let pages_start = align_up(heap_start + number_of_heap_pages, PAGE_SIZE);
-        let pages = unsafe { from_raw_parts_mut(pages_start as *mut _, number_of_heap_pages) };
+        let (begin, metadata, end) = unsafe { metadata.align_to_mut::<PageStatus>() };
+        assert!(begin.len() == 0);
+        assert!(end.len() == 0);
+
+        let (_begin, heap, _end) = unsafe { heap.align_to_mut::<Page>() };
+        assert!(metadata.len() <= heap.len());
+        assert!(heap[0].as_ptr() as usize % PAGE_SIZE == 0);
 
         let size_metadata = core::mem::size_of_val(metadata);
-        let size_heap = core::mem::size_of_val(pages);
+        let size_heap = core::mem::size_of_val(heap);
         assert!(size_metadata + size_heap <= heap_size);
-        assert!(metadata.len() == pages.len());
-        assert!(metadata.as_ptr() as usize % PAGE_SIZE == 0);
-        assert!(pages.as_ptr() as usize % PAGE_SIZE == 0);
 
         self.metadata = metadata;
-        self.pages = pages;
+        self.pages = heap;
 
         self.metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
 
@@ -237,8 +237,9 @@ impl<Dropper: PageDropper> Drop for AllocatedPages<Dropper> {
 
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
-pub fn init(heap_start: usize, heap_size: usize) {
-    PAGE_ALLOCATOR.lock().init(heap_start, heap_size);
+pub fn init(heap_start: *mut u8, heap_size: usize) {
+    let memory = unsafe { from_raw_parts_mut(heap_start, heap_size) };
+    PAGE_ALLOCATOR.lock().init(memory);
 }
 
 #[allow(dead_code)]
