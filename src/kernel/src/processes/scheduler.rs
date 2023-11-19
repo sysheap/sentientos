@@ -1,13 +1,16 @@
-use alloc::boxed::Box;
-use alloc::collections::VecDeque;
+use core::cell::RefCell;
+
+use alloc::rc::Rc;
 use common::mutex::Mutex;
 
 use crate::klibc::elf::ElfFile;
 use crate::klibc::macros::include_bytes_align_as;
 use crate::memory::page_tables;
-use crate::{cpu, debug, info};
+use crate::processes::process_list;
+use crate::{cpu, debug};
 
 use super::process::Process;
+use super::process_list::add_process;
 
 macro_rules! path_to_compiled_binaries {
     () => {
@@ -31,40 +34,13 @@ prog_bytes!(SHELL, "shell");
 static PROGRAMS: [(&str, &[u8]); 3] = [PROG1, PROG2, SHELL];
 static INIT_PROGRAM: &[u8] = SHELL.1;
 
-pub struct Scheduler {
-    queue: VecDeque<Box<Process>>,
+pub fn initialize() {
+    let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
+    let process = Process::from_elf(&elf);
+    add_process(process);
 }
 
-impl Scheduler {
-    const fn new() -> Self {
-        Self {
-            queue: VecDeque::new(),
-        }
-    }
-
-    pub fn initialize(&mut self) {
-        info!("Initializing scheduler");
-
-        let elf = ElfFile::parse(INIT_PROGRAM).expect("Cannot parse ELF file");
-        let process = Process::from_elf(&elf);
-        self.queue.push_back(Box::new(process));
-    }
-
-    pub fn get_next(&mut self) -> Option<Box<Process>> {
-        self.queue.pop_front()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    pub fn enqueue(&mut self, process: Box<Process>) {
-        self.queue.push_back(process);
-    }
-}
-
-pub static SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
-static CURRENT_PROCESS: Mutex<Option<Box<Process>>> = Mutex::new(None);
+static CURRENT_PROCESS: Mutex<Option<Rc<RefCell<Process>>>> = Mutex::new(None);
 
 extern "C" {
     fn restore_user_context() -> !;
@@ -72,20 +48,14 @@ extern "C" {
 
 pub fn schedule() {
     debug!("Schedule next process");
-    if prepare_next_process() {
-        unsafe {
-            restore_user_context();
-        }
-    } else {
-        panic!("All processes died... ");
+    prepare_next_process();
+    unsafe {
+        restore_user_context();
     }
 }
 
 pub fn kill_current_process() {
-    {
-        let mut current_process = CURRENT_PROCESS.lock();
-        current_process.take();
-    }
+    CURRENT_PROCESS.lock().take();
     schedule();
 }
 
@@ -94,53 +64,41 @@ pub fn schedule_program(name: &str) -> bool {
         if name == prog_name {
             let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
             let process = Process::from_elf(&elf);
-            let mut scheduler = SCHEDULER.lock();
-            scheduler.enqueue(Box::new(process));
+            add_process(process);
             return true;
         }
     }
     false
 }
 
-fn prepare_next_process() -> bool {
-    let mut scheduler = SCHEDULER.lock();
+fn prepare_next_process() {
+    let current_process = CURRENT_PROCESS.lock().take();
 
-    let mut current_process = CURRENT_PROCESS.lock();
-
-    // No more processes to schedule
-    if current_process.is_none() && scheduler.is_empty() {
-        return false;
-    }
-
-    // Current process is the only process; We can skip the save and restore part
-    if scheduler.is_empty() && current_process.is_some() {
-        return true;
-    }
-
-    if let Some(ref mut current_process) = *current_process {
-        current_process.set_program_counter(cpu::read_sepc());
+    if let Some(current_process) = current_process {
+        current_process
+            .borrow_mut()
+            .set_program_counter(cpu::read_sepc());
         debug!("Saved context to current process");
         debug!("Current process: {:?}", current_process);
+        process_list::enqueue(current_process);
     }
 
-    let next_process = scheduler.get_next().expect("No process to schedule!");
+    let next_process_ref = process_list::next_runnable().expect("No processes left to schedule.");
 
-    let trap_frame_ptr = next_process.register_state_ptr();
-    let pc = next_process.get_program_counter();
-    let page_table = next_process.get_page_table();
+    {
+        let next_process = next_process_ref.borrow();
 
-    cpu::write_sscratch_register(trap_frame_ptr);
-    cpu::write_sepc(pc);
+        let trap_frame_ptr = next_process.register_state_ptr();
+        let pc = next_process.get_program_counter();
+        let page_table = next_process.get_page_table();
 
-    page_tables::activate_page_table(page_table);
+        cpu::write_sscratch_register(trap_frame_ptr);
+        cpu::write_sepc(pc);
 
-    debug!("Next process: {:?}", next_process);
+        page_tables::activate_page_table(page_table);
 
-    let old_process = current_process.replace(next_process);
-
-    if let Some(old_process) = old_process {
-        scheduler.enqueue(old_process);
+        debug!("Next process: {:?}", next_process);
     }
 
-    true
+    *CURRENT_PROCESS.lock() = Some(next_process_ref);
 }

@@ -68,6 +68,6 @@ extern "C" fn kernel_init() {
 
     plic::init_uart_interrupt();
 
-    scheduler::SCHEDULER.lock().initialize();
+    scheduler::initialize();
     timer::set_timer(0);
 }
