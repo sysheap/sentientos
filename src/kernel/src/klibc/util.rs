@@ -105,7 +105,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::page_allocator::PAGE_SIZE;
+    use crate::memory::PAGE_SIZE;
 
     #[test_case]
     fn align_up() {

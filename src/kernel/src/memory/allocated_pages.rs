@@ -10,31 +10,48 @@ pub struct Ephemeral;
 pub struct Ethernal;
 
 pub trait PageDropper: Sized {
-    fn drop(page: &mut AllocatedPages<Self>);
+    fn drop<A: WhichAllocator>(page: NonNull<Page>);
 }
 
 impl PageDropper for Ephemeral {
-    fn drop(page: &mut AllocatedPages<Self>) {
-        debug!("Drop allocated page at {:p}", page.ptr.as_ptr());
-        PAGE_ALLOCATOR.lock().dealloc(page.ptr);
-        page.number_of_pages = 0;
-        page.ptr = NonNull::dangling();
+    fn drop<A: WhichAllocator>(pages: NonNull<Page>) {
+        debug!("Drop allocated page at {:p}", pages);
+        A::deallocate(pages);
     }
 }
 impl PageDropper for Ethernal {
-    fn drop(_page: &mut AllocatedPages<Self>) {}
+    fn drop<A: WhichAllocator>(_page: NonNull<Page>) {}
+}
+
+pub trait WhichAllocator {
+    fn allocate(number_of_pages: usize) -> Option<NonNull<Page>>;
+    fn deallocate(pages: NonNull<Page>);
 }
 
 #[derive(Debug)]
-pub struct AllocatedPages<Dropper: PageDropper> {
-    ptr: NonNull<Page>,
-    number_of_pages: usize,
-    phantom: PhantomData<Dropper>,
+pub struct StaticAllocator;
+
+impl WhichAllocator for StaticAllocator {
+    fn allocate(number_of_pages: usize) -> Option<NonNull<Page>> {
+        PAGE_ALLOCATOR.lock().alloc(number_of_pages)
+    }
+
+    fn deallocate(pages: NonNull<Page>) {
+        PAGE_ALLOCATOR.lock().dealloc(pages);
+    }
 }
 
-impl<Dropper: PageDropper> AllocatedPages<Dropper> {
+#[derive(Debug)]
+pub struct AllocatedPages<Dropper: PageDropper, A: WhichAllocator = StaticAllocator> {
+    ptr: NonNull<Page>,
+    number_of_pages: usize,
+    dropper_phantom: PhantomData<Dropper>,
+    which_allocator_phantom: PhantomData<A>,
+}
+
+impl<Dropper: PageDropper, A: WhichAllocator> AllocatedPages<Dropper, A> {
     pub fn zalloc(number_of_pages: usize) -> Option<Self> {
-        PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
+        A::allocate(number_of_pages).map(|ptr| {
             let mut allocated_page = Self::new(ptr, number_of_pages);
             allocated_page.zero();
             allocated_page
@@ -45,7 +62,8 @@ impl<Dropper: PageDropper> AllocatedPages<Dropper> {
         Self {
             ptr,
             number_of_pages,
-            phantom: PhantomData,
+            dropper_phantom: PhantomData,
+            which_allocator_phantom: PhantomData,
         }
     }
 
@@ -74,8 +92,10 @@ impl<Dropper: PageDropper> AllocatedPages<Dropper> {
     }
 }
 
-impl<Dropper: PageDropper> Drop for AllocatedPages<Dropper> {
+impl<Dropper: PageDropper, A: WhichAllocator> Drop for AllocatedPages<Dropper, A> {
     fn drop(&mut self) {
-        Dropper::drop(self);
+        Dropper::drop::<A>(self.ptr);
+        self.number_of_pages = 0;
+        self.ptr = NonNull::dangling();
     }
 }
