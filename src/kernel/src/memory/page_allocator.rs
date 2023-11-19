@@ -36,12 +36,12 @@ enum PageStatus {
     Last,
 }
 
-struct PageAllocator {
-    metadata: &'static mut [PageStatus],
-    pages: &'static mut [Page],
+struct PageAllocator<'a> {
+    metadata: &'a mut [PageStatus],
+    pages: &'a mut [Page],
 }
 
-impl PageAllocator {
+impl<'a> PageAllocator<'a> {
     const fn new() -> Self {
         Self {
             metadata: &mut [],
@@ -49,7 +49,7 @@ impl PageAllocator {
         }
     }
 
-    fn init(&mut self, memory: &'static mut [u8]) {
+    fn init(&mut self, memory: &'a mut [u8]) {
         let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
@@ -238,7 +238,7 @@ impl<Dropper: PageDropper> Drop for AllocatedPages<Dropper> {
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
 pub fn init(heap_start: *mut u8, heap_size: usize) {
-    let memory = unsafe { from_raw_parts_mut(heap_start, heap_size) };
+    let memory: &'static mut [u8] = unsafe { from_raw_parts_mut(heap_start, heap_size) };
     PAGE_ALLOCATOR.lock().init(memory);
 }
 
