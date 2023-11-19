@@ -1,5 +1,6 @@
 use core::{
     marker::PhantomData,
+    ops::{Deref, DerefMut},
     ptr::NonNull,
     slice::{self, from_raw_parts_mut},
 };
@@ -9,7 +10,23 @@ use common::mutex::Mutex;
 use crate::{debug, info, klibc::util::align_up};
 
 pub const PAGE_SIZE: usize = 4096;
-pub type Page = [u8; PAGE_SIZE];
+
+#[repr(C, align(4096))]
+pub struct Page([u8; PAGE_SIZE]);
+
+impl Deref for Page {
+    type Target = [u8; PAGE_SIZE];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Page {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
