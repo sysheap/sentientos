@@ -2,14 +2,16 @@ use core::ptr::slice_from_raw_parts;
 
 use alloc::string::String;
 use common::syscalls::{
-    kernel::Syscalls, trap_frame::TrapFrame, userpointer::Userpointer, SYSCALL_INVALID_PROGRAM,
-    SYSCALL_INVALID_PTR, SYSCALL_SUCCESS, SYSCALL_WAIT,
+    kernel::Syscalls, trap_frame::TrapFrame, userpointer::Userpointer, SYSCALL_INVALID_PID,
+    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR, SYSCALL_SUCCESS, SYSCALL_WAIT,
 };
 
 use crate::{
-    debug, io::stdin_buf::STDIN_BUFFER,
-    memory::page_tables::translate_userspace_address_to_physical_address, print,
-    processes::scheduler,
+    debug,
+    io::stdin_buf::STDIN_BUFFER,
+    memory::page_tables::translate_userspace_address_to_physical_address,
+    print,
+    processes::scheduler::{self, let_current_process_wait_for},
 };
 
 struct SyscallHandler;
@@ -50,13 +52,22 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
                 name.push(*c as char);
             }
 
-            if scheduler::schedule_program(&name) {
-                SYSCALL_SUCCESS
+            if let Some(pid) = scheduler::schedule_program(&name) {
+                pid as isize
             } else {
                 SYSCALL_INVALID_PROGRAM
             }
         } else {
             SYSCALL_INVALID_PTR
+        }
+    }
+
+    #[allow(non_snake_case)]
+    fn WAIT(&self, pid: u64) -> isize {
+        if let_current_process_wait_for(pid) {
+            SYSCALL_SUCCESS
+        } else {
+            SYSCALL_INVALID_PID
         }
     }
 }

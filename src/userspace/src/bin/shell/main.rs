@@ -59,10 +59,17 @@ fn parse_command_and_execute(command: &str) {
         }
         program => {
             let reference = unsafe { &*program.as_ptr() };
+            let mut len = program.len();
 
-            let result = common::syscalls::userspace::EXECUTE(reference, program.len());
-            if result != SYSCALL_SUCCESS {
-                println!("Error executing program: {}", result);
+            if program.ends_with('&') {
+                len -= 1;
+            }
+
+            let pid = common::syscalls::userspace::EXECUTE(reference, len);
+            if pid < 0 {
+                println!("Error executing program: {}", pid);
+            } else if !program.ends_with('&') {
+                common::syscalls::userspace::WAIT(pid as u64);
             }
         }
     }

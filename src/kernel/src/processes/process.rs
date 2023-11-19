@@ -16,8 +16,16 @@ use crate::{
     processes::loader::{self, LoadedElf},
 };
 
-fn get_next_pid() -> u64 {
-    static PID_COUNTER: Mutex<u64> = Mutex::new(0);
+pub type PID = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessState {
+    Runnable,
+    WaitingFor(PID),
+}
+
+fn get_next_pid() -> PID {
+    static PID_COUNTER: Mutex<PID> = Mutex::new(0);
     let mut pid_counter = PID_COUNTER.lock();
     let next_pid = *pid_counter;
     *pid_counter += 1;
@@ -25,11 +33,12 @@ fn get_next_pid() -> u64 {
 }
 
 pub struct Process {
-    pid: u64,
+    pid: PID,
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
     allocated_pages: Vec<AllocatedPages<Ephemeral>>,
+    state: ProcessState,
 }
 
 impl Debug for Process {
@@ -65,8 +74,24 @@ impl Process {
         self.program_counter = program_counter;
     }
 
+    pub fn get_state(&self) -> ProcessState {
+        self.state
+    }
+
+    pub fn set_state(&mut self, state: ProcessState) {
+        self.state = state;
+    }
+
     pub fn get_page_table(&self) -> Rc<RootPageTableHolder> {
         self.page_table.clone()
+    }
+
+    pub fn get_pid(&self) -> PID {
+        self.pid
+    }
+
+    pub fn set_syscall_return_code(&mut self, return_code: usize) {
+        self.register_state[Register::a0] = return_code;
     }
 
     pub fn from_elf(elf_file: &ElfFile) -> Self {
@@ -87,6 +112,7 @@ impl Process {
             page_table: Rc::new(page_tables),
             program_counter: entry_address,
             allocated_pages,
+            state: ProcessState::Runnable,
         }
     }
 }
