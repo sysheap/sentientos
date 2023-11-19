@@ -55,7 +55,11 @@ pub fn schedule() {
 }
 
 pub fn kill_current_process() {
-    CURRENT_PROCESS.lock().take();
+    debug!("Killing current process");
+    let current_process = CURRENT_PROCESS.lock().take();
+    if let Some(current_process) = current_process {
+        debug!("{:?}", current_process);
+    }
     schedule();
 }
 
