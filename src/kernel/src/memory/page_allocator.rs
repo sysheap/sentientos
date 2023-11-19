@@ -148,7 +148,7 @@ mod tests {
     use common::mutex::Mutex;
 
     use crate::memory::{
-        allocated_pages::{AllocatedPages, Ephemeral, WhichAllocator},
+        allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
         page_allocator::PageStatus,
     };
 
@@ -264,5 +264,17 @@ mod tests {
                 PageStatus::Free
             ]
         );
+    }
+
+    #[test_case]
+    fn test_ethernal_pages() {
+        init_allocator();
+        let ethernal = AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).unwrap();
+        drop(ethernal);
+        let allocator = PAGE_ALLOC.lock();
+        assert_eq!(allocator.metadata[0], PageStatus::Last);
+        assert!(allocator.metadata[1..]
+            .iter()
+            .all(|s| *s == PageStatus::Free));
     }
 }
