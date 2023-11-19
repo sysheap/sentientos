@@ -1,4 +1,5 @@
 use core::{
+    fmt::Debug,
     marker::PhantomData,
     ops::{Deref, DerefMut},
     ptr::NonNull,
@@ -7,7 +8,7 @@ use core::{
 
 use common::mutex::Mutex;
 
-use crate::{debug, info};
+use crate::debug;
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -29,7 +30,7 @@ impl DerefMut for Page {
 }
 
 #[repr(u8)]
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum PageStatus {
     Free,
     Used,
@@ -39,6 +40,15 @@ enum PageStatus {
 struct PageAllocator<'a> {
     metadata: &'a mut [PageStatus],
     pages: &'a mut [Page],
+}
+
+impl<'a> Debug for PageAllocator<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PageAllocator")
+            .field("metadata", &self.metadata.as_ptr())
+            .field("pages", &self.pages.as_ptr())
+            .finish()
+    }
 }
 
 impl<'a> PageAllocator<'a> {
@@ -56,8 +66,8 @@ impl<'a> PageAllocator<'a> {
         let (metadata, heap) = memory.split_at_mut(number_of_heap_pages);
 
         let (begin, metadata, end) = unsafe { metadata.align_to_mut::<PageStatus>() };
-        assert!(begin.len() == 0);
-        assert!(end.len() == 0);
+        assert!(begin.is_empty());
+        assert!(end.is_empty());
 
         let (_begin, heap, _end) = unsafe { heap.align_to_mut::<Page>() };
         assert!(metadata.len() <= heap.len());
@@ -67,15 +77,15 @@ impl<'a> PageAllocator<'a> {
         let size_heap = core::mem::size_of_val(heap);
         assert!(size_metadata + size_heap <= heap_size);
 
+        metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
+
         self.metadata = metadata;
         self.pages = heap;
 
-        self.metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
-
-        info!("Page allocator initalized");
-        info!("Metadata start:\t\t{:p}", self.metadata);
-        info!("Heap start:\t\t{:p}", self.pages);
-        info!("Number of pages:\t{}\n", self.total_heap_pages());
+        debug!("Page allocator initalized");
+        debug!("Metadata start:\t\t{:p}", self.metadata);
+        debug!("Heap start:\t\t{:p}", self.pages);
+        debug!("Number of pages:\t{}\n", self.total_heap_pages());
     }
 
     fn total_heap_pages(&self) -> usize {
@@ -87,15 +97,16 @@ impl<'a> PageAllocator<'a> {
         NonNull::new(page as *mut _).unwrap()
     }
 
-    fn page_pointer_to_page_idx<T: PageDropper>(&self, page: &AllocatedPages<T>) -> usize {
+    fn page_pointer_to_page_idx(&self, page: NonNull<Page>) -> usize {
         let heap_start = self.pages.as_ptr();
         let heap_end = self
             .pages
             .last()
             .map(|x| x.as_ptr() as *const _)
             .unwrap_or(heap_start);
-        let page_ptr = page.addr().as_ptr() as *const _;
-        assert!(page_ptr >= heap_start && page_ptr < heap_end);
+        let page_ptr = page.as_ptr() as *const _;
+        assert!(page_ptr >= heap_start);
+        assert!(page_ptr < heap_end);
         let offset = page_ptr as usize - heap_start as usize;
         assert!(offset % PAGE_SIZE == 0);
         offset / PAGE_SIZE
@@ -126,7 +137,7 @@ impl<'a> PageAllocator<'a> {
         }
     }
 
-    fn dealloc(&mut self, page: &mut AllocatedPages<Ephemeral>) {
+    fn dealloc(&mut self, page: NonNull<Page>) {
         let mut idx = self.page_pointer_to_page_idx(page);
 
         while self.metadata[idx] != PageStatus::Last {
@@ -134,9 +145,6 @@ impl<'a> PageAllocator<'a> {
             idx += 1;
         }
         self.metadata[idx] = PageStatus::Free;
-
-        page.number_of_pages = 0;
-        page.ptr = NonNull::dangling();
     }
 
     fn dump(&self) {
@@ -173,7 +181,9 @@ pub trait PageDropper: Sized {
 impl PageDropper for Ephemeral {
     fn drop(page: &mut AllocatedPages<Self>) {
         debug!("Drop allocated page at {:p}", page.ptr.as_ptr());
-        PAGE_ALLOCATOR.lock().dealloc(page);
+        PAGE_ALLOCATOR.lock().dealloc(page.ptr);
+        page.number_of_pages = 0;
+        page.ptr = NonNull::dangling();
     }
 }
 impl PageDropper for Ethernal {
@@ -245,4 +255,108 @@ pub fn init(heap_start: *mut u8, heap_size: usize) {
 #[allow(dead_code)]
 pub fn dump() {
     PAGE_ALLOCATOR.lock().dump();
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::memory::page_allocator::PageStatus;
+
+    use super::{PageAllocator, PAGE_SIZE};
+
+    static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 5000] = [0; PAGE_SIZE * 5000];
+
+    fn init_allocator() -> PageAllocator<'static> {
+        let mut allocator = PageAllocator::new();
+        unsafe {
+            allocator.init(&mut PAGE_ALLOC_MEMORY);
+        }
+        allocator
+    }
+
+    #[test_case]
+    fn clean_start() {
+        let allocator = init_allocator();
+        assert!(allocator.metadata.iter().all(|s| *s == PageStatus::Free));
+    }
+
+    #[test_case]
+    fn exhaustion_allocation() {
+        let mut allocator = init_allocator();
+        let number_of_pages = allocator.total_heap_pages();
+        let _pages = allocator.alloc(number_of_pages).unwrap();
+        let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
+        assert!(all_metadata_except_last
+            .iter()
+            .all(|s| *s == PageStatus::Used));
+        assert_eq!(*last, PageStatus::Last);
+    }
+
+    #[test_case]
+    fn metadata_integrity() {
+        let mut allocator = init_allocator();
+        let page1 = allocator.alloc(1).unwrap();
+        assert_eq!(allocator.metadata[0], PageStatus::Last);
+        assert!(allocator.metadata[1..]
+            .iter()
+            .all(|s| *s == PageStatus::Free));
+        let page2 = allocator.alloc(2).unwrap();
+        assert_eq!(
+            allocator.metadata[..3],
+            [PageStatus::Last, PageStatus::Used, PageStatus::Last]
+        );
+        assert!(allocator.metadata[3..]
+            .iter()
+            .all(|s| *s == PageStatus::Free));
+        let page3 = allocator.alloc(3).unwrap();
+        assert_eq!(
+            allocator.metadata[..6],
+            [
+                PageStatus::Last,
+                PageStatus::Used,
+                PageStatus::Last,
+                PageStatus::Used,
+                PageStatus::Used,
+                PageStatus::Last
+            ]
+        );
+        assert!(allocator.metadata[6..]
+            .iter()
+            .all(|s| *s == PageStatus::Free),);
+        allocator.dealloc(page2);
+        assert_eq!(
+            allocator.metadata[..6],
+            [
+                PageStatus::Last,
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Used,
+                PageStatus::Used,
+                PageStatus::Last
+            ]
+        );
+        allocator.dealloc(page1);
+        assert_eq!(
+            allocator.metadata[..6],
+            [
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Used,
+                PageStatus::Used,
+                PageStatus::Last
+            ]
+        );
+        allocator.dealloc(page3);
+        assert_eq!(
+            allocator.metadata[..6],
+            [
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Free,
+                PageStatus::Free
+            ]
+        );
+    }
 }
