@@ -10,7 +10,7 @@ use crate::{
     debug,
     klibc::elf::ElfFile,
     memory::{
-        page_allocator::{AllocatedPages, Ephemeral},
+        allocated_pages::{AllocatedPages, Ephemeral},
         page_tables::RootPageTableHolder,
     },
     processes::loader::{self, LoadedElf},

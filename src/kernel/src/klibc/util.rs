@@ -1,6 +1,6 @@
 use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
-use crate::memory::page_allocator::PAGE_SIZE;
+use crate::memory::PAGE_SIZE;
 
 pub fn align_up(value: usize, alignment: usize) -> usize {
     let remainder = value % alignment;

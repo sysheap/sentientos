@@ -6,8 +6,9 @@ use crate::{
         util::{align_up_and_get_number_of_pages, copy_slice},
     },
     memory::{
-        page_allocator::{AllocatedPages, Ephemeral, PAGE_SIZE},
+        allocated_pages::{AllocatedPages, Ephemeral},
         page_tables::RootPageTableHolder,
+        PAGE_SIZE,
     },
 };
 

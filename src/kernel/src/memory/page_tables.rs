@@ -15,7 +15,10 @@ use crate::{
     processes::timer,
 };
 
-use super::page_allocator::{AllocatedPages, Ephemeral, Page};
+use super::{
+    allocated_pages::{AllocatedPages, Ephemeral},
+    page_allocator::Page,
+};
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 

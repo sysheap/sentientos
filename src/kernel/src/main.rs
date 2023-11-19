@@ -14,10 +14,7 @@ use alloc::rc::Rc;
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
-    memory::{
-        page_allocator,
-        page_tables::{self, RootPageTableHolder},
-    },
+    memory::page_tables::{self, RootPageTableHolder},
     processes::{scheduler, timer},
 };
 
@@ -60,7 +57,7 @@ extern "C" fn kernel_init() {
 
     unsafe {
         info!("Initializing page allocator");
-        page_allocator::init(HEAP_START as *mut u8, HEAP_SIZE);
+        memory::init_page_allocator(HEAP_START as *mut u8, HEAP_SIZE);
     }
 
     #[cfg(test)]

@@ -1,14 +1,9 @@
+use crate::debug;
 use core::{
     fmt::Debug,
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     ptr::NonNull,
-    slice::{self, from_raw_parts_mut},
 };
-
-use common::mutex::Mutex;
-
-use crate::debug;
 
 pub const PAGE_SIZE: usize = 4096;
 
@@ -37,7 +32,7 @@ enum PageStatus {
     Last,
 }
 
-struct PageAllocator<'a> {
+pub(super) struct PageAllocator<'a> {
     metadata: &'a mut [PageStatus],
     pages: &'a mut [Page],
 }
@@ -52,14 +47,14 @@ impl<'a> Debug for PageAllocator<'a> {
 }
 
 impl<'a> PageAllocator<'a> {
-    const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             metadata: &mut [],
             pages: &mut [],
         }
     }
 
-    fn init(&mut self, memory: &'a mut [u8]) {
+    pub(super) fn init(&mut self, memory: &'a mut [u8]) {
         let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
@@ -112,7 +107,7 @@ impl<'a> PageAllocator<'a> {
         offset / PAGE_SIZE
     }
 
-    fn alloc(&mut self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
+    pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
         (0..self.total_heap_pages())
             .find(|&idx| self.is_range_free(idx, number_of_pages_requested))
             .map(|start_idx| {
@@ -137,7 +132,7 @@ impl<'a> PageAllocator<'a> {
         }
     }
 
-    fn dealloc(&mut self, page: NonNull<Page>) {
+    pub fn dealloc(&mut self, page: NonNull<Page>) {
         let mut idx = self.page_pointer_to_page_idx(page);
 
         while self.metadata[idx] != PageStatus::Last {
@@ -146,89 +141,6 @@ impl<'a> PageAllocator<'a> {
         }
         self.metadata[idx] = PageStatus::Free;
     }
-}
-
-#[derive(Debug, Default)]
-pub struct Ephemeral;
-#[derive(Debug, Default)]
-pub struct Ethernal;
-
-pub trait PageDropper: Sized {
-    fn drop(page: &mut AllocatedPages<Self>);
-}
-
-impl PageDropper for Ephemeral {
-    fn drop(page: &mut AllocatedPages<Self>) {
-        debug!("Drop allocated page at {:p}", page.ptr.as_ptr());
-        PAGE_ALLOCATOR.lock().dealloc(page.ptr);
-        page.number_of_pages = 0;
-        page.ptr = NonNull::dangling();
-    }
-}
-impl PageDropper for Ethernal {
-    fn drop(_page: &mut AllocatedPages<Self>) {}
-}
-
-#[derive(Debug)]
-pub struct AllocatedPages<Dropper: PageDropper> {
-    ptr: NonNull<Page>,
-    number_of_pages: usize,
-    phantom: PhantomData<Dropper>,
-}
-
-impl<Dropper: PageDropper> AllocatedPages<Dropper> {
-    pub fn zalloc(number_of_pages: usize) -> Option<Self> {
-        PAGE_ALLOCATOR.lock().alloc(number_of_pages).map(|ptr| {
-            let mut allocated_page = Self::new(ptr, number_of_pages);
-            allocated_page.zero();
-            allocated_page
-        })
-    }
-
-    fn new(ptr: NonNull<Page>, number_of_pages: usize) -> Self {
-        Self {
-            ptr,
-            number_of_pages,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn addr(&self) -> NonNull<Page> {
-        self.ptr
-    }
-
-    fn u8(&self) -> *mut u8 {
-        self.ptr.cast().as_ptr()
-    }
-
-    pub fn slice(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.u8(), self.number_of_pages * PAGE_SIZE) }
-    }
-
-    pub fn addr_as_usize(&self) -> usize {
-        self.ptr.as_ptr() as usize
-    }
-
-    pub fn zero(&mut self) {
-        for offset in 0..self.number_of_pages {
-            unsafe {
-                self.ptr.as_ptr().add(offset).as_mut().unwrap().fill(0);
-            }
-        }
-    }
-}
-
-impl<Dropper: PageDropper> Drop for AllocatedPages<Dropper> {
-    fn drop(&mut self) {
-        Dropper::drop(self);
-    }
-}
-
-static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
-
-pub fn init(heap_start: *mut u8, heap_size: usize) {
-    let memory: &'static mut [u8] = unsafe { from_raw_parts_mut(heap_start, heap_size) };
-    PAGE_ALLOCATOR.lock().init(memory);
 }
 
 #[cfg(test)]

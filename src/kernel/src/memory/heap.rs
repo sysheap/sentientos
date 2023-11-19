@@ -5,7 +5,7 @@ use common::mutex::{Mutex, MutexGuard};
 use crate::{
     debug,
     klibc::util::align_up,
-    memory::page_allocator::{AllocatedPages, Ethernal},
+    memory::allocated_pages::{AllocatedPages, Ethernal},
 };
 
 use super::page_allocator;
