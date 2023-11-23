@@ -8,10 +8,8 @@ extern crate userspace;
 #[no_mangle]
 fn main() {
     println!("Hello from Loop");
-    let mut counter: usize = 0;
-    loop {
-        println!("Looping... {}", counter);
-        counter += 1;
+    for i in 0..10 {
+        println!("Looping... {}", i);
         wait(1000000000);
     }
 }
