@@ -24,7 +24,7 @@ fn main() {
                 if result != SYSCALL_WAIT {
                     break;
                 }
-                wait();
+                wait(10000);
             }
             let next_char = result as u8;
             input_buffer[buffer_index] = next_char;
