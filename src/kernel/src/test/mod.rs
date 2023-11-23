@@ -20,12 +20,11 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn test_runner(tests: &[&dyn Testable]) -> ! {
     println!("Running {} tests", tests.len());
     for test in tests {
         test.run();
     }
     qemu_exit::exit_success();
-    #[allow(clippy::empty_loop)]
-    loop {}
 }

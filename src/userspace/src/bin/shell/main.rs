@@ -1,10 +1,7 @@
 #![no_std]
 #![no_main]
 
-use common::{
-    mutex::Mutex,
-    syscalls::{SYSCALL_SUCCESS, SYSCALL_WAIT},
-};
+use common::{mutex::Mutex, syscalls::SYSCALL_WAIT};
 use userspace::{print, println, util::wait};
 
 extern crate userspace;

@@ -3,7 +3,7 @@ use core::cell::RefCell;
 use alloc::{collections::VecDeque, rc::Rc};
 use common::mutex::Mutex;
 
-use super::process::{Process, ProcessState, PID};
+use super::process::{Pid, Process, ProcessState};
 
 static PROCESSES: Mutex<VecDeque<Rc<RefCell<Process>>>> = Mutex::new(VecDeque::new());
 
@@ -34,14 +34,14 @@ pub fn enqueue(process: Rc<RefCell<Process>>) {
     PROCESSES.lock().push_back(process);
 }
 
-pub fn does_pid_exits(pid: PID) -> bool {
+pub fn does_pid_exits(pid: Pid) -> bool {
     PROCESSES
         .lock()
         .iter()
         .any(|process| process.borrow().get_pid() == pid)
 }
 
-pub fn notify_died(pid: PID) {
+pub fn notify_died(pid: Pid) {
     let processes = PROCESSES.lock();
     for process in processes.iter() {
         if process.borrow().get_state() == ProcessState::WaitingFor(pid) {

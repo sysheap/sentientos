@@ -37,8 +37,8 @@ extern "C" fn supervisor_mode_trap(
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
     match cause.get_exception_code() {
         ENVIRONMENT_CALL_FROM_U_MODE => {
-            trap_frame[Register::a0] = handle_syscall(trap_frame) as usize;
             cpu::write_sepc(sepc + 4); // Skip the ecall instruction
+            trap_frame[Register::a0] = handle_syscall(trap_frame) as usize;
         }
         _ => {
             panic!(
@@ -66,7 +66,7 @@ fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_fr
 
 fn handle_supervisor_timer_interrupt() {
     debug!("Supervisor timer interrupt occurred!");
-    timer::set_timer(1000);
+    timer::set_timer(10);
     scheduler::schedule();
 }
 

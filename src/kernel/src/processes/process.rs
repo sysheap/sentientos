@@ -16,16 +16,16 @@ use crate::{
     processes::loader::{self, LoadedElf},
 };
 
-pub type PID = u64;
+pub type Pid = u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
     Runnable,
-    WaitingFor(PID),
+    WaitingFor(Pid),
 }
 
-fn get_next_pid() -> PID {
-    static PID_COUNTER: Mutex<PID> = Mutex::new(0);
+fn get_next_pid() -> Pid {
+    static PID_COUNTER: Mutex<Pid> = Mutex::new(0);
     let mut pid_counter = PID_COUNTER.lock();
     let next_pid = *pid_counter;
     *pid_counter += 1;
@@ -33,7 +33,7 @@ fn get_next_pid() -> PID {
 }
 
 pub struct Process {
-    pid: PID,
+    pid: Pid,
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
@@ -50,13 +50,15 @@ impl Debug for Process {
             Registers: {:?},
             Page Table: {:?},
             Program Counter: {:#x},
-            Number of allocated pages: {}
+            Number of allocated pages: {},
+            State: {:?}
         ]",
             self.pid,
             self.register_state,
             self.page_table,
             self.program_counter,
-            self.allocated_pages.len()
+            self.allocated_pages.len(),
+            self.state
         )
     }
 }
@@ -86,7 +88,7 @@ impl Process {
         self.page_table.clone()
     }
 
-    pub fn get_pid(&self) -> PID {
+    pub fn get_pid(&self) -> Pid {
         self.pid
     }
 
