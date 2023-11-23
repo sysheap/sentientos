@@ -29,7 +29,7 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
     let mut allocated_pages = Vec::new();
 
     // Map 4KB stack
-    let stack = AllocatedPages::zalloc(PAGE_SIZE).expect("Could not allocate memory for stack");
+    let stack = AllocatedPages::zalloc(1).expect("Could not allocate memory for stack");
     let stack_addr = stack.addr_as_usize();
     allocated_pages.push(stack);
 
