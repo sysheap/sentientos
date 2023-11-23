@@ -108,7 +108,7 @@ impl<'a> PageAllocator<'a> {
     }
 
     pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
-        (0..self.total_heap_pages())
+        (0..self.total_heap_pages() - number_of_pages_requested)
             .find(|&idx| self.is_range_free(idx, number_of_pages_requested))
             .map(|start_idx| {
                 self.mark_range_as_used(start_idx, number_of_pages_requested);
