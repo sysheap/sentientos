@@ -108,7 +108,11 @@ impl<'a> PageAllocator<'a> {
     }
 
     pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
-        (0..self.total_heap_pages() - number_of_pages_requested)
+        let total_pages = self.total_heap_pages();
+        if number_of_pages_requested > total_pages {
+            return None;
+        }
+        (0..=(self.total_heap_pages() - number_of_pages_requested))
             .find(|&idx| self.is_range_free(idx, number_of_pages_requested))
             .map(|start_idx| {
                 self.mark_range_as_used(start_idx, number_of_pages_requested);
@@ -189,12 +193,31 @@ mod tests {
         init_allocator();
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
         let _pages = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(number_of_pages).unwrap();
+        assert!(AllocatedPages::<Ephemeral, TestAllocator>::zalloc(1).is_none());
         let allocator = PAGE_ALLOC.lock();
         let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
         assert!(all_metadata_except_last
             .iter()
             .all(|s| *s == PageStatus::Used));
         assert_eq!(*last, PageStatus::Last);
+    }
+
+    #[test_case]
+    fn beyond_capacity() {
+        init_allocator();
+        let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
+        let pages = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(number_of_pages + 1);
+        assert!(pages.is_none());
+    }
+
+    #[test_case]
+    fn all_single_allocations() {
+        init_allocator();
+        let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
+        for _ in 0..number_of_pages {
+            assert!(AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).is_some());
+        }
+        assert!(AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).is_none());
     }
 
     #[test_case]
