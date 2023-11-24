@@ -62,9 +62,7 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
 
     let compiled_userspace_path = Path::new("../kernel/compiled_userspace");
 
-    if compiled_userspace_path.exists() {
-        let _ = std::fs::remove_dir_all(compiled_userspace_path);
-    }
+    let _ = std::fs::remove_dir_all(compiled_userspace_path);
 
     let mut command = Command::new("cargo");
     command.current_dir("../userspace");
