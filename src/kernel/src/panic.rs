@@ -1,9 +1,6 @@
 use core::panic::PanicInfo;
 
-use crate::println;
-
-#[cfg(test)]
-use crate::test;
+use crate::{println, test::qemu_exit};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -16,8 +13,5 @@ fn panic(info: &PanicInfo) -> ! {
         println!("Location: {}", location);
     }
 
-    #[cfg(test)]
-    test::qemu_exit::exit_failure(1);
-
-    loop {}
+    qemu_exit::exit_failure(1);
 }
