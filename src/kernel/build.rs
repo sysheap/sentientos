@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -59,7 +60,11 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
     let profile = std::env::var("PROFILE")?;
 
-    let _ = std::fs::remove_dir_all("../kernel/compiled_userspace");
+    let compiled_userspace_path = Path::new("../kernel/compiled_userspace");
+
+    if compiled_userspace_path.exists() {
+        let _ = std::fs::remove_dir_all(compiled_userspace_path);
+    }
 
     let mut command = Command::new("cargo");
     command.current_dir("../userspace");
@@ -70,7 +75,7 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
         "--target-dir",
         "../../target-userspace",
         "--out-dir",
-        "../kernel/compiled_userspace",
+        compiled_userspace_path.to_str().unwrap(),
         "-Z",
         "unstable-options",
     ]);
