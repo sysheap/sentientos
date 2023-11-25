@@ -1,6 +1,4 @@
-use crate::debug;
-
-use super::macros::static_assert_size;
+use crate::{assert::static_assert_size, debug};
 
 const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 

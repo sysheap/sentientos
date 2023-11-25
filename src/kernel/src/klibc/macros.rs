@@ -1,11 +1,3 @@
-macro_rules! static_assert_size {
-    ($type: ty, $size: expr) => {
-        const _: [(); $size] = [(); core::mem::size_of::<$type>()];
-    };
-}
-
-pub(crate) use static_assert_size;
-
 // Copied from https://users.rust-lang.org/t/can-i-conveniently-compile-bytes-into-a-rust-program-with-a-specific-alignment/24049/2
 #[repr(C)] // guarantee 'bytes' comes after '_align'
 pub struct AlignedAs<Align, Bytes: ?Sized> {
