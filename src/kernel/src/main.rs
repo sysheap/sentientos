@@ -3,7 +3,6 @@
 #![feature(panic_info_message)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]
-#![feature(core_intrinsics)]
 #![feature(custom_test_frameworks)]
 #![feature(const_mut_refs)]
 #![test_runner(test::test_runner)]
