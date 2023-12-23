@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use crate::{
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{align_up_and_get_number_of_pages, copy_slice},
+        util::{copy_slice, minimum_amount_of_pages},
     },
     memory::{
         allocated_pages::{AllocatedPages, Ephemeral},
@@ -50,7 +50,7 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
     for program_header in loadable_program_header {
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
-        let size_in_pages = align_up_and_get_number_of_pages(real_size as usize);
+        let size_in_pages = minimum_amount_of_pages(real_size as usize);
         let mut pages = AllocatedPages::zalloc(size_in_pages)
             .expect("Could not allocate memory for program header.");
         let pages_addr = pages.addr_as_usize();

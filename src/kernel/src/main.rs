@@ -5,6 +5,8 @@
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(const_mut_refs)]
+#![feature(offset_of)]
+#![feature(option_take_if)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 

@@ -2,7 +2,7 @@ use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
 use crate::memory::PAGE_SIZE;
 
-pub fn align_up(value: usize, alignment: usize) -> usize {
+pub const fn align_up(value: usize, alignment: usize) -> usize {
     let remainder = value % alignment;
     if remainder == 0 {
         value
@@ -11,7 +11,7 @@ pub fn align_up(value: usize, alignment: usize) -> usize {
     }
 }
 
-pub fn align_up_and_get_number_of_pages(value: usize) -> usize {
+pub const fn minimum_amount_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE
 }
 
@@ -116,9 +116,9 @@ mod tests {
 
     #[test_case]
     fn align_up_number_of_pages() {
-        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE - 15), 1);
-        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE + 15), 2);
-        assert_eq!(super::align_up_and_get_number_of_pages(PAGE_SIZE * 2), 2);
+        assert_eq!(super::minimum_amount_of_pages(PAGE_SIZE - 15), 1);
+        assert_eq!(super::minimum_amount_of_pages(PAGE_SIZE + 15), 2);
+        assert_eq!(super::minimum_amount_of_pages(PAGE_SIZE * 2), 2);
     }
 
     #[test_case]
