@@ -9,6 +9,7 @@ clippy:
     cargo clippy -- -D warnings
 
 clean:
+    rm src/kernel/compiled_userspace/*
     cargo clean
 
 debugCommand := "cargo run -- -s -S"
