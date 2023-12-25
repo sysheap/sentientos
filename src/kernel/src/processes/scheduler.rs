@@ -8,7 +8,7 @@ use crate::klibc::elf::ElfFile;
 use crate::memory::page_tables;
 use crate::processes::process_list::{self, notify_died};
 use crate::test::qemu_exit;
-use crate::{cpu, debug};
+use crate::{cpu, debug, info};
 
 use super::process::{Pid, Process, ProcessState};
 use super::process_list::add_process;
@@ -88,7 +88,7 @@ fn prepare_next_process() {
     let next_process_ref = if let Some(next_process) = process_list::next_runnable() {
         next_process
     } else {
-        debug!("No more processes to run, shutting down");
+        info!("No more processes to schedule, shutting down system");
         qemu_exit::exit_success();
     };
 

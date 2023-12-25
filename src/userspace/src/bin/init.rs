@@ -13,5 +13,5 @@ fn main() {
     let shell_pid =
         common::syscalls::userspace::EXECUTE(&shell_name.as_bytes()[0], shell_name.len());
     common::syscalls::userspace::WAIT(shell_pid as u64);
-    println!("No more processes to run, shutting down");
+    println!("Initial shell has exited...");
 }
