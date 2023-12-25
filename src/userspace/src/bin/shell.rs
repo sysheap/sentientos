@@ -7,6 +7,7 @@ use userspace::{print, println, util::wait};
 extern crate userspace;
 
 static INPUT_BUFFER: Mutex<[u8; 1024]> = Mutex::new([0; 1024]);
+const DELETE: u8 = 127;
 
 #[no_mangle]
 fn main() {
@@ -27,17 +28,27 @@ fn main() {
                 wait(10000);
             }
             let next_char = result as u8;
-            input_buffer[buffer_index] = next_char;
-            buffer_index += 1;
-            if next_char == b'\r' {
-                // Carriage return
-                println!();
-                break;
+            match next_char {
+                b'\r' => {
+                    // Carriage return
+                    println!();
+                    break;
+                }
+                DELETE => {
+                    if buffer_index > 0 {
+                        buffer_index -= 1;
+                        print!("{}{}{}", 8 as char, ' ' as char, 8 as char);
+                    }
+                }
+                _ => {
+                    input_buffer[buffer_index] = next_char;
+                    buffer_index += 1;
+                    print!("{}", next_char as char);
+                }
             }
-            print!("{}", next_char as char);
         }
         // Parse input and execute
-        let command = core::str::from_utf8(&input_buffer[0..buffer_index - 1]).unwrap();
+        let command = core::str::from_utf8(&input_buffer[0..buffer_index]).unwrap();
         parse_command_and_execute(command);
     }
 }
