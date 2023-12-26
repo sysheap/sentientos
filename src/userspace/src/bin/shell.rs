@@ -37,7 +37,7 @@ fn main() {
                 DELETE => {
                     if buffer_index > 0 {
                         buffer_index -= 1;
-                        print!("{}{}{}", 8 as char, ' ' as char, 8 as char);
+                        print!("{}{}{}", 8 as char, ' ', 8 as char);
                     }
                 }
                 _ => {
