@@ -34,14 +34,14 @@ enum PageStatus {
 
 pub(super) struct PageAllocator<'a> {
     metadata: &'a mut [PageStatus],
-    pages: &'a mut [Page],
+    pages: *mut Page,
 }
 
 impl<'a> Debug for PageAllocator<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PageAllocator")
             .field("metadata", &self.metadata.as_ptr())
-            .field("pages", &self.pages.as_ptr())
+            .field("pages", &self.pages)
             .finish()
     }
 }
@@ -50,7 +50,7 @@ impl<'a> PageAllocator<'a> {
     pub(super) const fn new() -> Self {
         Self {
             metadata: &mut [],
-            pages: &mut [],
+            pages: core::ptr::null_mut(),
         }
     }
 
@@ -75,7 +75,7 @@ impl<'a> PageAllocator<'a> {
         metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
 
         self.metadata = metadata;
-        self.pages = heap;
+        self.pages = heap.as_mut_ptr();
 
         debug!("Page allocator initalized");
         debug!("Metadata start:\t\t{:p}", self.metadata);
@@ -88,17 +88,12 @@ impl<'a> PageAllocator<'a> {
     }
 
     fn page_idx_to_pointer(&mut self, page_index: usize) -> NonNull<Page> {
-        let page = &mut self.pages[page_index];
-        NonNull::new(page as *mut _).unwrap()
+        unsafe { NonNull::new(self.pages.add(page_index)).unwrap() }
     }
 
     fn page_pointer_to_page_idx(&self, page: NonNull<Page>) -> usize {
-        let heap_start = self.pages.as_ptr();
-        let heap_end = self
-            .pages
-            .last()
-            .map(|x| x.as_ptr() as *const _)
-            .unwrap_or(heap_start);
+        let heap_start = self.pages;
+        let heap_end = unsafe { self.pages.add(self.metadata.len()) };
         let page_ptr = page.as_ptr() as *const _;
         assert!(page_ptr >= heap_start);
         assert!(page_ptr < heap_end);
@@ -158,7 +153,7 @@ mod tests {
 
     use super::{PageAllocator, PAGE_SIZE};
 
-    static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 5000] = [0; PAGE_SIZE * 5000];
+    static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
     static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
     struct TestAllocator;
