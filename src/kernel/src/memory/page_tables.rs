@@ -434,7 +434,8 @@ pub fn translate_userspace_address_to_physical_address<T>(address: *const T) -> 
 mod tests {
     use super::RootPageTableHolder;
 
-    #[test_case]
+    // extern static not supported by miri
+    #[cfg_attr(not(miri), test_case)]
     fn check_drop_of_page_table_holder() {
         let page_table = RootPageTableHolder::new_with_kernel_mapping();
         drop(page_table);
