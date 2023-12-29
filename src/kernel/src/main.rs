@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(miri), no_std)]
+#![cfg_attr(not(miri), no_main)]
 #![feature(panic_info_message)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]

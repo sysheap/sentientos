@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::io::Write;
 use std::path::Path;
@@ -8,10 +9,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=../userspace/");
     println!("cargo:rustc-link-arg-bin=kernel=-Tsrc/kernel/qemu.ld");
 
+    if is_miri_execution() {
+        return Ok(());
+    }
+
     build_userspace_programs()?;
     generate_userspace_programs_include()?;
 
     Ok(())
+}
+
+fn is_miri_execution() -> bool {
+    env::var_os("CARGO_CFG_MIRI").is_some()
 }
 
 fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {

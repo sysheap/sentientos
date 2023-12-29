@@ -1,3 +1,4 @@
+#![cfg_attr(miri, allow(unused_imports))]
 use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
@@ -244,6 +245,7 @@ unsafe impl<A: WhichAllocator> GlobalAlloc for MutexHeap<A> {
     }
 }
 
+#[cfg(not(miri))]
 #[global_allocator]
 static HEAP: MutexHeap<StaticAllocator> = MutexHeap::new();
 

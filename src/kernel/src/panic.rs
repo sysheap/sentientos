@@ -1,7 +1,8 @@
+#![cfg_attr(miri, allow(unused_imports))]
+use crate::{println, test::qemu_exit};
 use core::panic::PanicInfo;
 
-use crate::{println, test::qemu_exit};
-
+#[cfg(not(miri))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("");
