@@ -262,7 +262,7 @@ mod test {
 
     use super::{FreeBlock, MutexHeap, PAGE_SIZE};
 
-    const HEAP_PAGES: usize = 256;
+    const HEAP_PAGES: usize = 8;
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * HEAP_PAGES] = [0; PAGE_SIZE * HEAP_PAGES];
     static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
