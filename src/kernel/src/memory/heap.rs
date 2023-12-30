@@ -2,7 +2,7 @@
 use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
-    mem::offset_of,
+    mem::size_of,
     ptr::null_mut,
 };
 
@@ -65,13 +65,13 @@ impl AlignedSizeWithMetadata {
 struct FreeBlock {
     next: Link,
     size: AlignedSizeWithMetadata,
-    data: u64,
+    // data: u64, This field is virtual because otherwise the offset calculation would be wrong
 }
 
-static_assert_size!(FreeBlock, 24);
+static_assert_size!(FreeBlock, 16);
 
 impl FreeBlock {
-    const METADATA_SIZE: usize = offset_of!(FreeBlock, data);
+    const METADATA_SIZE: usize = size_of::<Self>();
     const DATA_ALIGNMENT: usize = 8;
     const MINIMUM_SIZE: usize = Self::METADATA_SIZE + Self::DATA_ALIGNMENT;
 
@@ -79,7 +79,6 @@ impl FreeBlock {
         Self {
             next: None,
             size: AlignedSizeWithMetadata::new(),
-            data: 0,
         }
     }
 
@@ -102,15 +101,14 @@ impl FreeBlock {
         block
     }
 
-    fn from_data_ptr(ptr: *mut u8) -> &'static mut FreeBlock {
-        unsafe {
-            let block_ptr = ptr.byte_sub(Self::METADATA_SIZE) as *mut FreeBlock;
-            &mut *block_ptr
-        }
+    unsafe fn from_data_ptr(ptr: *mut u8) -> &'static mut FreeBlock {
+        let free_block_ptr = ptr as *mut FreeBlock;
+        &mut *(free_block_ptr.sub(1))
     }
 
-    fn get_data_ptr(&mut self) -> *mut u64 {
-        &mut self.data
+    unsafe fn get_data_ptr(&mut self) -> *mut u8 {
+        let self_ptr = self as *mut FreeBlock;
+        self_ptr.add(1) as *mut u8
     }
 
     fn split(&mut self, requested_size: AlignedSizeWithMetadata) -> &'static mut FreeBlock {
@@ -163,11 +161,11 @@ impl<A: WhichAllocator> Heap<A> {
         // Make smaller if needed
         self.split_if_necessary(&mut block, requested_size);
 
-        block.get_data_ptr() as *mut u8
+        unsafe { block.get_data_ptr() }
     }
 
     fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
-        let free_block = FreeBlock::from_data_ptr(ptr);
+        let free_block = unsafe { FreeBlock::from_data_ptr(ptr) };
         assert!(free_block.next.is_none(), "Heap metadata corruption");
         assert!(
             free_block.size.data_size() >= layout.size(),
@@ -295,7 +293,7 @@ mod test {
         if ptr.is_null() {
             return ptr;
         }
-        let free_block = FreeBlock::from_data_ptr(ptr as *mut u8);
+        let free_block = unsafe { FreeBlock::from_data_ptr(ptr as *mut u8) };
         assert!(free_block.next.is_none());
         assert!(free_block.size.data_size() >= core::mem::size_of::<T>());
         assert!(free_block.size.data_size() % FreeBlock::DATA_ALIGNMENT == 0);
