@@ -178,6 +178,7 @@ pub enum ProgramHeaderType {
     PT_HIOS = 0x6FFFFFFF,
     PT_LOPROC = 0x70000000,
     PT_HIPROC = 0x7FFFFFFF,
+    GNU_STACK = 0x6474e551,
 }
 
 #[repr(u32)]
