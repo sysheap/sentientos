@@ -2,7 +2,7 @@
 use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
-    mem::size_of,
+    mem::{align_of, size_of},
     ptr::null_mut,
 };
 
@@ -31,9 +31,9 @@ impl AlignedSizeWithMetadata {
         Self { size: 0 }
     }
 
-    const fn from_layout(layout: Layout) -> Self {
+    fn from_layout(layout: Layout) -> Self {
         let size = align_up(
-            layout.size() + FreeBlock::METADATA_SIZE,
+            core::cmp::max(layout.size(), FreeBlock::MINIMUM_SIZE),
             FreeBlock::DATA_ALIGNMENT,
         );
         Self { size }
@@ -41,16 +41,12 @@ impl AlignedSizeWithMetadata {
 
     const fn from_pages(pages: usize) -> Self {
         Self {
-            size: pages * PAGE_SIZE,
+            size: align_up(pages * PAGE_SIZE, FreeBlock::DATA_ALIGNMENT),
         }
     }
 
     const fn total_size(&self) -> usize {
         self.size
-    }
-
-    const fn data_size(&self) -> usize {
-        self.size - FreeBlock::METADATA_SIZE
     }
 
     const fn get_remaining_size(&self, needed_size: AlignedSizeWithMetadata) -> Self {
@@ -72,7 +68,7 @@ static_assert_size!(FreeBlock, 16);
 
 impl FreeBlock {
     const METADATA_SIZE: usize = size_of::<Self>();
-    const DATA_ALIGNMENT: usize = 8;
+    const DATA_ALIGNMENT: usize = align_of::<usize>();
     const MINIMUM_SIZE: usize = Self::METADATA_SIZE + Self::DATA_ALIGNMENT;
 
     const fn new() -> Self {
@@ -86,44 +82,39 @@ impl FreeBlock {
         block_ptr: *mut FreeBlock,
         size: AlignedSizeWithMetadata,
     ) -> &'static mut FreeBlock {
-        assert!(size.total_size() >= Self::MINIMUM_SIZE);
+        let data_size = size.total_size();
 
-        let data_size = size.data_size();
+        assert!(data_size >= Self::MINIMUM_SIZE);
 
         assert!(data_size >= Self::DATA_ALIGNMENT, "FreeBlock too small");
         assert!(
             data_size % Self::DATA_ALIGNMENT == 0,
             "FreeBlock not aligned (data_size={data_size})"
         );
+
         let block = unsafe { &mut *block_ptr };
         block.next = None;
         block.size = size;
         block
     }
 
-    unsafe fn from_data_ptr(ptr: *mut u8) -> &'static mut FreeBlock {
-        let free_block_ptr = ptr as *mut FreeBlock;
-        &mut *(free_block_ptr.sub(1))
-    }
-
-    unsafe fn get_data_ptr(&mut self) -> *mut u8 {
-        let self_ptr = self as *mut FreeBlock;
-        self_ptr.add(1) as *mut u8
-    }
-
     fn split(&mut self, requested_size: AlignedSizeWithMetadata) -> &'static mut FreeBlock {
         assert!(self.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
-        assert!(requested_size.data_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(requested_size.total_size() % Self::DATA_ALIGNMENT == 0);
 
         let remaining_size = self.size.get_remaining_size(requested_size);
-        let new_block =
-            unsafe { self.get_data_ptr().byte_add(requested_size.data_size()) as *mut FreeBlock };
+        let self_ptr = self as *mut FreeBlock;
+        let new_block = unsafe { self_ptr.byte_add(requested_size.total_size()) as *mut FreeBlock };
 
-        assert!(remaining_size.data_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(remaining_size.total_size() % Self::DATA_ALIGNMENT == 0);
 
         self.size = requested_size;
 
         Self::initialize(new_block, remaining_size)
+    }
+
+    fn as_ptr(&mut self) -> *mut u8 {
+        self as *mut Self as *mut u8
     }
 }
 
@@ -161,17 +152,18 @@ impl<A: WhichAllocator> Heap<A> {
         // Make smaller if needed
         self.split_if_necessary(&mut block, requested_size);
 
-        unsafe { block.get_data_ptr() }
+        block.as_ptr()
     }
 
     fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
-        let free_block = unsafe { FreeBlock::from_data_ptr(ptr) };
-        assert!(free_block.next.is_none(), "Heap metadata corruption");
-        assert!(
-            free_block.size.data_size() >= layout.size(),
-            "Heap metadata corruption"
-        );
-        self.insert(free_block);
+        let size = AlignedSizeWithMetadata::from_layout(layout);
+        let free_block_ptr = ptr as *mut FreeBlock;
+        let mut free_block = FreeBlock::new();
+        free_block.size = size;
+        unsafe {
+            free_block_ptr.write(free_block);
+            self.insert(&mut *free_block_ptr);
+        }
     }
 
     fn insert(&mut self, block: &'static mut FreeBlock) {
@@ -290,14 +282,6 @@ mod test {
     fn alloc<T>(heap: &MutexHeap<TestAllocator>) -> *mut T {
         let layout = core::alloc::Layout::new::<T>();
         let ptr = unsafe { heap.alloc(layout) as *mut T };
-        if ptr.is_null() {
-            return ptr;
-        }
-        let free_block = unsafe { FreeBlock::from_data_ptr(ptr as *mut u8) };
-        assert!(free_block.next.is_none());
-        assert!(free_block.size.data_size() >= core::mem::size_of::<T>());
-        assert!(free_block.size.data_size() % FreeBlock::DATA_ALIGNMENT == 0);
-        assert!(ptr as usize % FreeBlock::DATA_ALIGNMENT == 0);
         ptr
     }
 
@@ -317,6 +301,9 @@ mod test {
         let heap = create_heap();
         let ptr = alloc::<u8>(&heap);
         assert!(!ptr.is_null());
+        unsafe {
+            ptr.write(0x42);
+        };
         let heap = heap.inner.lock();
         let free_block = heap.genesis_block.next.as_ref().unwrap();
         assert!(free_block.next.is_none());
@@ -331,9 +318,15 @@ mod test {
         let heap = create_heap();
         let ptr1 = alloc::<u8>(&heap);
         assert!(!ptr1.is_null());
+        unsafe {
+            ptr1.write(0x42);
+        };
 
         let ptr2 = alloc::<u8>(&heap);
         assert!(!ptr2.is_null());
+        unsafe {
+            ptr2.write(0x42);
+        };
 
         let heap = heap.inner.lock();
         let free_block = heap.genesis_block.next.as_ref().unwrap();
@@ -349,10 +342,14 @@ mod test {
         let heap = create_heap();
         let ptr = alloc::<u8>(&heap);
         assert!(!ptr.is_null());
+        unsafe {
+            ptr.write(0x42);
+        };
+
         dealloc(&heap, ptr);
         let heap = heap.inner.lock();
         let free_block1 = heap.genesis_block.next.as_ref().unwrap();
-        assert_eq!(free_block1.size.data_size(), FreeBlock::DATA_ALIGNMENT);
+        assert_eq!(free_block1.size.total_size(), FreeBlock::MINIMUM_SIZE);
 
         let free_block2 = free_block1.next.as_ref().unwrap();
         assert!(free_block2.next.is_none());
@@ -366,8 +363,12 @@ mod test {
     fn alloc_exhaustion() {
         let heap = create_heap();
         // One page is metadata
-        let ptr = alloc::<[u8; ((HEAP_PAGES - 1) * PAGE_SIZE) - FreeBlock::METADATA_SIZE]>(&heap);
+        const SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
+        let ptr = alloc::<[u8; SIZE]>(&heap);
         assert!(!ptr.is_null());
+        unsafe {
+            ptr.write([0x42; SIZE]);
+        };
 
         let ptr2 = alloc::<u8>(&heap);
         assert!(ptr2.is_null());
@@ -380,13 +381,13 @@ mod test {
 
         let ptr = alloc::<u8>(&heap);
         assert!(!ptr.is_null());
+        unsafe {
+            ptr.write(0x42);
+        }
 
         let heap_lock = heap.inner.lock();
         let free_block = heap_lock.genesis_block.next.as_ref().unwrap();
         assert!(free_block.next.is_none());
-        assert_eq!(
-            free_block.size.total_size(),
-            ((HEAP_PAGES - 1) * PAGE_SIZE) - FreeBlock::METADATA_SIZE - FreeBlock::DATA_ALIGNMENT
-        );
+        assert_eq!(free_block.size.total_size(), SIZE - FreeBlock::MINIMUM_SIZE);
     }
 }
