@@ -132,7 +132,21 @@ impl<A: WhichAllocator> Heap<A> {
         }
     }
 
+    fn is_page_allocator_allocation(&self, layout: &Layout) -> bool {
+        layout.size() >= PAGE_SIZE || layout.align() == PAGE_SIZE
+    }
+
     fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
+        if self.is_page_allocator_allocation(&layout) {
+            // Allocate directly from the page allocator
+            let pages = minimum_amount_of_pages(layout.size());
+            if let Some(allocation) = AllocatedPages::<Ethernal, A>::zalloc(pages) {
+                return allocation.addr().cast().as_ptr();
+            } else {
+                return null_mut();
+            };
+        }
+
         let requested_size = AlignedSizeWithMetadata::from_layout(layout);
         let block = if let Some(block) = self.find_and_remove(requested_size) {
             block
@@ -156,6 +170,14 @@ impl<A: WhichAllocator> Heap<A> {
     }
 
     fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
+        assert!(!ptr.is_null());
+        if self.is_page_allocator_allocation(&layout) {
+            // Deallocate directly to the page allocator
+            unsafe {
+                A::deallocate(NonNull::new_unchecked(ptr).cast());
+            }
+            return;
+        }
         let size = AlignedSizeWithMetadata::from_layout(layout);
         let free_block_ptr = unsafe { NonNull::new_unchecked(ptr).cast() };
         let free_block = FreeBlock::new_with_size(size);
@@ -256,6 +278,7 @@ mod test {
     use super::{FreeBlock, MutexHeap, PAGE_SIZE};
 
     const HEAP_PAGES: usize = 8;
+    const HEAP_SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * HEAP_PAGES] = [0; PAGE_SIZE * HEAP_PAGES];
     static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
@@ -363,14 +386,27 @@ mod test {
     }
 
     #[test_case]
+    fn test_page_allocator_directly() {
+        let heap = create_heap();
+        let ptr = alloc::<[u8; HEAP_SIZE]>(&heap);
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write([0x42; HEAP_SIZE]);
+        }
+        dealloc(&heap, ptr);
+
+        let heap_lock = heap.inner.lock();
+        assert!(heap_lock.genesis_block.next.is_none());
+    }
+
+    #[test_case]
     fn alloc_exhaustion() {
         let heap = create_heap();
         // One page is metadata
-        const SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
-        let ptr = alloc::<[u8; SIZE]>(&heap);
+        let ptr = alloc::<[u8; HEAP_SIZE]>(&heap);
         assert!(!ptr.is_null());
         unsafe {
-            ptr.write([0x42; SIZE]);
+            ptr.write([0x42; HEAP_SIZE]);
         };
 
         let ptr2 = alloc::<u8>(&heap);
@@ -391,6 +427,10 @@ mod test {
         let heap_lock = heap.inner.lock();
         let free_block = unsafe { heap_lock.genesis_block.next.unwrap().as_ref() };
         assert!(free_block.next.is_none());
-        assert_eq!(free_block.size.total_size(), SIZE - FreeBlock::MINIMUM_SIZE);
+        // Because we use the page allocator directly there should be only one page allocated to the heap
+        assert_eq!(
+            free_block.size.total_size(),
+            PAGE_SIZE - FreeBlock::MINIMUM_SIZE
+        );
     }
 }
