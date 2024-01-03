@@ -1,0 +1,17 @@
+name: Miri
+
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: taiki-e/install-action@just
+      - uses: actions/checkout@v3
+      - name: Install miri
+        run: rustup component add miri
+      - name: Run miri
+        run: just miri
