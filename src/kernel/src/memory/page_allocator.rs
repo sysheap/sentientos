@@ -149,12 +149,9 @@ mod tests {
 
     use common::mutex::Mutex;
 
-    use crate::{
-        assert,
-        memory::{
-            allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
-            page_allocator::PageStatus,
-        },
+    use crate::memory::{
+        allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
+        page_allocator::PageStatus,
     };
 
     use super::{Page, PageAllocator, PAGE_SIZE};
