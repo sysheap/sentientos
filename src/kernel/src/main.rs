@@ -60,7 +60,7 @@ extern "C" fn kernel_init() {
 
     unsafe {
         info!("Initializing page allocator");
-        memory::init_page_allocator(HEAP_START as *mut u8, HEAP_SIZE);
+        memory::init_page_allocator(HEAP_START, HEAP_SIZE);
     }
 
     #[cfg(test)]
