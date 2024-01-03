@@ -3,7 +3,7 @@ use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
     mem::{align_of, size_of},
-    ptr::null_mut,
+    ptr::{null_mut, NonNull},
 };
 
 use common::mutex::Mutex;
@@ -17,8 +17,6 @@ use super::{
     allocated_pages::{AllocatedPages, Ethernal, StaticAllocator, WhichAllocator},
     PAGE_SIZE,
 };
-
-type Link = Option<&'static mut FreeBlock>;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -59,7 +57,7 @@ impl AlignedSizeWithMetadata {
 
 #[repr(C, align(8))]
 struct FreeBlock {
-    next: Link,
+    next: Option<NonNull<FreeBlock>>,
     size: AlignedSizeWithMetadata,
     // data: u64, This field is virtual because otherwise the offset calculation would be wrong
 }
@@ -78,10 +76,11 @@ impl FreeBlock {
         }
     }
 
-    fn initialize(
-        block_ptr: *mut FreeBlock,
-        size: AlignedSizeWithMetadata,
-    ) -> &'static mut FreeBlock {
+    const fn new_with_size(size: AlignedSizeWithMetadata) -> Self {
+        Self { next: None, size }
+    }
+
+    fn initialize(block_ptr: NonNull<FreeBlock>, size: AlignedSizeWithMetadata) {
         let data_size = size.total_size();
 
         assert!(data_size >= Self::MINIMUM_SIZE);
@@ -92,29 +91,30 @@ impl FreeBlock {
             "FreeBlock not aligned (data_size={data_size})"
         );
 
-        let block = unsafe { &mut *block_ptr };
-        block.next = None;
-        block.size = size;
-        block
+        let block = FreeBlock::new_with_size(size);
+        unsafe {
+            block_ptr.write(block);
+        }
     }
 
-    fn split(&mut self, requested_size: AlignedSizeWithMetadata) -> &'static mut FreeBlock {
-        assert!(self.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
+    fn split(
+        mut block_ptr: NonNull<FreeBlock>,
+        requested_size: AlignedSizeWithMetadata,
+    ) -> NonNull<FreeBlock> {
+        let block = unsafe { block_ptr.as_mut() };
+        assert!(block.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
         assert!(requested_size.total_size() % Self::DATA_ALIGNMENT == 0);
 
-        let remaining_size = self.size.get_remaining_size(requested_size);
-        let self_ptr = self as *mut FreeBlock;
-        let new_block = unsafe { self_ptr.byte_add(requested_size.total_size()) as *mut FreeBlock };
+        let remaining_size = block.size.get_remaining_size(requested_size);
+
+        let new_block = unsafe { block_ptr.byte_add(requested_size.total_size()) };
 
         assert!(remaining_size.total_size() % Self::DATA_ALIGNMENT == 0);
 
-        self.size = requested_size;
+        block.size = requested_size;
 
-        Self::initialize(new_block, remaining_size)
-    }
-
-    fn as_ptr(&mut self) -> *mut u8 {
-        self as *mut Self as *mut u8
+        Self::initialize(new_block, remaining_size);
+        new_block
     }
 }
 
@@ -133,7 +133,7 @@ impl<A: WhichAllocator> Heap<A> {
 
     fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
         let requested_size = AlignedSizeWithMetadata::from_layout(layout);
-        let mut block = if let Some(block) = self.find_and_remove(requested_size) {
+        let block = if let Some(block) = self.find_and_remove(requested_size) {
             block
         } else {
             let pages = minimum_amount_of_pages(requested_size.total_size());
@@ -143,70 +143,72 @@ impl<A: WhichAllocator> Heap<A> {
             } else {
                 return null_mut();
             };
-            FreeBlock::initialize(
-                allocation.addr().cast().as_ptr(),
-                AlignedSizeWithMetadata::from_pages(pages),
-            )
+            let free_block_ptr = allocation.addr().cast();
+            FreeBlock::initialize(free_block_ptr, AlignedSizeWithMetadata::from_pages(pages));
+            free_block_ptr
         };
 
         // Make smaller if needed
-        self.split_if_necessary(&mut block, requested_size);
+        self.split_if_necessary(block, requested_size);
 
-        block.as_ptr()
+        block.cast().as_ptr()
     }
 
     fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
         let size = AlignedSizeWithMetadata::from_layout(layout);
-        let free_block_ptr = ptr as *mut FreeBlock;
-        let mut free_block = FreeBlock::new();
-        free_block.size = size;
+        let free_block_ptr = unsafe { NonNull::new_unchecked(ptr).cast() };
+        let free_block = FreeBlock::new_with_size(size);
         unsafe {
             free_block_ptr.write(free_block);
-            self.insert(&mut *free_block_ptr);
+            self.insert(free_block_ptr);
         }
     }
 
-    fn insert(&mut self, block: &'static mut FreeBlock) {
+    fn insert(&mut self, mut block_ptr: NonNull<FreeBlock>) {
+        let block = unsafe { block_ptr.as_mut() };
         assert!(block.next.is_none(), "Heap metadata corruption");
         block.next = self.genesis_block.next.take();
-        self.genesis_block.next = Some(block);
+        self.genesis_block.next = Some(block_ptr);
     }
 
     fn split_if_necessary(
         &mut self,
-        block: &mut &'static mut FreeBlock,
+        block_ptr: NonNull<FreeBlock>,
         requested_size: AlignedSizeWithMetadata,
     ) {
+        let block = unsafe { block_ptr.as_ref() };
         let current_block_size = block.size;
         assert!(current_block_size >= requested_size);
         if (current_block_size.total_size() - requested_size.total_size()) < FreeBlock::MINIMUM_SIZE
         {
             return;
         }
-        let new_block = block.split(requested_size);
+        let new_block = FreeBlock::split(block_ptr, requested_size);
         self.insert(new_block);
     }
 
     fn find_and_remove(
         &mut self,
         requested_size: AlignedSizeWithMetadata,
-    ) -> Option<&'static mut FreeBlock> {
+    ) -> Option<NonNull<FreeBlock>> {
         let mut previous_block = &mut self.genesis_block;
-        loop {
-            let block = previous_block
-                .next
-                .take_if(|block| block.size >= requested_size)
-                .map(|block| {
-                    previous_block.next = block.next.take();
-                    block
-                });
-            if block.is_some() {
-                return block;
-            }
-            if let Some(next) = &mut previous_block.next {
-                previous_block = next;
-            } else {
-                break;
+        unsafe {
+            loop {
+                let block = previous_block
+                    .next
+                    .take_if(|block| block.as_ref().size >= requested_size)
+                    .map(|mut block| {
+                        previous_block.next = block.as_mut().next.take();
+                        block
+                    });
+                if block.is_some() {
+                    return block;
+                }
+                if let Some(next) = &mut previous_block.next {
+                    previous_block = next.as_mut();
+                } else {
+                    break;
+                }
             }
         }
         None
@@ -305,7 +307,7 @@ mod test {
             ptr.write(0x42);
         };
         let heap = heap.inner.lock();
-        let free_block = heap.genesis_block.next.as_ref().unwrap();
+        let free_block = unsafe { heap.genesis_block.next.unwrap().as_ref() };
         assert!(free_block.next.is_none());
         assert_eq!(
             free_block.size.total_size(),
@@ -329,7 +331,7 @@ mod test {
         };
 
         let heap = heap.inner.lock();
-        let free_block = heap.genesis_block.next.as_ref().unwrap();
+        let free_block = unsafe { heap.genesis_block.next.unwrap().as_ref() };
         assert!(free_block.next.is_none());
         assert_eq!(
             free_block.size.total_size(),
@@ -348,10 +350,10 @@ mod test {
 
         dealloc(&heap, ptr);
         let heap = heap.inner.lock();
-        let free_block1 = heap.genesis_block.next.as_ref().unwrap();
+        let free_block1 = unsafe { heap.genesis_block.next.unwrap().as_ref() };
         assert_eq!(free_block1.size.total_size(), FreeBlock::MINIMUM_SIZE);
 
-        let free_block2 = free_block1.next.as_ref().unwrap();
+        let free_block2 = unsafe { free_block1.next.unwrap().as_ref() };
         assert!(free_block2.next.is_none());
         assert_eq!(
             free_block2.size.total_size(),
@@ -386,7 +388,7 @@ mod test {
         }
 
         let heap_lock = heap.inner.lock();
-        let free_block = heap_lock.genesis_block.next.as_ref().unwrap();
+        let free_block = unsafe { heap_lock.genesis_block.next.unwrap().as_ref() };
         assert!(free_block.next.is_none());
         assert_eq!(free_block.size.total_size(), SIZE - FreeBlock::MINIMUM_SIZE);
     }

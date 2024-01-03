@@ -7,6 +7,7 @@
 #![feature(const_mut_refs)]
 #![feature(offset_of)]
 #![feature(option_take_if)]
+#![feature(non_null_convenience)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
