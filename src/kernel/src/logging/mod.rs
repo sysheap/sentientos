@@ -1,7 +1,5 @@
 use core::fmt;
 
-use crate::io::uart;
-
 pub mod configuration;
 
 #[macro_export]
@@ -48,6 +46,7 @@ pub fn _print(args: fmt::Arguments) {
 
     #[cfg(not(miri))]
     {
+        use crate::io::uart;
         use core::fmt::Write;
         uart::QEMU_UART.lock().write_fmt(args).unwrap();
     }

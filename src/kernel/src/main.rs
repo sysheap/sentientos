@@ -1,5 +1,6 @@
 #![cfg_attr(not(miri), no_std)]
 #![cfg_attr(not(miri), no_main)]
+#![cfg_attr(miri, allow(dead_code))]
 #![feature(panic_info_message)]
 #![feature(strict_provenance)]
 #![feature(nonzero_ops)]
