@@ -30,6 +30,7 @@ impl AlignedSizeWithMetadata {
     }
 
     fn from_layout(layout: Layout) -> Self {
+        assert!(FreeBlock::DATA_ALIGNMENT >= layout.align());
         let size = align_up(
             core::cmp::max(layout.size(), FreeBlock::MINIMUM_SIZE),
             FreeBlock::DATA_ALIGNMENT,
