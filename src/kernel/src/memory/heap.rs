@@ -266,7 +266,7 @@ static HEAP: MutexHeap<StaticAllocator> = MutexHeap::new();
 
 #[cfg(test)]
 mod test {
-    use core::alloc::GlobalAlloc;
+    use core::{alloc::GlobalAlloc, ops::Range, ptr::NonNull};
 
     use common::mutex::Mutex;
 
@@ -285,7 +285,7 @@ mod test {
 
     struct TestAllocator;
     impl WhichAllocator for TestAllocator {
-        fn allocate(number_of_pages: usize) -> Option<core::ptr::NonNull<Page>> {
+        fn allocate(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
             PAGE_ALLOC.lock().alloc(number_of_pages)
         }
 

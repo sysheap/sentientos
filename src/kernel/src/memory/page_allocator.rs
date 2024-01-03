@@ -1,7 +1,7 @@
 use crate::debug;
 use core::{
     fmt::Debug,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Range},
     ptr::NonNull,
 };
 
@@ -102,7 +102,7 @@ impl<'a> PageAllocator<'a> {
         offset / PAGE_SIZE
     }
 
-    pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<NonNull<Page>> {
+    pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
         let total_pages = self.total_heap_pages();
         if number_of_pages_requested > total_pages {
             return None;
@@ -112,6 +112,7 @@ impl<'a> PageAllocator<'a> {
             .map(|start_idx| {
                 self.mark_range_as_used(start_idx, number_of_pages_requested);
                 self.page_idx_to_pointer(start_idx)
+                    ..self.page_idx_to_pointer(start_idx + number_of_pages_requested)
             })
     }
 
@@ -144,21 +145,26 @@ impl<'a> PageAllocator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use core::{ops::Range, ptr::NonNull};
+
     use common::mutex::Mutex;
 
-    use crate::memory::{
-        allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
-        page_allocator::PageStatus,
+    use crate::{
+        assert,
+        memory::{
+            allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
+            page_allocator::PageStatus,
+        },
     };
 
-    use super::{PageAllocator, PAGE_SIZE};
+    use super::{Page, PageAllocator, PAGE_SIZE};
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
     static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
     struct TestAllocator;
     impl WhichAllocator for TestAllocator {
-        fn allocate(number_of_pages: usize) -> Option<core::ptr::NonNull<super::Page>> {
+        fn allocate(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
             PAGE_ALLOC.lock().alloc(number_of_pages)
         }
 
@@ -294,5 +300,12 @@ mod tests {
         assert!(allocator.metadata[1..]
             .iter()
             .all(|s| *s == PageStatus::Free));
+    }
+
+    #[test_case]
+    fn test_number_of_pages() {
+        init_allocator();
+        let ephemeral = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(3).unwrap();
+        assert_eq!(ephemeral.number_of_pages(), 3);
     }
 }
