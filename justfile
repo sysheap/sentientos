@@ -23,10 +23,10 @@ run-debug:
     cargo run
 
 test:
-    cargo test --release --features commonlib-test
+    cargo test --release
 
 miri: build-debug
-    cargo miri test --features commonlib-test --target riscv64gc-unknown-linux-gnu
+    cargo miri test --target riscv64gc-unknown-linux-gnu
 
 run-vscode:
     cargo run -- -s -S && echo "DONE"
