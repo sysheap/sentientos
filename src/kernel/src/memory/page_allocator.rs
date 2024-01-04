@@ -147,31 +147,25 @@ mod tests {
 
     use common::mutex::Mutex;
 
-    use crate::memory::{
-        allocated_pages::{AllocatedPages, Ephemeral, Ethernal, WhichAllocator},
-        page_allocator::PageStatus,
-    };
+    use crate::memory::page_allocator::PageStatus;
 
     use super::{MetadataPageAllocator, Page, PAGE_SIZE};
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
     static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
-    struct TestAllocator;
-    impl WhichAllocator for TestAllocator {
-        fn allocate(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
-            PAGE_ALLOC.lock().alloc(number_of_pages)
-        }
-
-        fn deallocate(pages: core::ptr::NonNull<super::Page>) {
-            PAGE_ALLOC.lock().dealloc(pages)
-        }
-    }
-
     fn init_allocator() {
         unsafe {
             PAGE_ALLOC.lock().init(&mut PAGE_ALLOC_MEMORY);
         }
+    }
+
+    fn alloc(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
+        PAGE_ALLOC.lock().alloc(number_of_pages)
+    }
+
+    fn dealloc(pages: Range<NonNull<Page>>) {
+        PAGE_ALLOC.lock().dealloc(pages.start)
     }
 
     #[test_case]
@@ -188,8 +182,8 @@ mod tests {
     fn exhaustion_allocation() {
         init_allocator();
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
-        let _pages = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(number_of_pages).unwrap();
-        assert!(AllocatedPages::<Ephemeral, TestAllocator>::zalloc(1).is_none());
+        let _pages = alloc(number_of_pages).unwrap();
+        assert!(alloc(1).is_none());
         let allocator = PAGE_ALLOC.lock();
         let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
         assert!(all_metadata_except_last
@@ -202,7 +196,7 @@ mod tests {
     fn beyond_capacity() {
         init_allocator();
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
-        let pages = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(number_of_pages + 1);
+        let pages = alloc(number_of_pages + 1);
         assert!(pages.is_none());
     }
 
@@ -211,20 +205,20 @@ mod tests {
         init_allocator();
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
         for _ in 0..number_of_pages {
-            assert!(AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).is_some());
+            assert!(alloc(1).is_some());
         }
-        assert!(AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).is_none());
+        assert!(alloc(1).is_none());
     }
 
     #[test_case]
     fn metadata_integrity() {
         init_allocator();
-        let page1 = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(1).unwrap();
+        let page1 = alloc(1).unwrap();
         assert_eq!(PAGE_ALLOC.lock().metadata[0], PageStatus::Last);
         assert!(PAGE_ALLOC.lock().metadata[1..]
             .iter()
             .all(|s| *s == PageStatus::Free));
-        let page2 = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(2).unwrap();
+        let page2 = alloc(2).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..3],
             [PageStatus::Last, PageStatus::Used, PageStatus::Last]
@@ -232,7 +226,7 @@ mod tests {
         assert!(PAGE_ALLOC.lock().metadata[3..]
             .iter()
             .all(|s| *s == PageStatus::Free));
-        let page3 = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(3).unwrap();
+        let page3 = alloc(3).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
             [
@@ -247,7 +241,7 @@ mod tests {
         assert!(PAGE_ALLOC.lock().metadata[6..]
             .iter()
             .all(|s| *s == PageStatus::Free),);
-        drop(page2);
+        dealloc(page2);
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
             [
@@ -259,7 +253,7 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        drop(page1);
+        dealloc(page1);
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
             [
@@ -271,7 +265,7 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        drop(page3);
+        dealloc(page3);
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
             [
@@ -283,24 +277,5 @@ mod tests {
                 PageStatus::Free
             ]
         );
-    }
-
-    #[test_case]
-    fn test_ethernal_pages() {
-        init_allocator();
-        let ethernal = AllocatedPages::<Ethernal, TestAllocator>::zalloc(1).unwrap();
-        drop(ethernal);
-        let allocator = PAGE_ALLOC.lock();
-        assert_eq!(allocator.metadata[0], PageStatus::Last);
-        assert!(allocator.metadata[1..]
-            .iter()
-            .all(|s| *s == PageStatus::Free));
-    }
-
-    #[test_case]
-    fn test_number_of_pages() {
-        init_allocator();
-        let ephemeral = AllocatedPages::<Ephemeral, TestAllocator>::zalloc(3).unwrap();
-        assert_eq!(ephemeral.number_of_pages(), 3);
     }
 }
