@@ -264,7 +264,7 @@ mod test {
 
     use crate::memory::{
         allocated_pages::WhichAllocator,
-        page_allocator::{Page, PageAllocator},
+        page_allocator::{MetadataPageAllocator, Page},
     };
 
     use super::{FreeBlock, MutexHeap, PAGE_SIZE};
@@ -273,7 +273,7 @@ mod test {
     const HEAP_SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * HEAP_PAGES] = [0; PAGE_SIZE * HEAP_PAGES];
-    static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
+    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
     struct TestAllocator;
     impl WhichAllocator for TestAllocator {

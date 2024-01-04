@@ -15,12 +15,12 @@ enum PageStatus {
     Last,
 }
 
-pub(super) struct PageAllocator<'a> {
+pub(super) struct MetadataPageAllocator<'a> {
     metadata: &'a mut [PageStatus],
     pages: Range<*mut Page>,
 }
 
-impl<'a> Debug for PageAllocator<'a> {
+impl<'a> Debug for MetadataPageAllocator<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PageAllocator")
             .field("metadata", &self.metadata.as_ptr())
@@ -29,7 +29,7 @@ impl<'a> Debug for PageAllocator<'a> {
     }
 }
 
-impl<'a> PageAllocator<'a> {
+impl<'a> MetadataPageAllocator<'a> {
     pub(super) const fn new() -> Self {
         Self {
             metadata: &mut [],
@@ -138,10 +138,10 @@ mod tests {
         page_allocator::PageStatus,
     };
 
-    use super::{Page, PageAllocator, PAGE_SIZE};
+    use super::{MetadataPageAllocator, Page, PAGE_SIZE};
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
-    static PAGE_ALLOC: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
+    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
     struct TestAllocator;
     impl WhichAllocator for TestAllocator {
