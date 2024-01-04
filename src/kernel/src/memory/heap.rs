@@ -13,10 +13,7 @@ use crate::{
     klibc::util::{align_up, minimum_amount_of_pages},
 };
 
-use super::{
-    allocated_pages::{AllocatedPages, Ethernal, StaticAllocator, WhichAllocator},
-    PAGE_SIZE,
-};
+use super::{page_allocator::PageAllocator, PAGE_SIZE};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -119,12 +116,12 @@ impl FreeBlock {
     }
 }
 
-struct Heap<A: WhichAllocator> {
+struct Heap<Allocator: PageAllocator> {
     genesis_block: FreeBlock,
-    allocator: PhantomData<A>,
+    allocator: PhantomData<Allocator>,
 }
 
-impl<A: WhichAllocator> Heap<A> {
+impl<Allocator: PageAllocator> Heap<Allocator> {
     const fn new() -> Self {
         Self {
             genesis_block: FreeBlock::new(),
@@ -140,8 +137,8 @@ impl<A: WhichAllocator> Heap<A> {
         if self.is_page_allocator_allocation(&layout) {
             // Allocate directly from the page allocator
             let pages = minimum_amount_of_pages(layout.size());
-            if let Some(allocation) = AllocatedPages::<Ethernal, A>::zalloc(pages) {
-                return allocation.addr().cast().as_ptr();
+            if let Some(allocation) = Allocator::alloc(pages) {
+                return allocation.start.cast().as_ptr();
             } else {
                 return null_mut();
             };
@@ -152,13 +149,12 @@ impl<A: WhichAllocator> Heap<A> {
             block
         } else {
             let pages = minimum_amount_of_pages(requested_size.total_size());
-            let allocation = if let Some(allocation) = AllocatedPages::<Ethernal, A>::zalloc(pages)
-            {
+            let allocation = if let Some(allocation) = Allocator::alloc(pages) {
                 allocation
             } else {
                 return null_mut();
             };
-            let free_block_ptr = allocation.addr().cast();
+            let free_block_ptr = allocation.start.cast();
             FreeBlock::initialize(free_block_ptr, AlignedSizeWithMetadata::from_pages(pages));
             free_block_ptr
         };
@@ -174,7 +170,7 @@ impl<A: WhichAllocator> Heap<A> {
         if self.is_page_allocator_allocation(&layout) {
             // Deallocate directly to the page allocator
             unsafe {
-                A::deallocate(NonNull::new_unchecked(ptr).cast());
+                Allocator::dealloc(NonNull::new_unchecked(ptr).cast());
             }
             return;
         }
@@ -230,11 +226,11 @@ impl<A: WhichAllocator> Heap<A> {
     }
 }
 
-struct MutexHeap<A: WhichAllocator> {
-    inner: Mutex<Heap<A>>,
+struct MutexHeap<Allocator: PageAllocator> {
+    inner: Mutex<Heap<Allocator>>,
 }
 
-impl<A: WhichAllocator> MutexHeap<A> {
+impl<Allocator: PageAllocator> MutexHeap<Allocator> {
     const fn new() -> Self {
         Self {
             inner: Mutex::new(Heap::new()),
@@ -242,7 +238,7 @@ impl<A: WhichAllocator> MutexHeap<A> {
     }
 }
 
-unsafe impl<A: WhichAllocator> GlobalAlloc for MutexHeap<A> {
+unsafe impl<Allocator: PageAllocator> GlobalAlloc for MutexHeap<Allocator> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         self.inner.lock().alloc(layout)
     }
@@ -254,7 +250,7 @@ unsafe impl<A: WhichAllocator> GlobalAlloc for MutexHeap<A> {
 
 #[cfg(not(miri))]
 #[global_allocator]
-static HEAP: MutexHeap<StaticAllocator> = MutexHeap::new();
+static HEAP: MutexHeap<super::StaticPageAllocator> = MutexHeap::new();
 
 #[cfg(test)]
 mod test {
@@ -263,8 +259,8 @@ mod test {
     use common::mutex::Mutex;
 
     use crate::memory::{
-        allocated_pages::WhichAllocator,
-        page_allocator::{MetadataPageAllocator, Page},
+        page::Page,
+        page_allocator::{MetadataPageAllocator, PageAllocator},
     };
 
     use super::{FreeBlock, MutexHeap, PAGE_SIZE};
@@ -276,13 +272,13 @@ mod test {
     static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
     struct TestAllocator;
-    impl WhichAllocator for TestAllocator {
-        fn allocate(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
-            PAGE_ALLOC.lock().alloc(number_of_pages)
+    impl PageAllocator for TestAllocator {
+        fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
+            PAGE_ALLOC.lock().alloc(number_of_pages_requested)
         }
 
-        fn deallocate(pages: core::ptr::NonNull<Page>) {
-            PAGE_ALLOC.lock().dealloc(pages)
+        fn dealloc(page: NonNull<Page>) {
+            PAGE_ALLOC.lock().dealloc(page)
         }
     }
 
