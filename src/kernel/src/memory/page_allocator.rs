@@ -127,6 +127,21 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 }
 
+trait PageAllocator {
+    fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>>;
+    fn dealloc(&mut self, page: NonNull<Page>);
+}
+
+impl PageAllocator for MetadataPageAllocator<'_> {
+    fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
+        self.alloc(number_of_pages_requested)
+    }
+
+    fn dealloc(&mut self, page: NonNull<Page>) {
+        self.dealloc(page)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::{ops::Range, ptr::NonNull};
