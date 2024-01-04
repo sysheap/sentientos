@@ -10,9 +10,6 @@ description.workspace = true
 [dependencies]
 common = { path = "../common" }
 
-[dev-dependencies]
-common ={ path = "../common", features = ["test"]}
-
 [[bin]]
 name = "kernel"
 path = "src/main.rs"

@@ -35,12 +35,12 @@ impl<T> Mutex<T> {
         MutexGuard { mutex: self }
     }
 
-    #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn get_locked(&self) -> &AtomicBool {
         &self.locked
     }
 
-    #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn get_data(&self) -> &UnsafeCell<T> {
         &self.data
     }
