@@ -5,7 +5,7 @@ use core::{
     ptr::{null_mut, NonNull},
 };
 
-use super::page::{Page, Pages};
+use super::page::Page;
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
@@ -129,15 +129,6 @@ impl<'a> MetadataPageAllocator<'a> {
 
 pub trait PageAllocator {
     fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>>;
-    fn zalloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
-        let mut pages = Self::alloc(number_of_pages_requested);
-
-        if let Some(pages) = &mut pages {
-            pages.zero();
-        }
-
-        pages
-    }
     fn dealloc(page: NonNull<Page>);
 }
 
