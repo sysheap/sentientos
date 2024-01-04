@@ -2,7 +2,7 @@ use core::{marker::PhantomData, ops::Range, ptr::NonNull, slice};
 
 use crate::{debug, memory::PAGE_ALLOCATOR};
 
-use super::page_allocator::{Page, PAGE_SIZE};
+use super::page::{Page, PAGE_SIZE};
 
 #[derive(Debug, Default)]
 pub struct Ephemeral;

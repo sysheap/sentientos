@@ -11,13 +11,13 @@ use crate::{
         elf,
         util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
     },
-    memory::page_allocator::PAGE_SIZE,
+    memory::page::PAGE_SIZE,
     processes::timer,
 };
 
 use super::{
     allocated_pages::{AllocatedPages, Ephemeral},
-    page_allocator::Page,
+    page::Page,
 };
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);

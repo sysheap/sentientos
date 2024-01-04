@@ -1,28 +1,11 @@
-use crate::debug;
+use crate::{debug, memory::PAGE_SIZE};
 use core::{
     fmt::Debug,
-    ops::{Deref, DerefMut, Range},
+    ops::Range,
     ptr::{null_mut, NonNull},
 };
 
-pub const PAGE_SIZE: usize = 4096;
-
-#[repr(C, align(4096))]
-pub struct Page([u8; PAGE_SIZE]);
-
-impl Deref for Page {
-    type Target = [u8; PAGE_SIZE];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Page {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+use super::page::Page;
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]

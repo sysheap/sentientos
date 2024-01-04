@@ -9,10 +9,11 @@ use self::page_allocator::PageAllocator;
 
 pub mod allocated_pages;
 pub mod heap;
+pub mod page;
 mod page_allocator;
 pub mod page_tables;
 
-pub use page_allocator::PAGE_SIZE;
+pub use page::PAGE_SIZE;
 
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator::new());
 
