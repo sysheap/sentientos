@@ -214,25 +214,17 @@ impl<A: WhichAllocator> Heap<A> {
         &mut self,
         requested_size: AlignedSizeWithMetadata,
     ) -> Option<NonNull<FreeBlock>> {
-        let mut previous_block = &mut self.genesis_block;
-        unsafe {
-            loop {
-                let block = previous_block
-                    .next
-                    .take_if(|block| block.as_ref().size >= requested_size)
-                    .map(|mut block| {
-                        previous_block.next = block.as_mut().next.take();
-                        block
-                    });
-                if block.is_some() {
-                    return block;
-                }
-                if let Some(next) = &mut previous_block.next {
-                    previous_block = next.as_mut();
-                } else {
-                    break;
-                }
+        let mut current = &mut self.genesis_block;
+        while let Some(potential_block) = current.next.map(|mut block| unsafe { block.as_mut() }) {
+            if potential_block.size < requested_size {
+                current = potential_block;
+                continue;
             }
+
+            // Take the block out of the list
+            let block = current.next.take();
+            current.next = potential_block.next.take();
+            return block;
         }
         None
     }
