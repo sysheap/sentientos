@@ -2,7 +2,7 @@ use crate::debug;
 use core::{
     fmt::Debug,
     ops::{Deref, DerefMut, Range},
-    ptr::NonNull,
+    ptr::{null_mut, NonNull},
 };
 
 pub const PAGE_SIZE: usize = 4096;
@@ -34,7 +34,7 @@ enum PageStatus {
 
 pub(super) struct PageAllocator<'a> {
     metadata: &'a mut [PageStatus],
-    pages: *mut Page,
+    pages: Range<*mut Page>,
 }
 
 impl<'a> Debug for PageAllocator<'a> {
@@ -50,7 +50,7 @@ impl<'a> PageAllocator<'a> {
     pub(super) const fn new() -> Self {
         Self {
             metadata: &mut [],
-            pages: core::ptr::null_mut(),
+            pages: null_mut()..null_mut(),
         }
     }
 
@@ -75,11 +75,12 @@ impl<'a> PageAllocator<'a> {
         metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
 
         self.metadata = metadata;
-        self.pages = heap.as_mut_ptr();
+
+        self.pages = heap.as_mut_ptr_range();
 
         debug!("Page allocator initalized");
         debug!("Metadata start:\t\t{:p}", self.metadata);
-        debug!("Heap start:\t\t{:p}", self.pages);
+        debug!("Heap start:\t\t{:p}", self.pages.start);
         debug!("Number of pages:\t{}\n", self.total_heap_pages());
     }
 
@@ -87,19 +88,19 @@ impl<'a> PageAllocator<'a> {
         self.metadata.len()
     }
 
-    fn page_idx_to_pointer(&mut self, page_index: usize) -> NonNull<Page> {
-        unsafe { NonNull::new(self.pages.add(page_index)).unwrap() }
+    fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<Page> {
+        unsafe { NonNull::new(self.pages.start.add(page_index)).unwrap() }
     }
 
     fn page_pointer_to_page_idx(&self, page: NonNull<Page>) -> usize {
-        let heap_start = self.pages;
-        let heap_end = unsafe { self.pages.add(self.metadata.len()) };
-        let page_ptr = page.as_ptr() as *const _;
+        let heap_start = self.pages.start;
+        let heap_end = self.pages.end;
+        let page_ptr = page.as_ptr();
         assert!(page_ptr >= heap_start);
         assert!(page_ptr < heap_end);
-        let offset = page_ptr as usize - heap_start as usize;
-        assert!(offset % PAGE_SIZE == 0);
-        offset / PAGE_SIZE
+        assert!(page_ptr.is_aligned());
+        let offset = unsafe { page_ptr.offset_from(heap_start) };
+        offset as usize
     }
 
     pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {

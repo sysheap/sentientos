@@ -9,6 +9,7 @@
 #![feature(offset_of)]
 #![feature(option_take_if)]
 #![feature(non_null_convenience)]
+#![feature(pointer_is_aligned)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
