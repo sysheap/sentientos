@@ -60,10 +60,6 @@ impl PinnedHeapPages {
         Self { allocation }
     }
 
-    pub fn single() -> Self {
-        Self::new(1)
-    }
-
     pub fn fill(&mut self, data: &[u8]) {
         copy_slice(data, self.as_u8_slice());
     }

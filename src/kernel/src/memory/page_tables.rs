@@ -1,4 +1,4 @@
-use core::{arch::asm, fmt::Debug, ptr::NonNull, u8};
+use core::{arch::asm, fmt::Debug, u8};
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use common::mutex::Mutex;
@@ -16,7 +16,7 @@ use crate::{
     processes::timer,
 };
 
-use super::page::{Page, PinnedHeapPages};
+use super::page::Page;
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
@@ -238,7 +238,7 @@ impl RootPageTableHolder {
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address() == 0 {
-                let mut page = Box::new(PageTable::zero());
+                let page = Box::new(PageTable::zero());
                 first_level_entry.set_physical_address(page.get_physical_address());
                 first_level_entry.set_validity(true);
                 new_pages.push(page);
@@ -248,7 +248,7 @@ impl RootPageTableHolder {
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address() == 0 {
-                let mut page = Box::new(PageTable::zero());
+                let page = Box::new(PageTable::zero());
                 second_level_entry.set_physical_address(page.get_physical_address());
                 second_level_entry.set_validity(true);
                 new_pages.push(page);
@@ -309,10 +309,6 @@ impl PageTable {
         Self {
             0: [PageTableEntry(0); 512],
         }
-    }
-
-    fn from(ptr: NonNull<Page>) -> &'static mut PageTable {
-        unsafe { ptr.cast().as_mut() }
     }
 
     fn get_entry_for_virtual_address_mut(
