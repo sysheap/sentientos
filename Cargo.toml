@@ -16,6 +16,7 @@ version = "0.1.0"
 [profile.release]
 panic = 'abort'
 lto = "fat"
+debug = true
 
 [profile.dev]
 panic = 'abort'

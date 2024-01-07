@@ -48,3 +48,6 @@ debug-releasef FUNC:
 
 disassm-release:
     riscv64-unknown-elf-objdump -d target/riscv64gc-unknown-none-elf/release/kernel | less
+
+addr2line ADDR:
+    riscv64-unknown-elf-addr2line -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
