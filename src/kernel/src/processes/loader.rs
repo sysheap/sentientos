@@ -3,13 +3,9 @@ use alloc::vec::Vec;
 use crate::{
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{copy_slice, minimum_amount_of_pages},
+        util::minimum_amount_of_pages,
     },
-    memory::{
-        allocated_pages::{AllocatedPages, Ephemeral},
-        page_tables::RootPageTableHolder,
-        PAGE_SIZE,
-    },
+    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
 };
 
 pub const STACK_END: usize = 0xfffffffffffff000;
@@ -19,7 +15,7 @@ pub const STACK_START: usize = STACK_END + (PAGE_SIZE - 1);
 pub struct LoadedElf {
     pub entry_address: usize,
     pub page_tables: RootPageTableHolder,
-    pub allocated_pages: Vec<AllocatedPages<Ephemeral>>,
+    pub allocated_pages: Vec<PinnedHeapPages>,
 }
 
 pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
@@ -29,13 +25,13 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
     let mut allocated_pages = Vec::new();
 
     // Map 4KB stack
-    let stack = AllocatedPages::zalloc(1).expect("Could not allocate memory for stack");
-    let stack_addr = stack.addr_as_usize();
+    let mut stack = PinnedHeapPages::new(1);
+    let stack_addr = stack.addr();
     allocated_pages.push(stack);
 
     page_tables.map_userspace(
         STACK_END,
-        stack_addr,
+        stack_addr.get(),
         PAGE_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
         "Stack",
@@ -51,16 +47,17 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
         let size_in_pages = minimum_amount_of_pages(real_size as usize);
-        let mut pages = AllocatedPages::zalloc(size_in_pages)
-            .expect("Could not allocate memory for program header.");
-        let pages_addr = pages.addr_as_usize();
-        let page_slice = pages.slice();
-        copy_slice(data, page_slice);
+
+        let mut pages = PinnedHeapPages::new(size_in_pages);
+        pages.fill(data);
+
+        let pages_addr = pages.addr();
+
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
             program_header.virtual_address as usize,
-            pages_addr,
+            pages_addr.get(),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
             "LOAD",

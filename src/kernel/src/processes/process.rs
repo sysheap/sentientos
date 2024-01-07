@@ -9,10 +9,7 @@ use common::{
 use crate::{
     debug,
     klibc::elf::ElfFile,
-    memory::{
-        allocated_pages::{AllocatedPages, Ephemeral},
-        page_tables::RootPageTableHolder,
-    },
+    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder},
     processes::loader::{self, LoadedElf},
 };
 
@@ -37,7 +34,7 @@ pub struct Process {
     register_state: Box<TrapFrame>,
     page_table: Rc<RootPageTableHolder>,
     program_counter: usize,
-    allocated_pages: Vec<AllocatedPages<Ephemeral>>,
+    allocated_pages: Vec<PinnedHeapPages>,
     state: ProcessState,
 }
 

@@ -2,7 +2,7 @@ use core::{marker::PhantomData, ops::Range, ptr::NonNull, slice};
 
 use crate::{debug, memory::PAGE_ALLOCATOR};
 
-use super::page::{Page, PAGE_SIZE};
+use super::page::Page;
 
 #[derive(Debug, Default)]
 pub struct Ephemeral;
@@ -69,24 +69,12 @@ impl<Dropper: PageDropper, A: WhichAllocator> AllocatedPages<Dropper, A> {
         self.pages.start
     }
 
-    fn u8(&self) -> *mut u8 {
-        self.addr().cast().as_ptr()
-    }
-
-    pub fn slice(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.u8(), self.number_of_pages() * PAGE_SIZE) }
-    }
-
     pub fn page_slice(&mut self) -> &mut [Page] {
         unsafe { slice::from_raw_parts_mut(self.addr().as_ptr(), self.number_of_pages()) }
     }
 
     pub fn number_of_pages(&self) -> usize {
         unsafe { self.pages.end.offset_from(self.pages.start) as usize }
-    }
-
-    pub fn addr_as_usize(&self) -> usize {
-        self.addr().as_ptr() as usize
     }
 
     pub fn zero(&mut self) {
