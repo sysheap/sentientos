@@ -20,19 +20,25 @@ pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
     dst[..src.len()].copy_from_slice(src);
 }
 
-pub fn set_or_clear_bit<DataType>(data: &mut DataType, should_set_bit: bool, bit_position: usize)
+pub fn set_or_clear_bit<DataType>(
+    data: &mut DataType,
+    should_set_bit: bool,
+    bit_position: usize,
+) -> DataType
 where
     DataType: BitOrAssign
         + BitAndAssign
         + Not<Output = DataType>
         + From<u8>
-        + Shl<usize, Output = DataType>,
+        + Shl<usize, Output = DataType>
+        + Copy,
 {
     if should_set_bit {
         set_bit(data, bit_position);
     } else {
         clear_bit(data, bit_position)
     }
+    *data
 }
 
 pub fn set_bit<DataType>(data: &mut DataType, bit_position: usize)
@@ -64,12 +70,14 @@ pub fn set_multiple_bits<DataType, ValueType>(
     value: ValueType,
     number_of_bits: usize,
     bit_position: usize,
-) where
+) -> DataType
+where
     DataType: BitAndAssign
         + BitOrAssign
         + Not<Output = DataType>
         + From<u8>
-        + Shl<usize, Output = DataType>,
+        + Shl<usize, Output = DataType>
+        + Copy,
     ValueType: Copy + BitAnd + From<u8> + Shl<usize, Output = ValueType>,
     <ValueType as BitAnd>::Output: PartialOrd<ValueType>,
 {
@@ -90,6 +98,7 @@ pub fn set_multiple_bits<DataType, ValueType>(
     }
 
     *data |= mask;
+    *data
 }
 
 pub fn get_multiple_bits<DataType, ValueType>(

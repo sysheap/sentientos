@@ -1,11 +1,11 @@
-use core::{arch::asm, fmt::Debug, u8};
+use core::{arch::asm, fmt::Debug, ptr::null_mut, u8};
 
 use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use common::mutex::Mutex;
 
 use crate::{
     assert::static_assert_size,
-    debug,
+    debug, info,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESSS,
     klibc::{
@@ -27,7 +27,7 @@ pub struct RootPageTableHolder {
 impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let page_table = self.table();
-        write!(f, "RootPageTableHolder({:p})", &*page_table)
+        write!(f, "RootPageTableHolder({:p})", page_table)
     }
 }
 
@@ -237,9 +237,9 @@ impl RootPageTableHolder {
 
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
-            if first_level_entry.get_physical_address() == 0 {
-                let page = Box::new(PageTable::zero());
-                first_level_entry.set_physical_address(page.get_physical_address());
+            if first_level_entry.get_physical_address().is_null() {
+                let mut page = Box::new(PageTable::zero());
+                first_level_entry.set_physical_address(&mut *page);
                 first_level_entry.set_validity(true);
                 new_pages.push(page);
             }
@@ -247,9 +247,9 @@ impl RootPageTableHolder {
             let second_level_entry = first_level_entry
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
-            if second_level_entry.get_physical_address() == 0 {
-                let page = Box::new(PageTable::zero());
-                second_level_entry.set_physical_address(page.get_physical_address());
+            if second_level_entry.get_physical_address().is_null() {
+                let mut page = Box::new(PageTable::zero());
+                second_level_entry.set_physical_address(&mut *page);
                 second_level_entry.set_validity(true);
                 new_pages.push(page);
             }
@@ -262,7 +262,7 @@ impl RootPageTableHolder {
 
             third_level_entry.set_xwr_mode(privileges);
             third_level_entry.set_validity(true);
-            third_level_entry.set_physical_address(current_physical_address);
+            third_level_entry.set_physical_address(current_physical_address as *mut PageTable);
             third_level_entry.set_user_mode_accessible(is_user_mode_accessible);
         }
 
@@ -298,7 +298,7 @@ impl RootPageTableHolder {
     }
 }
 
-#[repr(transparent)]
+#[repr(C, align(4096))]
 #[derive(Debug)]
 struct PageTable([PageTableEntry; 512]);
 
@@ -306,9 +306,7 @@ static_assert_size!(PageTable, core::mem::size_of::<Page>());
 
 impl PageTable {
     fn zero() -> Self {
-        Self {
-            0: [PageTableEntry(0); 512],
-        }
+        Self([PageTableEntry(null_mut()); 512])
     }
 
     fn get_entry_for_virtual_address_mut(
@@ -336,7 +334,7 @@ impl PageTable {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
-struct PageTableEntry(u64);
+struct PageTableEntry(*mut PageTable);
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -378,33 +376,41 @@ impl PageTableEntry {
     const EXECUTE_BIT_POS: usize = 3;
     const USER_MODE_ACCESSIBLE_BIT_POS: usize = 4;
     const PHYSICAL_PAGE_BIT_POS: usize = 10;
+    const PHYSICAL_PAGE_BITS: usize = 0xfffffffffff;
 
     fn set_validity(&mut self, is_valid: bool) {
-        set_or_clear_bit(&mut self.0, is_valid, PageTableEntry::VALID_BIT_POS);
+        self.0 = self.0.map_addr(|mut addr| {
+            set_or_clear_bit(&mut addr, is_valid, PageTableEntry::VALID_BIT_POS)
+        });
     }
 
     fn get_validity(&self) -> bool {
-        get_bit(self.0, PageTableEntry::VALID_BIT_POS)
+        get_bit(self.0.addr(), PageTableEntry::VALID_BIT_POS)
     }
 
     fn set_user_mode_accessible(&mut self, is_user_mode_accessible: bool) {
-        set_or_clear_bit(
-            &mut self.0,
-            is_user_mode_accessible,
-            PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS,
-        );
+        info!("User mode accessible");
+        self.0 = self.0.map_addr(|mut addr| {
+            set_or_clear_bit(
+                &mut addr,
+                is_user_mode_accessible,
+                PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS,
+            )
+        });
     }
 
     fn get_user_mode_accessible(&self) -> bool {
-        get_bit(self.0, PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS)
+        get_bit(self.0.addr(), PageTableEntry::USER_MODE_ACCESSIBLE_BIT_POS)
     }
 
     fn set_xwr_mode(&mut self, mode: XWRMode) {
-        set_multiple_bits(&mut self.0, mode as u8, 3, PageTableEntry::READ_BIT_POS);
+        self.0 = self.0.map_addr(|mut addr| {
+            set_multiple_bits(&mut addr, mode as u8, 3, PageTableEntry::READ_BIT_POS)
+        });
     }
 
     fn get_xwr_mode(&self) -> XWRMode {
-        let bits = get_multiple_bits(self.0, 3, PageTableEntry::READ_BIT_POS) as u8;
+        let bits = get_multiple_bits(self.0.addr() as u64, 3, PageTableEntry::READ_BIT_POS) as u8;
         bits.into()
     }
 
@@ -413,24 +419,32 @@ impl PageTableEntry {
         mode != XWRMode::PointerToNextLevel
     }
 
-    fn set_physical_address(&mut self, address: usize) {
-        set_multiple_bits(
-            &mut self.0,
-            address >> 12,
-            44,
-            PageTableEntry::PHYSICAL_PAGE_BIT_POS,
-        );
+    fn set_physical_address(&mut self, address: *mut PageTable) {
+        info!("Setting {:p}", address);
+        let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
+        self.0 = address.map_addr(|new_address| {
+            let mut original = self.0.addr();
+            original &= mask;
+            original |=
+                ((new_address >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
+            original
+        });
+        info!("Afterwords 0x{:x}", self.0.addr());
     }
 
-    fn get_physical_address(&self) -> usize {
-        (((self.0 >> PageTableEntry::PHYSICAL_PAGE_BIT_POS) & 0xfffffffffff) << 12) as usize
+    fn get_physical_address(&self) -> *mut PageTable {
+        let ptr = self.0.map_addr(|addr| {
+            ((addr >> Self::PHYSICAL_PAGE_BIT_POS) & Self::PHYSICAL_PAGE_BITS) << 12
+        });
+        info!("Getting {:p}", ptr);
+        ptr
     }
 
     fn get_target_page_table(&self) -> &'static mut PageTable {
         assert!(!self.is_leaf());
-        assert!(self.get_physical_address() != 0);
+        assert!(!self.get_physical_address().is_null());
         let phyiscal_address = self.get_physical_address();
-        unsafe { &mut *(core::ptr::from_exposed_addr_mut(phyiscal_address)) }
+        unsafe { &mut *phyiscal_address }
     }
 }
 
