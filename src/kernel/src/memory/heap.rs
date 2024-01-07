@@ -1,4 +1,3 @@
-#![cfg_attr(miri, allow(unused_imports))]
 use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
