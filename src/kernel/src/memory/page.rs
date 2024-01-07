@@ -68,12 +68,12 @@ impl PinnedHeapPages {
         copy_slice(data, self.as_u8_slice());
     }
 
-    pub fn as_ptr(&mut self) -> NonNull<Page> {
+    pub fn as_mut_ptr(&mut self) -> NonNull<Page> {
         unsafe { NonNull::new_unchecked(self.allocation.as_mut_ptr()) }
     }
 
     pub fn addr(&mut self) -> NonZeroUsize {
-        self.as_ptr().addr()
+        self.as_mut_ptr().addr()
     }
 }
 
