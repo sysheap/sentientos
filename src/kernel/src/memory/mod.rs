@@ -12,7 +12,6 @@ use self::{
     page_allocator::{MetadataPageAllocator, PageAllocator},
 };
 
-pub mod allocated_pages;
 pub mod heap;
 pub mod page;
 mod page_allocator;

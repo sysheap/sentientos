@@ -15,16 +15,13 @@ use crate::{
     processes::timer,
 };
 
-use super::{
-    allocated_pages::{AllocatedPages, Ephemeral},
-    page::Page,
-};
+use super::page::{Page, PinnedHeapPages};
 
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
 pub struct RootPageTableHolder {
     table: Mutex<&'static mut PageTable>,
-    allocated_pages: Vec<AllocatedPages<Ephemeral>>,
+    allocated_pages: Vec<PinnedHeapPages>,
 }
 
 impl Debug for RootPageTableHolder {
@@ -36,11 +33,11 @@ impl Debug for RootPageTableHolder {
 
 impl RootPageTableHolder {
     fn empty() -> Self {
-        let root_page = AllocatedPages::zalloc(1).unwrap();
-        let root_page_addr = root_page.addr();
+        let mut root_page = PinnedHeapPages::single();
+        let root_page_ptr = root_page.as_ptr();
         let allocated_pages = vec![root_page];
         Self {
-            table: Mutex::new(PageTable::from(root_page_addr)),
+            table: Mutex::new(PageTable::from(root_page_ptr)),
             allocated_pages,
         }
     }
@@ -190,8 +187,8 @@ impl RootPageTableHolder {
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address() == 0 {
-                let page = AllocatedPages::zalloc(1).unwrap();
-                let new_page_table = PageTable::from(page.addr());
+                let mut page = PinnedHeapPages::single();
+                let new_page_table = PageTable::from(page.as_ptr());
                 self.allocated_pages.push(page);
                 first_level_entry.set_physical_address(new_page_table.get_physical_address());
                 first_level_entry.set_validity(true);
@@ -201,8 +198,8 @@ impl RootPageTableHolder {
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address() == 0 {
-                let page = AllocatedPages::zalloc(1).unwrap();
-                let new_page_table = PageTable::from(page.addr());
+                let mut page = PinnedHeapPages::single();
+                let new_page_table = PageTable::from(page.as_ptr());
                 self.allocated_pages.push(page);
                 second_level_entry.set_physical_address(new_page_table.get_physical_address());
                 second_level_entry.set_validity(true);
