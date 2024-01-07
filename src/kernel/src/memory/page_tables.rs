@@ -1,6 +1,6 @@
 use core::{arch::asm, fmt::Debug, ptr::NonNull, u8};
 
-use alloc::{rc::Rc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use common::mutex::Mutex;
 
 use crate::{
@@ -21,7 +21,7 @@ use super::page::{Page, PinnedHeapPages};
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
 pub struct RootPageTableHolder {
-    allocated_pages: Vec<PinnedHeapPages>,
+    allocated_pages: Vec<Box<PageTable>>,
 }
 
 impl Debug for RootPageTableHolder {
@@ -88,19 +88,19 @@ impl LinkerInformation {
 
 impl RootPageTableHolder {
     fn empty() -> Self {
-        let root_page = PinnedHeapPages::single();
+        let root_page = Box::new(PageTable::zero());
         let allocated_pages = vec![root_page];
         Self { allocated_pages }
     }
 
     fn table(&self) -> &PageTable {
         // SAFETY: First index always points to the root page table
-        unsafe { &*(self.allocated_pages[0].as_ptr() as *const PageTable) }
+        self.allocated_pages[0].as_ref()
     }
 
     fn table_mut(&mut self) -> &mut PageTable {
         // SAFETY: First index always points to the root page table
-        unsafe { self.allocated_pages[0].as_mut_ptr().cast().as_mut() }
+        self.allocated_pages[0].as_mut()
     }
 
     pub fn new_with_kernel_mapping() -> Self {
@@ -238,9 +238,8 @@ impl RootPageTableHolder {
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address() == 0 {
-                let mut page = PinnedHeapPages::single();
-                let new_page_table = PageTable::from(page.as_mut_ptr());
-                first_level_entry.set_physical_address(new_page_table.get_physical_address());
+                let mut page = Box::new(PageTable::zero());
+                first_level_entry.set_physical_address(page.get_physical_address());
                 first_level_entry.set_validity(true);
                 new_pages.push(page);
             }
@@ -249,9 +248,8 @@ impl RootPageTableHolder {
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address() == 0 {
-                let mut page = PinnedHeapPages::single();
-                let new_page_table = PageTable::from(page.as_mut_ptr());
-                second_level_entry.set_physical_address(new_page_table.get_physical_address());
+                let mut page = Box::new(PageTable::zero());
+                second_level_entry.set_physical_address(page.get_physical_address());
                 second_level_entry.set_validity(true);
                 new_pages.push(page);
             }
@@ -307,6 +305,12 @@ struct PageTable([PageTableEntry; 512]);
 static_assert_size!(PageTable, core::mem::size_of::<Page>());
 
 impl PageTable {
+    fn zero() -> Self {
+        Self {
+            0: [PageTableEntry(0); 512],
+        }
+    }
+
     fn from(ptr: NonNull<Page>) -> &'static mut PageTable {
         unsafe { ptr.cast().as_mut() }
     }
@@ -335,7 +339,7 @@ impl PageTable {
 }
 
 #[repr(transparent)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct PageTableEntry(u64);
 
 #[repr(u8)]
