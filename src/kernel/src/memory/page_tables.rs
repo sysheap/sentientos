@@ -1,11 +1,11 @@
 use core::{arch::asm, fmt::Debug, ptr::null_mut, u8};
 
-use alloc::{boxed::Box, rc::Rc, vec::Vec};
+use alloc::{boxed::Box, rc::Rc};
 use common::mutex::Mutex;
 
 use crate::{
     assert::static_assert_size,
-    debug, info,
+    debug,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESSS,
     klibc::{
@@ -21,13 +21,38 @@ use super::page::Page;
 static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
 
 pub struct RootPageTableHolder {
-    allocated_pages: Vec<Box<PageTable>>,
+    root_table: *mut PageTable,
 }
 
 impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let page_table = self.table();
         write!(f, "RootPageTableHolder({:p})", page_table)
+    }
+}
+
+impl Drop for RootPageTableHolder {
+    fn drop(&mut self) {
+        let table = self.table();
+        for first_level_entry in table.0.iter() {
+            if !first_level_entry.get_validity() {
+                continue;
+            }
+            let second_level_table = first_level_entry.get_target_page_table();
+            for second_level_entry in second_level_table.0.iter() {
+                if !second_level_entry.get_validity() {
+                    continue;
+                }
+                let third_level_table = second_level_entry.get_physical_address();
+                if third_level_table.is_null() {
+                    continue;
+                }
+                let _ = unsafe { Box::from_raw(third_level_table) };
+            }
+            let _ = unsafe { Box::from_raw(second_level_table) };
+        }
+        let _ = unsafe { Box::from_raw(self.root_table) };
+        self.root_table = null_mut();
     }
 }
 
@@ -88,19 +113,18 @@ impl LinkerInformation {
 
 impl RootPageTableHolder {
     fn empty() -> Self {
-        let root_page = Box::new(PageTable::zero());
-        let allocated_pages = vec![root_page];
-        Self { allocated_pages }
+        let root_table = Box::leak(Box::new(PageTable::zero()));
+        Self { root_table }
     }
 
     fn table(&self) -> &PageTable {
-        // SAFETY: First index always points to the root page table
-        self.allocated_pages[0].as_ref()
+        // SAFETY: It is always allocated
+        unsafe { &*self.root_table }
     }
 
     fn table_mut(&mut self) -> &mut PageTable {
-        // SAFETY: First index always points to the root page table
-        self.allocated_pages[0].as_mut()
+        // SAFETY: It is always allocated
+        unsafe { &mut *self.root_table }
     }
 
     pub fn new_with_kernel_mapping() -> Self {
@@ -227,8 +251,6 @@ impl RootPageTableHolder {
         assert_eq!(physical_address_start % PAGE_SIZE, 0);
         assert_eq!(size % PAGE_SIZE, 0);
 
-        let mut new_pages = Vec::new();
-
         let root_page_table = self.table_mut();
 
         for offset in (0..size).step_by(PAGE_SIZE) {
@@ -238,20 +260,18 @@ impl RootPageTableHolder {
             let first_level_entry =
                 root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
             if first_level_entry.get_physical_address().is_null() {
-                let mut page = Box::new(PageTable::zero());
+                let page = Box::leak(Box::new(PageTable::zero()));
                 first_level_entry.set_physical_address(&mut *page);
                 first_level_entry.set_validity(true);
-                new_pages.push(page);
             }
 
             let second_level_entry = first_level_entry
                 .get_target_page_table()
                 .get_entry_for_virtual_address_mut(current_virtual_address, 1);
             if second_level_entry.get_physical_address().is_null() {
-                let mut page = Box::new(PageTable::zero());
+                let page = Box::leak(Box::new(PageTable::zero()));
                 second_level_entry.set_physical_address(&mut *page);
                 second_level_entry.set_validity(true);
-                new_pages.push(page);
             }
 
             let third_level_entry = second_level_entry
@@ -262,11 +282,9 @@ impl RootPageTableHolder {
 
             third_level_entry.set_xwr_mode(privileges);
             third_level_entry.set_validity(true);
-            third_level_entry.set_physical_address(current_physical_address as *mut PageTable);
+            third_level_entry.set_leaf_address(current_physical_address);
             third_level_entry.set_user_mode_accessible(is_user_mode_accessible);
         }
-
-        self.allocated_pages.append(&mut new_pages);
     }
 
     pub fn map_identity_kernel(
@@ -389,7 +407,6 @@ impl PageTableEntry {
     }
 
     fn set_user_mode_accessible(&mut self, is_user_mode_accessible: bool) {
-        info!("User mode accessible");
         self.0 = self.0.map_addr(|mut addr| {
             set_or_clear_bit(
                 &mut addr,
@@ -420,7 +437,6 @@ impl PageTableEntry {
     }
 
     fn set_physical_address(&mut self, address: *mut PageTable) {
-        info!("Setting {:p}", address);
         let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
         self.0 = address.map_addr(|new_address| {
             let mut original = self.0.addr();
@@ -429,15 +445,22 @@ impl PageTableEntry {
                 ((new_address >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
             original
         });
-        info!("Afterwords 0x{:x}", self.0.addr());
+    }
+
+    fn set_leaf_address(&mut self, address: usize) {
+        let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
+        self.0 = self.0.map_addr(|_| {
+            let mut original = self.0.addr();
+            original &= mask;
+            original |= ((address >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
+            original
+        });
     }
 
     fn get_physical_address(&self) -> *mut PageTable {
-        let ptr = self.0.map_addr(|addr| {
+        self.0.map_addr(|addr| {
             ((addr >> Self::PHYSICAL_PAGE_BIT_POS) & Self::PHYSICAL_PAGE_BITS) << 12
-        });
-        info!("Getting {:p}", ptr);
-        ptr
+        })
     }
 
     fn get_target_page_table(&self) -> &'static mut PageTable {
