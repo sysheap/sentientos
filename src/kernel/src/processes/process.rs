@@ -131,7 +131,8 @@ mod tests {
 
     use super::Process;
 
-    #[test_case]
+    // Disable this test because it is slow in miri
+    #[cfg_attr(not(miri), test_case)]
     fn create_process_from_elf() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
         let process = Process::from_elf(&elf);
