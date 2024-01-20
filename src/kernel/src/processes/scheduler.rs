@@ -25,6 +25,14 @@ extern "C" {
     fn restore_user_context() -> !;
 }
 
+pub fn get_current_process() -> Rc<RefCell<Process>> {
+    CURRENT_PROCESS
+        .lock()
+        .as_ref()
+        .expect("There must be a running current process")
+        .clone()
+}
+
 pub fn schedule() -> ! {
     debug!("Schedule next process");
     prepare_next_process();

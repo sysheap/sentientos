@@ -14,6 +14,8 @@
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use core::cell::RefCell;
+
 use alloc::rc::Rc;
 
 use crate::{
@@ -68,7 +70,9 @@ extern "C" fn kernel_init() {
     #[cfg(test)]
     test_main();
 
-    page_tables::activate_page_table(Rc::new(RootPageTableHolder::new_with_kernel_mapping()));
+    page_tables::activate_page_table(Rc::new(RefCell::new(
+        RootPageTableHolder::new_with_kernel_mapping(),
+    )));
     interrupts::set_sscratch_to_kernel_trap_frame();
 
     plic::init_uart_interrupt();

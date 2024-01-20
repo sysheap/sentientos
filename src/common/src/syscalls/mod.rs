@@ -17,4 +17,5 @@ syscalls!(
     EXIT(status: isize);
     EXECUTE(name: &u8, length: usize);
     WAIT(pid: u64);
+    MMAP_PAGES(number_of_pages: usize);
 );

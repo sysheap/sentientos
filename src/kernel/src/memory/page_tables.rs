@@ -1,4 +1,4 @@
-use core::{arch::asm, fmt::Debug, ptr::null_mut, u8};
+use core::{arch::asm, cell::RefCell, fmt::Debug, ptr::null_mut, u8};
 
 use alloc::{boxed::Box, rc::Rc};
 use common::mutex::Mutex;
@@ -18,7 +18,7 @@ use crate::{
 
 use super::page::Page;
 
-static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RootPageTableHolder>>> = Mutex::new(None);
+static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RefCell<RootPageTableHolder>>>> = Mutex::new(None);
 
 pub struct RootPageTableHolder {
     root_table: *mut PageTable,
@@ -471,8 +471,8 @@ impl PageTableEntry {
     }
 }
 
-pub fn activate_page_table(page_table_holder: Rc<RootPageTableHolder>) {
-    let page_table_address = page_table_holder.table().get_physical_address();
+pub fn activate_page_table(page_table_holder: Rc<RefCell<RootPageTableHolder>>) {
+    let page_table_address = page_table_holder.borrow().table().get_physical_address();
 
     debug!(
         "Activate new page mapping (Addr of page tables 0x{:x})",
@@ -494,6 +494,7 @@ pub fn is_userspace_address(address: usize) -> bool {
     let current_page_table = CURRENT_PAGE_TABLE.lock();
     if let Some(ref current_page_table) = *current_page_table {
         current_page_table
+            .borrow()
             .get_page_table_entry_for_address(address)
             .map_or(false, |entry| entry.get_user_mode_accessible())
     } else {
@@ -510,6 +511,7 @@ pub fn translate_userspace_address_to_physical_address<T>(address: *const T) -> 
     if let Some(ref current_page_table) = *current_page_table {
         let offset_from_page_start = address % PAGE_SIZE;
         current_page_table
+            .borrow()
             .get_page_table_entry_for_address(address)
             .map(|entry| {
                 (entry.get_physical_address() as usize + offset_from_page_start) as *const T

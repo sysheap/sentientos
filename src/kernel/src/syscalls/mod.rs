@@ -11,7 +11,7 @@ use crate::{
     io::stdin_buf::STDIN_BUFFER,
     memory::page_tables::translate_userspace_address_to_physical_address,
     print,
-    processes::scheduler::{self, let_current_process_wait_for},
+    processes::scheduler::{self, get_current_process, let_current_process_wait_for},
 };
 
 struct SyscallHandler;
@@ -69,6 +69,13 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
         } else {
             SYSCALL_INVALID_PID
         }
+    }
+
+    #[allow(non_snake_case)]
+    fn MMAP_PAGES(&self, number_of_pages: usize) -> isize {
+        let current_process = get_current_process();
+        let mut current_process = current_process.borrow_mut();
+        current_process.mmap_pages(number_of_pages) as isize
     }
 }
 
