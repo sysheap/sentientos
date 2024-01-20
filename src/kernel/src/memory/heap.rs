@@ -253,7 +253,11 @@ static HEAP: MutexHeap<super::StaticPageAllocator> = MutexHeap::new();
 
 #[cfg(test)]
 mod test {
-    use core::{alloc::GlobalAlloc, ops::Range, ptr::NonNull};
+    use core::{
+        alloc::GlobalAlloc,
+        ops::Range,
+        ptr::{addr_of_mut, NonNull},
+    };
 
     use common::mutex::Mutex;
 
@@ -283,7 +287,9 @@ mod test {
 
     fn init_allocator() {
         unsafe {
-            PAGE_ALLOC.lock().init(&mut PAGE_ALLOC_MEMORY);
+            PAGE_ALLOC
+                .lock()
+                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
         }
     }
 

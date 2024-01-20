@@ -134,7 +134,10 @@ pub trait PageAllocator {
 
 #[cfg(test)]
 mod tests {
-    use core::{ops::Range, ptr::NonNull};
+    use core::{
+        ops::Range,
+        ptr::{addr_of_mut, NonNull},
+    };
 
     use common::mutex::Mutex;
 
@@ -147,7 +150,9 @@ mod tests {
 
     fn init_allocator() {
         unsafe {
-            PAGE_ALLOC.lock().init(&mut PAGE_ALLOC_MEMORY);
+            PAGE_ALLOC
+                .lock()
+                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
         }
     }
 
