@@ -72,3 +72,11 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test_case]
+    fn fail_lib_tets() {
+        assert!(1 == 2, "THIS MUST FAIL");
+    }
+}

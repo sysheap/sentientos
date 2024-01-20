@@ -1,12 +1,13 @@
 #![no_std]
 #![no_main]
 
-use common::{mutex::Mutex, syscalls::SYSCALL_WAIT};
+use alloc::string::String;
+use common::syscalls::SYSCALL_WAIT;
 use userspace::{print, println, util::wait};
 
+extern crate alloc;
 extern crate userspace;
 
-static INPUT_BUFFER: Mutex<[u8; 1024]> = Mutex::new([0; 1024]);
 const DELETE: u8 = 127;
 
 #[no_mangle]
@@ -16,8 +17,7 @@ fn main() {
     println!("Type 'help' for a list of available commands.");
     loop {
         print!("$ ");
-        let mut input_buffer = INPUT_BUFFER.lock();
-        let mut buffer_index = 0;
+        let mut input = String::new();
         loop {
             let mut result: isize;
             loop {
@@ -35,26 +35,23 @@ fn main() {
                     break;
                 }
                 DELETE => {
-                    if buffer_index > 0 {
-                        buffer_index -= 1;
+                    if input.pop().is_some() {
                         print!("{}{}{}", 8 as char, ' ', 8 as char);
                     }
                 }
                 _ => {
-                    input_buffer[buffer_index] = next_char;
-                    buffer_index += 1;
+                    input.push(next_char as char);
                     print!("{}", next_char as char);
                 }
             }
         }
         // Parse input and execute
-        let command = core::str::from_utf8(&input_buffer[0..buffer_index]).unwrap();
-        parse_command_and_execute(command);
+        parse_command_and_execute(input);
     }
 }
 
-fn parse_command_and_execute(command: &str) {
-    match command {
+fn parse_command_and_execute(command: String) {
+    match command.as_str() {
         "" => {}
         "exit" => {
             println!("Exiting...");
