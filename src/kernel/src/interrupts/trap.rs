@@ -3,11 +3,15 @@ use core::panic;
 use common::syscalls::trap_frame::{Register, TrapFrame};
 
 use crate::{
-    cpu, debug,
+    cpu::{self, read_satp, write_satp_and_fence},
+    debug,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
-    memory::page_tables,
-    processes::{scheduler, timer},
+    memory::page_tables::{activate_page_table, KERNEL_PAGE_TABLES},
+    processes::{
+        scheduler::{self, get_current_process_expect},
+        timer,
+    },
     syscalls::handle_syscall,
 };
 
@@ -21,6 +25,9 @@ extern "C" fn supervisor_mode_trap(
     sepc: usize,
     trap_frame: &mut TrapFrame,
 ) {
+    let old_tables = read_satp();
+    debug!("Activate KERNEL_PAGE_TABLES");
+    activate_page_table(&KERNEL_PAGE_TABLES.lock());
     debug!(
         "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})\nTrap Frame: {:?}",
         sepc,
@@ -31,6 +38,15 @@ extern "C" fn supervisor_mode_trap(
         handle_interrupt(cause, stval, sepc, trap_frame);
     } else {
         handle_exception(cause, stval, sepc, trap_frame);
+    }
+
+    // Restore old page tables
+    // SAFTEY: They should be valid. If a process dies we don't come here
+    // because the scheduler returns with restore_user_context
+    // Hoewever: This is very ugly and prone to error.
+    // TODO: Find a better way to do this
+    unsafe {
+        write_satp_and_fence(old_tables);
     }
 }
 
@@ -47,7 +63,7 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
                 cause.get_exception_code(),
                 stval,
                 sepc,
-                page_tables::is_userspace_address(sepc),
+                get_current_process_expect().borrow().get_page_table().is_userspace_address(sepc),
                 trap_frame
             );
         }
@@ -65,8 +81,7 @@ fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_fr
 }
 
 fn handle_supervisor_timer_interrupt() {
-    debug!("Supervisor timer interrupt occurred!");
-    timer::set_timer(10);
+    timer::set_timer(10000);
     scheduler::schedule();
 }
 

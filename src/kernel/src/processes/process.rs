@@ -1,6 +1,6 @@
-use core::{cell::RefCell, fmt::Debug};
+use core::fmt::Debug;
 
-use alloc::{boxed::Box, rc::Rc, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
 use common::{
     mutex::Mutex,
     syscalls::trap_frame::{Register, TrapFrame},
@@ -34,7 +34,7 @@ fn get_next_pid() -> Pid {
 pub struct Process {
     pid: Pid,
     register_state: Box<TrapFrame>,
-    page_table: Rc<RefCell<RootPageTableHolder>>,
+    page_table: RootPageTableHolder,
     program_counter: usize,
     allocated_pages: Vec<PinnedHeapPages>,
     state: ProcessState,
@@ -66,7 +66,7 @@ impl Debug for Process {
 impl Process {
     pub fn mmap_pages(&mut self, number_of_pages: usize) -> *mut u8 {
         let pages = PinnedHeapPages::new(number_of_pages);
-        self.page_table.borrow_mut().map_userspace(
+        self.page_table.map_userspace(
             self.free_mmap_address,
             pages.as_ptr() as usize,
             PAGE_SIZE * number_of_pages,
@@ -99,8 +99,8 @@ impl Process {
         self.state = state;
     }
 
-    pub fn get_page_table(&self) -> Rc<RefCell<RootPageTableHolder>> {
-        self.page_table.clone()
+    pub fn get_page_table(&self) -> &RootPageTableHolder {
+        &self.page_table
     }
 
     pub fn get_pid(&self) -> Pid {
@@ -116,7 +116,7 @@ impl Process {
 
         let LoadedElf {
             entry_address,
-            page_tables,
+            page_tables: page_table,
             allocated_pages,
         } = loader::load_elf(elf_file);
 
@@ -126,7 +126,7 @@ impl Process {
         Self {
             pid: get_next_pid(),
             register_state: Box::new(register_state),
-            page_table: Rc::new(RefCell::new(page_tables)),
+            page_table,
             program_counter: entry_address,
             allocated_pages,
             state: ProcessState::Runnable,

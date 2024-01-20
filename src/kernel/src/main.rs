@@ -11,17 +11,14 @@
 #![feature(non_null_convenience)]
 #![feature(pointer_is_aligned)]
 #![feature(exposed_provenance)]
+#![feature(lazy_cell)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
-
-use core::cell::RefCell;
-
-use alloc::rc::Rc;
 
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
-    memory::page_tables::{self, RootPageTableHolder},
+    memory::page_tables::{self},
     processes::{scheduler, timer},
 };
 
@@ -70,9 +67,8 @@ extern "C" fn kernel_init() {
     #[cfg(test)]
     test_main();
 
-    page_tables::activate_page_table(Rc::new(RefCell::new(
-        RootPageTableHolder::new_with_kernel_mapping(),
-    )));
+    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
+
     interrupts::set_sscratch_to_kernel_trap_frame();
 
     plic::init_uart_interrupt();

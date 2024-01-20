@@ -25,7 +25,7 @@ extern "C" {
     fn restore_user_context() -> !;
 }
 
-pub fn get_current_process() -> Rc<RefCell<Process>> {
+pub fn get_current_process_expect() -> Rc<RefCell<Process>> {
     CURRENT_PROCESS
         .lock()
         .as_ref()

@@ -9,9 +9,8 @@ use common::syscalls::{
 use crate::{
     debug,
     io::stdin_buf::STDIN_BUFFER,
-    memory::page_tables::translate_userspace_address_to_physical_address,
     print,
-    processes::scheduler::{self, get_current_process, let_current_process_wait_for},
+    processes::scheduler::{self, get_current_process_expect, let_current_process_wait_for},
 };
 
 struct SyscallHandler;
@@ -43,7 +42,11 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
     #[allow(non_snake_case)]
     fn EXECUTE(&self, name: Userpointer<u8>, length: usize) -> isize {
         // Check validity of userspointer before using it
-        let physical_address = translate_userspace_address_to_physical_address(name.get());
+        let current_process = get_current_process_expect();
+        let current_process = current_process.borrow();
+        let physical_address = current_process
+            .get_page_table()
+            .translate_userspace_address_to_physical_address(name.get());
 
         if let Some(physical_address) = physical_address {
             let slice = unsafe { &*slice_from_raw_parts(physical_address, length) };
@@ -73,7 +76,7 @@ impl common::syscalls::kernel::Syscalls for SyscallHandler {
 
     #[allow(non_snake_case)]
     fn MMAP_PAGES(&self, number_of_pages: usize) -> isize {
-        let current_process = get_current_process();
+        let current_process = get_current_process_expect();
         let mut current_process = current_process.borrow_mut();
         current_process.mmap_pages(number_of_pages) as isize
     }

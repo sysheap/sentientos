@@ -9,7 +9,7 @@ use crate::klibc::util::copy_slice;
 
 pub const PAGE_SIZE: usize = 4096;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 #[repr(C, align(4096))]
 pub struct Page([u8; PAGE_SIZE]);
 
@@ -24,6 +24,12 @@ impl Deref for Page {
 impl DerefMut for Page {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl core::fmt::Debug for Page {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Page({:p})", self.0.as_ptr())
     }
 }
 

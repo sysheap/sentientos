@@ -1,10 +1,11 @@
-use core::{arch::asm, cell::RefCell, fmt::Debug, ptr::null_mut, u8};
+use core::{cell::LazyCell, fmt::Debug, ptr::null_mut, u8};
 
-use alloc::{boxed::Box, rc::Rc};
+use alloc::boxed::Box;
 use common::mutex::Mutex;
 
 use crate::{
     assert::static_assert_size,
+    cpu::{read_satp, write_satp_and_fence},
     debug,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESSS,
@@ -18,7 +19,11 @@ use crate::{
 
 use super::page::Page;
 
-static CURRENT_PAGE_TABLE: Mutex<Option<Rc<RefCell<RootPageTableHolder>>>> = Mutex::new(None);
+pub static KERNEL_PAGE_TABLES: Mutex<LazyCell<&'static RootPageTableHolder>> =
+    Mutex::new(LazyCell::new(|| {
+        let page_tables = Box::new(RootPageTableHolder::new_with_kernel_mapping());
+        Box::leak(page_tables)
+    }));
 
 pub struct RootPageTableHolder {
     root_table: *mut PageTable,
@@ -33,6 +38,7 @@ impl Debug for RootPageTableHolder {
 
 impl Drop for RootPageTableHolder {
     fn drop(&mut self) {
+        assert!(!self.is_active(), "Page table is dropped while active");
         let table = self.table();
         for first_level_entry in table.0.iter() {
             if !first_level_entry.get_validity() {
@@ -125,6 +131,20 @@ impl RootPageTableHolder {
     fn table_mut(&mut self) -> &mut PageTable {
         // SAFETY: It is always allocated
         unsafe { &mut *self.root_table }
+    }
+
+    fn is_active(&self) -> bool {
+        let satp = read_satp();
+        let ppn = satp & 0xfffffffffff;
+        let page_table_address = ppn << 12;
+
+        let current_physical_address = self.table().get_physical_address();
+
+        debug!(
+            "is_active: satp: {:x}; page_table_address: {:x}",
+            satp, current_physical_address
+        );
+        page_table_address == current_physical_address
     }
 
     pub fn new_with_kernel_mapping() -> Self {
@@ -314,6 +334,26 @@ impl RootPageTableHolder {
             name,
         );
     }
+
+    pub fn is_userspace_address(&self, address: usize) -> bool {
+        self.get_page_table_entry_for_address(address)
+            .map_or(false, |entry| entry.get_user_mode_accessible())
+    }
+
+    pub fn translate_userspace_address_to_physical_address<T>(
+        &self,
+        address: *const T,
+    ) -> Option<*const T> {
+        let address = address as usize;
+        if !self.is_userspace_address(address) {
+            return None;
+        }
+
+        let offset_from_page_start = address % PAGE_SIZE;
+        self.get_page_table_entry_for_address(address).map(|entry| {
+            (entry.get_physical_address() as usize + offset_from_page_start) as *const T
+        })
+    }
 }
 
 #[repr(C, align(4096))]
@@ -471,8 +511,8 @@ impl PageTableEntry {
     }
 }
 
-pub fn activate_page_table(page_table_holder: Rc<RefCell<RootPageTableHolder>>) {
-    let page_table_address = page_table_holder.borrow().table().get_physical_address();
+pub fn activate_page_table(page_table_holder: &RootPageTableHolder) {
+    let page_table_address = page_table_holder.table().get_physical_address();
 
     debug!(
         "Activate new page mapping (Addr of page tables 0x{:x})",
@@ -483,42 +523,8 @@ pub fn activate_page_table(page_table_holder: Rc<RefCell<RootPageTableHolder>>) 
     let satp_val = 8 << 60 | (page_table_address_shifted & 0xfffffffffff);
 
     unsafe {
-        asm!("csrw satp, {satp_val}", satp_val = in(reg) satp_val);
-        asm!("sfence.vma");
-    }
-
-    CURRENT_PAGE_TABLE.lock().replace(page_table_holder);
-}
-
-pub fn is_userspace_address(address: usize) -> bool {
-    let current_page_table = CURRENT_PAGE_TABLE.lock();
-    if let Some(ref current_page_table) = *current_page_table {
-        current_page_table
-            .borrow()
-            .get_page_table_entry_for_address(address)
-            .map_or(false, |entry| entry.get_user_mode_accessible())
-    } else {
-        false
-    }
-}
-
-pub fn translate_userspace_address_to_physical_address<T>(address: *const T) -> Option<*const T> {
-    let address = address as usize;
-    if !is_userspace_address(address) {
-        return None;
-    }
-    let current_page_table = CURRENT_PAGE_TABLE.lock();
-    if let Some(ref current_page_table) = *current_page_table {
-        let offset_from_page_start = address % PAGE_SIZE;
-        current_page_table
-            .borrow()
-            .get_page_table_entry_for_address(address)
-            .map(|entry| {
-                (entry.get_physical_address() as usize + offset_from_page_start) as *const T
-            })
-    } else {
-        None
-    }
+        write_satp_and_fence(satp_val);
+    };
 }
 
 #[cfg(test)]

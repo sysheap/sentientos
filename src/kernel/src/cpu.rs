@@ -21,3 +21,22 @@ pub fn read_sepc() -> usize {
     }
     sepc
 }
+
+pub unsafe fn write_satp_and_fence(satp_val: usize) {
+    unsafe {
+        asm!("csrw satp, {satp_val}", satp_val = in(reg) satp_val);
+        asm!("sfence.vma");
+    }
+}
+
+pub fn read_satp() -> usize {
+    if cfg!(miri) {
+        return 0;
+    }
+
+    let satp: usize;
+    unsafe {
+        asm!("csrr {}, satp", out(reg) satp);
+    }
+    satp
+}
