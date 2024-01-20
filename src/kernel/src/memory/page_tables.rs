@@ -525,7 +525,7 @@ mod tests {
 
     #[test_case]
     fn check_drop_of_page_table_holder() {
-        let page_table = RootPageTableHolder::new_with_kernel_mapping();
-        drop(page_table);
+        let mut page_table = RootPageTableHolder::empty();
+        page_table.map_userspace(0x1000, 0x2000, 0x3000, super::XWRMode::ReadOnly, "Test");
     }
 }
