@@ -5,4 +5,3 @@
 - Sleep for processes
 - Kernel-Userspace Allocator
 - Better syscall return type
-- Allocator in Userspace

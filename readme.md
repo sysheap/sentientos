@@ -23,6 +23,7 @@ TODO
 
 - VirtIO / Filesystem
 - Networkstack
+- GUI
 - See [todo](./todo.md)
 
 ## How do I run it?
