@@ -1,9 +1,16 @@
-extern crate macros;
+use crate::ecall;
+use crate::syscalls;
 
-use macros::syscalls;
+use self::syscall_argument::SyscallArgument;
 
+mod ecall;
+mod macros;
+mod syscall_argument;
 pub mod trap_frame;
-pub mod userpointer;
+pub mod userspace_argument;
+
+use self::ecall::*;
+use self::userspace_argument::UserspaceArgument;
 
 pub const SYSCALL_SUCCESS: isize = 0;
 pub const SYSCALL_WAIT: isize = -1;
@@ -12,10 +19,10 @@ pub const SYSCALL_INVALID_PROGRAM: isize = -3;
 pub const SYSCALL_INVALID_PID: isize = -4;
 
 syscalls!(
-    WRITE_CHAR(c: u8);
-    READ_CHAR();
-    EXIT(status: isize);
-    EXECUTE(name: &u8, length: usize);
-    WAIT(pid: u64);
-    MMAP_PAGES(number_of_pages: usize);
+    sys_write_char(c: char) -> isize;
+    sys_read_char() -> isize;
+    sys_exit(status: isize) -> isize;
+    sys_execute(name: &u8, length: usize) -> isize;
+    sys_wait(pid: u64) -> isize;
+    sys_mmap_pages(number_of_pages: usize) -> isize;
 );

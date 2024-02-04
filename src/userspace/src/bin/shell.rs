@@ -2,7 +2,7 @@
 #![no_main]
 
 use alloc::string::String;
-use common::syscalls::SYSCALL_WAIT;
+use common::syscalls::{sys_execute, sys_exit, sys_read_char, sys_wait, SYSCALL_WAIT};
 use userspace::{print, println, util::wait};
 
 extern crate alloc;
@@ -21,7 +21,7 @@ fn main() {
         loop {
             let mut result: isize;
             loop {
-                result = common::syscalls::userspace::READ_CHAR();
+                result = sys_read_char();
                 if result != SYSCALL_WAIT {
                     break;
                 }
@@ -55,7 +55,7 @@ fn parse_command_and_execute(command: String) {
         "" => {}
         "exit" => {
             println!("Exiting...");
-            common::syscalls::userspace::EXIT(0);
+            sys_exit(0);
         }
         "help" => {
             println!("Available commands:");
@@ -70,11 +70,11 @@ fn parse_command_and_execute(command: String) {
                 len -= 1;
             }
 
-            let pid = common::syscalls::userspace::EXECUTE(reference, len);
+            let pid = sys_execute(reference, len);
             if pid < 0 {
                 println!("Error executing program: {}", pid);
             } else if !program.ends_with('&') {
-                common::syscalls::userspace::WAIT(pid as u64);
+                sys_wait(pid as u64);
             }
         }
     }

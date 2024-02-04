@@ -2,7 +2,6 @@
 members = [
     "src/common",
     "src/kernel",
-    "src/macros",
     "src/userspace",
 ]
 default-members = ["src/kernel"]

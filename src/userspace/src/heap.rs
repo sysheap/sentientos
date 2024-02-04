@@ -10,7 +10,7 @@ use core::{
     ptr::{null_mut, NonNull},
 };
 
-use common::{mutex::Mutex, syscalls};
+use common::{mutex::Mutex, syscalls::sys_mmap_pages};
 
 const PAGE_SIZE: usize = 4096;
 
@@ -306,7 +306,7 @@ struct KernelSyscallAllocator;
 
 impl PageAllocator for KernelSyscallAllocator {
     fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
-        let ptr = syscalls::userspace::MMAP_PAGES(number_of_pages_requested) as *mut Page;
+        let ptr = sys_mmap_pages(number_of_pages_requested) as *mut Page;
         if ptr.is_null() {
             return None;
         }

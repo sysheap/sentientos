@@ -2,7 +2,7 @@ use core::fmt::{self, Write};
 
 use common::{
     mutex::Mutex,
-    syscalls::{userspace::WRITE_CHAR, SYSCALL_SUCCESS},
+    syscalls::{sys_write_char, SYSCALL_SUCCESS},
 };
 
 #[macro_export]
@@ -25,8 +25,8 @@ struct Writer;
 
 impl Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for c in s.bytes() {
-            if WRITE_CHAR(c) != SYSCALL_SUCCESS {
+        for c in s.chars() {
+            if sys_write_char(c) != SYSCALL_SUCCESS {
                 return Err(fmt::Error);
             }
         }

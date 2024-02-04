@@ -54,7 +54,10 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
     match cause.get_exception_code() {
         ENVIRONMENT_CALL_FROM_U_MODE => {
             cpu::write_sepc(sepc + 4); // Skip the ecall instruction
-            trap_frame[Register::a0] = handle_syscall(trap_frame) as usize;
+            let nr = trap_frame[Register::a0];
+            let arg1 = trap_frame[Register::a1];
+            let arg2 = trap_frame[Register::a2];
+            trap_frame[Register::a0] = handle_syscall(nr, arg1, arg2);
         }
         _ => {
             panic!(
