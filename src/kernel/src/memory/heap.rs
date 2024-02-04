@@ -272,24 +272,28 @@ mod test {
     const HEAP_SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * HEAP_PAGES] = [0; PAGE_SIZE * HEAP_PAGES];
-    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
+    static PAGE_ALLOC: Mutex<Option<MetadataPageAllocator>> = Mutex::new(None);
 
     struct TestAllocator;
     impl PageAllocator for TestAllocator {
         fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
-            PAGE_ALLOC.lock().alloc(number_of_pages_requested)
+            PAGE_ALLOC
+                .lock()
+                .as_mut()
+                .unwrap()
+                .alloc(number_of_pages_requested)
         }
 
         fn dealloc(page: NonNull<Page>) {
-            PAGE_ALLOC.lock().dealloc(page)
+            PAGE_ALLOC.lock().as_mut().unwrap().dealloc(page)
         }
     }
 
     fn init_allocator() {
         unsafe {
-            PAGE_ALLOC
-                .lock()
-                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
+            *PAGE_ALLOC.lock() = Some(MetadataPageAllocator::new(&mut *addr_of_mut!(
+                PAGE_ALLOC_MEMORY
+            )));
         }
     }
 

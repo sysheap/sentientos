@@ -1,9 +1,5 @@
 use crate::{debug, memory::PAGE_SIZE};
-use core::{
-    fmt::Debug,
-    ops::Range,
-    ptr::{null_mut, NonNull},
-};
+use core::{fmt::Debug, ops::Range, ptr::NonNull};
 
 use super::page::Page;
 
@@ -30,14 +26,7 @@ impl<'a> Debug for MetadataPageAllocator<'a> {
 }
 
 impl<'a> MetadataPageAllocator<'a> {
-    pub(super) const fn new() -> Self {
-        Self {
-            metadata: &mut [],
-            pages: null_mut()..null_mut(),
-        }
-    }
-
-    pub(super) fn init(&mut self, memory: &'a mut [u8]) {
+    pub(super) fn new(memory: &'a mut [u8]) -> Self {
         let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
@@ -57,14 +46,14 @@ impl<'a> MetadataPageAllocator<'a> {
 
         metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
 
-        self.metadata = metadata;
-
-        self.pages = heap.as_mut_ptr_range();
+        let pages = heap.as_mut_ptr_range();
 
         debug!("Page allocator initalized");
-        debug!("Metadata start:\t\t{:p}", self.metadata);
-        debug!("Heap start:\t\t{:p}", self.pages.start);
-        debug!("Number of pages:\t{}\n", self.total_heap_pages());
+        debug!("Metadata start:\t\t{:p}", metadata);
+        debug!("Heap start:\t\t{:p}", pages.start);
+        debug!("Number of pages:\t{}\n", metadata.len());
+
+        Self { metadata, pages }
     }
 
     fn total_heap_pages(&self) -> usize {
@@ -134,53 +123,31 @@ pub trait PageAllocator {
 
 #[cfg(test)]
 mod tests {
-    use core::{
-        ops::Range,
-        ptr::{addr_of_mut, NonNull},
-    };
-
-    use common::mutex::Mutex;
+    use core::ptr::addr_of_mut;
 
     use crate::memory::page_allocator::PageStatus;
 
-    use super::{MetadataPageAllocator, Page, PAGE_SIZE};
+    use super::{MetadataPageAllocator, PAGE_SIZE};
 
     static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
-    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
-    fn init_allocator() {
-        unsafe {
-            PAGE_ALLOC
-                .lock()
-                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
-        }
-    }
-
-    fn alloc(number_of_pages: usize) -> Option<Range<NonNull<Page>>> {
-        PAGE_ALLOC.lock().alloc(number_of_pages)
-    }
-
-    fn dealloc(pages: Range<NonNull<Page>>) {
-        PAGE_ALLOC.lock().dealloc(pages.start)
+    fn create_allocator() -> MetadataPageAllocator<'static> {
+        unsafe { MetadataPageAllocator::new(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY)) }
     }
 
     #[test_case]
     fn clean_start() {
-        init_allocator();
-        assert!(PAGE_ALLOC
-            .lock()
-            .metadata
-            .iter()
-            .all(|s| *s == PageStatus::Free));
+        let allocator = create_allocator();
+        assert!(allocator.metadata.iter().all(|s| *s == PageStatus::Free));
     }
 
     #[test_case]
     fn exhaustion_allocation() {
-        init_allocator();
-        let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
-        let _pages = alloc(number_of_pages).unwrap();
-        assert!(alloc(1).is_none());
-        let allocator = PAGE_ALLOC.lock();
+        let mut allocator = create_allocator();
+        let number_of_pages = allocator.total_heap_pages();
+        let _pages = allocator.alloc(number_of_pages).unwrap();
+        assert!(allocator.alloc(1).is_none());
+        let allocator = allocator;
         let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
         assert!(all_metadata_except_last
             .iter()
@@ -190,41 +157,41 @@ mod tests {
 
     #[test_case]
     fn beyond_capacity() {
-        init_allocator();
-        let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
-        let pages = alloc(number_of_pages + 1);
+        let mut allocator = create_allocator();
+        let number_of_pages = allocator.total_heap_pages();
+        let pages = allocator.alloc(number_of_pages + 1);
         assert!(pages.is_none());
     }
 
     #[test_case]
     fn all_single_allocations() {
-        init_allocator();
-        let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
+        let mut allocator = create_allocator();
+        let number_of_pages = allocator.total_heap_pages();
         for _ in 0..number_of_pages {
-            assert!(alloc(1).is_some());
+            assert!(allocator.alloc(1).is_some());
         }
-        assert!(alloc(1).is_none());
+        assert!(allocator.alloc(1).is_none());
     }
 
     #[test_case]
     fn metadata_integrity() {
-        init_allocator();
-        let page1 = alloc(1).unwrap();
-        assert_eq!(PAGE_ALLOC.lock().metadata[0], PageStatus::Last);
-        assert!(PAGE_ALLOC.lock().metadata[1..]
+        let mut allocator = create_allocator();
+        let page1 = allocator.alloc(1).unwrap();
+        assert_eq!(allocator.metadata[0], PageStatus::Last);
+        assert!(allocator.metadata[1..]
             .iter()
             .all(|s| *s == PageStatus::Free));
-        let page2 = alloc(2).unwrap();
+        let page2 = allocator.alloc(2).unwrap();
         assert_eq!(
-            PAGE_ALLOC.lock().metadata[..3],
+            allocator.metadata[..3],
             [PageStatus::Last, PageStatus::Used, PageStatus::Last]
         );
-        assert!(PAGE_ALLOC.lock().metadata[3..]
+        assert!(allocator.metadata[3..]
             .iter()
             .all(|s| *s == PageStatus::Free));
-        let page3 = alloc(3).unwrap();
+        let page3 = allocator.alloc(3).unwrap();
         assert_eq!(
-            PAGE_ALLOC.lock().metadata[..6],
+            allocator.metadata[..6],
             [
                 PageStatus::Last,
                 PageStatus::Used,
@@ -234,12 +201,12 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        assert!(PAGE_ALLOC.lock().metadata[6..]
+        assert!(allocator.metadata[6..]
             .iter()
             .all(|s| *s == PageStatus::Free),);
-        dealloc(page2);
+        allocator.dealloc(page2.start);
         assert_eq!(
-            PAGE_ALLOC.lock().metadata[..6],
+            allocator.metadata[..6],
             [
                 PageStatus::Last,
                 PageStatus::Free,
@@ -249,9 +216,9 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        dealloc(page1);
+        allocator.dealloc(page1.start);
         assert_eq!(
-            PAGE_ALLOC.lock().metadata[..6],
+            allocator.metadata[..6],
             [
                 PageStatus::Free,
                 PageStatus::Free,
@@ -261,9 +228,9 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        dealloc(page3);
+        allocator.dealloc(page3.start);
         assert_eq!(
-            PAGE_ALLOC.lock().metadata[..6],
+            allocator.metadata[..6],
             [
                 PageStatus::Free,
                 PageStatus::Free,

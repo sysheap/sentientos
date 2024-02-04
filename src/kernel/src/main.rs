@@ -6,7 +6,6 @@
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(const_mut_refs)]
-#![feature(offset_of)]
 #![feature(option_take_if)]
 #![feature(non_null_convenience)]
 #![feature(pointer_is_aligned)]
