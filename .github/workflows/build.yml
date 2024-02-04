@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - uses: taiki-e/install-action@just
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install clippy
         run: rustup component add clippy
       - name: Clippy
@@ -22,6 +22,6 @@ jobs:
 
     steps:
       - uses: taiki-e/install-action@just
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build
         run: just build-release
