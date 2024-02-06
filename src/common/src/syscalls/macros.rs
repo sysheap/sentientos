@@ -29,9 +29,7 @@ macro_rules! syscalls {
 
 
         pub mod kernel {
-            use super::UserspaceArgument;
-            use super::syscall_argument::SyscallArgument;
-            use super::syscall_argument::SyscallReturnArgument;
+            use super::*;
 
             pub trait KernelSyscalls {
                 $(fn $name($($arg_name: UserspaceArgument<$arg_ty>),*) -> $ret;)*

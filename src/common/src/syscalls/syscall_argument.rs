@@ -1,3 +1,5 @@
+use super::SysWaitError;
+
 pub trait SyscallArgument {
     fn into_reg(self) -> usize;
     fn from_reg(value: usize) -> Self;
@@ -127,5 +129,18 @@ impl<T> SyscallArgument for *mut T {
 
     fn from_reg(value: usize) -> Self {
         value as *mut T
+    }
+}
+
+impl SyscallArgument for SysWaitError {
+    fn into_reg(self) -> usize {
+        self as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        match value {
+            0 => SysWaitError::InvalidPid,
+            _ => panic!("Invalid SysWaitError value: {}", value),
+        }
     }
 }

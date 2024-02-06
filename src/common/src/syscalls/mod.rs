@@ -18,12 +18,18 @@ pub const SYSCALL_INVALID_PTR: isize = -2;
 pub const SYSCALL_INVALID_PROGRAM: isize = -3;
 pub const SYSCALL_INVALID_PID: isize = -4;
 
+#[derive(Debug)]
+#[repr(usize)]
+pub enum SysWaitError {
+    InvalidPid,
+}
+
 syscalls!(
     sys_write_char(c: char) -> ();
     sys_read_input() -> Option<u8>;
     sys_exit(status: isize) -> ();
     // TODO: Implement slice as argument using a wrapper
     sys_execute(name: &u8, length: usize) -> isize;
-    sys_wait(pid: u64) -> isize;
+    sys_wait(pid: u64) -> Result<(), SysWaitError>;
     sys_mmap_pages(number_of_pages: usize) -> *mut u8;
 );

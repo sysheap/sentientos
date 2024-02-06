@@ -7,6 +7,7 @@ use std::process::Command;
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");
     println!("cargo:rerun-if-changed=../userspace/");
+    println!("cargo:rerun-if-changed=../common/");
     println!("cargo:rustc-link-arg-bin=kernel=-Tsrc/kernel/qemu.ld");
 
     if is_miri_execution() {

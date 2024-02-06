@@ -4,8 +4,8 @@ use core::ptr::slice_from_raw_parts;
 
 use alloc::string::String;
 use common::syscalls::{
-    kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SYSCALL_INVALID_PID,
-    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR, SYSCALL_SUCCESS,
+    kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SysWaitError,
+    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR,
 };
 
 use crate::{
@@ -55,11 +55,11 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_wait(pid: UserspaceArgument<u64>) -> isize {
+    fn sys_wait(pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
         if let_current_process_wait_for(pid.validate()) {
-            SYSCALL_SUCCESS
+            Ok(())
         } else {
-            SYSCALL_INVALID_PID
+            Err(SysWaitError::InvalidPid)
         }
     }
 
