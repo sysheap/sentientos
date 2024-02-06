@@ -2,7 +2,7 @@
 #![no_main]
 
 use alloc::string::String;
-use common::syscalls::{sys_execute, sys_exit, sys_read_char, sys_wait, SYSCALL_WAIT};
+use common::syscalls::{sys_execute, sys_exit, sys_read_input, sys_wait};
 use userspace::{print, println, util::wait};
 
 extern crate alloc;
@@ -19,16 +19,13 @@ fn main() {
         print!("$ ");
         let mut input = String::new();
         loop {
-            let mut result: isize;
-            loop {
-                result = sys_read_char();
-                if result != SYSCALL_WAIT {
-                    break;
+            let result = loop {
+                if let Some(c) = sys_read_input() {
+                    break c;
                 }
                 wait(10000);
-            }
-            let next_char = result as u8;
-            match next_char {
+            };
+            match result {
                 b'\r' => {
                     // Carriage return
                     println!();
@@ -40,8 +37,10 @@ fn main() {
                     }
                 }
                 _ => {
-                    input.push(next_char as char);
-                    print!("{}", next_char as char);
+                    assert!(result.is_ascii());
+                    let result = result as char;
+                    input.push(result);
+                    print!("{}", result);
                 }
             }
         }

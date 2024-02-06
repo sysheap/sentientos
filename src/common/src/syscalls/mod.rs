@@ -1,7 +1,7 @@
 use crate::ecall;
 use crate::syscalls;
 
-use self::syscall_argument::SyscallArgument;
+use self::syscall_argument::{SyscallArgument, SyscallReturnArgument};
 
 mod ecall;
 mod macros;
@@ -20,7 +20,7 @@ pub const SYSCALL_INVALID_PID: isize = -4;
 
 syscalls!(
     sys_write_char(c: char) -> ();
-    sys_read_char() -> isize;
+    sys_read_input() -> Option<u8>;
     sys_exit(status: isize) -> ();
     // TODO: Implement slice as argument using a wrapper
     sys_execute(name: &u8, length: usize) -> isize;

@@ -5,7 +5,7 @@ use core::ptr::slice_from_raw_parts;
 use alloc::string::String;
 use common::syscalls::{
     kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SYSCALL_INVALID_PID,
-    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR, SYSCALL_SUCCESS, SYSCALL_WAIT,
+    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR, SYSCALL_SUCCESS,
 };
 
 use crate::{
@@ -21,20 +21,16 @@ use self::validator::FailibleSliceValidator;
 struct SyscallHandler;
 
 impl KernelSyscalls for SyscallHandler {
-    fn sys_write_char(c: UserspaceArgument<char>) -> () {
+    fn sys_write_char(c: UserspaceArgument<char>) {
         print!("{}", c.validate());
     }
 
-    fn sys_read_char() -> isize {
+    fn sys_read_input() -> Option<u8> {
         let mut stdin = STDIN_BUFFER.lock();
-        if let Some(c) = stdin.pop() {
-            c as isize
-        } else {
-            SYSCALL_WAIT
-        }
+        stdin.pop()
     }
 
-    fn sys_exit(status: UserspaceArgument<isize>) -> () {
+    fn sys_exit(status: UserspaceArgument<isize>) {
         debug!("Exit process with status: {}\n", status.validate());
         scheduler::kill_current_process();
     }
@@ -74,6 +70,6 @@ impl KernelSyscalls for SyscallHandler {
     }
 }
 
-pub fn handle_syscall(nr: usize, arg1: usize, arg2: usize) -> usize {
+pub fn handle_syscall(nr: usize, arg1: usize, arg2: usize) -> (usize, usize) {
     SyscallHandler::dispatch(nr, arg1, arg2)
 }

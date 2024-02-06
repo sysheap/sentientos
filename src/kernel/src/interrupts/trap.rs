@@ -57,7 +57,7 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
             let nr = trap_frame[Register::a0];
             let arg1 = trap_frame[Register::a1];
             let arg2 = trap_frame[Register::a2];
-            trap_frame[Register::a0] = handle_syscall(nr, arg1, arg2);
+            (trap_frame[Register::a0], trap_frame[Register::a1]) = handle_syscall(nr, arg1, arg2);
         }
         _ => {
             panic!(

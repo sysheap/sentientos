@@ -22,7 +22,8 @@ macro_rules! syscalls {
 
         $(
             pub fn $name($($arg_name: $arg_ty),*) -> $ret {
-                <$ret>::from_reg(ecall!(Syscalls::$name, $($arg_name),*))
+                let (first, second) = ecall!(Syscalls::$name, $($arg_name),*);
+                <$ret>::from_double_reg(first, second)
             }
         )*
 
@@ -30,15 +31,16 @@ macro_rules! syscalls {
         pub mod kernel {
             use super::UserspaceArgument;
             use super::syscall_argument::SyscallArgument;
+            use super::syscall_argument::SyscallReturnArgument;
 
             pub trait KernelSyscalls {
                 $(fn $name($($arg_name: UserspaceArgument<$arg_ty>),*) -> $ret;)*
-                fn dispatch(nr: usize, arg0: usize, arg1: usize) -> usize {
+                fn dispatch(nr: usize, arg0: usize, arg1: usize) -> (usize, usize) {
                     use super::Syscalls;
                     macro_rules! kernel_dispatch_call {
-                        ($x:ident,) => { Self::$x().into_reg() };
-                        ($x:ident, $arg1:ty) => { Self::$x(UserspaceArgument::new(<$arg1>::from_reg(arg0))).into_reg() };
-                        ($x:ident, $arg1:ty, $arg2:ty) => { Self::$x(UserspaceArgument::new(<$arg1>::from_reg(arg0)), UserspaceArgument::new(<$arg2>::from_reg(arg1))).into_reg() };
+                        ($x:ident,) => { Self::$x().into_double_reg() };
+                        ($x:ident, $arg1:ty) => { Self::$x(UserspaceArgument::new(<$arg1>::from_reg(arg0))).into_double_reg() };
+                        ($x:ident, $arg1:ty, $arg2:ty) => { Self::$x(UserspaceArgument::new(<$arg1>::from_reg(arg0)), UserspaceArgument::new(<$arg2>::from_reg(arg1))).into_double_reg() };
                     }
                     let enum_value: Syscalls = unsafe { core::mem::transmute(nr) };
                     match enum_value {
