@@ -4,8 +4,7 @@ use core::ptr::slice_from_raw_parts;
 
 use alloc::string::String;
 use common::syscalls::{
-    kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SysWaitError,
-    SYSCALL_INVALID_PROGRAM, SYSCALL_INVALID_PTR,
+    kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SysExecuteError, SysWaitError,
 };
 
 use crate::{
@@ -35,7 +34,10 @@ impl KernelSyscalls for SyscallHandler {
         scheduler::kill_current_process();
     }
 
-    fn sys_execute(name: UserspaceArgument<&u8>, length: UserspaceArgument<usize>) -> isize {
+    fn sys_execute(
+        name: UserspaceArgument<&u8>,
+        length: UserspaceArgument<usize>,
+    ) -> Result<u64, SysExecuteError> {
         let length = length.validate();
 
         if let Ok(physical_address) = name.validate(length) {
@@ -46,12 +48,12 @@ impl KernelSyscalls for SyscallHandler {
             }
 
             if let Some(pid) = scheduler::schedule_program(&name) {
-                pid as isize
+                Ok(pid)
             } else {
-                SYSCALL_INVALID_PROGRAM
+                Err(SysExecuteError::InvalidProgram)
             }
         } else {
-            SYSCALL_INVALID_PTR
+            Err(SysExecuteError::InvalidPtr)
         }
     }
 

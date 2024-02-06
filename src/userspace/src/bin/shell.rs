@@ -69,11 +69,14 @@ fn parse_command_and_execute(command: String) {
                 len -= 1;
             }
 
-            let pid = sys_execute(reference, len);
-            if pid < 0 {
-                println!("Error executing program: {}", pid);
-            } else if !program.ends_with('&') {
-                sys_wait(pid as u64);
+            let execute_result = sys_execute(reference, len);
+            match execute_result {
+                Ok(pid) => {
+                    sys_wait(pid).unwrap();
+                }
+                Err(err) => {
+                    println!("Error executing program: {:?}", err);
+                }
             }
         }
     }

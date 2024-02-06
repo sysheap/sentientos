@@ -1,4 +1,4 @@
-use super::SysWaitError;
+use super::{SysExecuteError, SysWaitError};
 
 pub trait SyscallArgument {
     fn into_reg(self) -> usize;
@@ -138,9 +138,16 @@ impl SyscallArgument for SysWaitError {
     }
 
     fn from_reg(value: usize) -> Self {
-        match value {
-            0 => SysWaitError::InvalidPid,
-            _ => panic!("Invalid SysWaitError value: {}", value),
-        }
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl SyscallArgument for SysExecuteError {
+    fn into_reg(self) -> usize {
+        self as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        unsafe { core::mem::transmute(value) }
     }
 }
