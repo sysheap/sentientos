@@ -21,9 +21,8 @@ use self::validator::FailibleSliceValidator;
 struct SyscallHandler;
 
 impl KernelSyscalls for SyscallHandler {
-    fn sys_write_char(c: UserspaceArgument<char>) -> isize {
+    fn sys_write_char(c: UserspaceArgument<char>) -> () {
         print!("{}", c.validate());
-        SYSCALL_SUCCESS
     }
 
     fn sys_read_char() -> isize {
@@ -35,10 +34,9 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_exit(status: UserspaceArgument<isize>) -> isize {
+    fn sys_exit(status: UserspaceArgument<isize>) -> () {
         debug!("Exit process with status: {}\n", status.validate());
         scheduler::kill_current_process();
-        SYSCALL_SUCCESS
     }
 
     fn sys_execute(name: UserspaceArgument<&u8>, length: UserspaceArgument<usize>) -> isize {
@@ -69,10 +67,10 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_mmap_pages(number_of_pages: UserspaceArgument<usize>) -> isize {
+    fn sys_mmap_pages(number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
         let current_process = get_current_process_expect();
         let mut current_process = current_process.borrow_mut();
-        current_process.mmap_pages(number_of_pages.validate()) as isize
+        current_process.mmap_pages(number_of_pages.validate())
     }
 }
 
