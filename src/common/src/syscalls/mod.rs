@@ -12,12 +12,6 @@ pub mod userspace_argument;
 use self::ecall::*;
 use self::userspace_argument::UserspaceArgument;
 
-pub const SYSCALL_SUCCESS: isize = 0;
-pub const SYSCALL_WAIT: isize = -1;
-pub const SYSCALL_INVALID_PTR: isize = -2;
-pub const SYSCALL_INVALID_PROGRAM: isize = -3;
-pub const SYSCALL_INVALID_PID: isize = -4;
-
 #[derive(Debug)]
 #[repr(usize)]
 pub enum SysWaitError {
