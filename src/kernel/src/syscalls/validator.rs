@@ -1,7 +1,9 @@
 use common::syscalls::userspace_argument::{UserspaceArgument, UserspaceArgumentValueExtractor};
 
-pub trait FailibleUserspaceArgumentValidator<T> {
-    fn validate(self) -> Result<T, ()>;
+use crate::processes::scheduler::get_current_process_expect;
+
+pub trait FailibleSliceValidator<'a, T: 'a> {
+    fn validate(self, len: usize) -> Result<&'a T, ()>;
 }
 
 pub trait UserspaceArgumentValidator<T> {
@@ -23,9 +25,25 @@ simple_type!(usize);
 simple_type!(isize);
 simple_type!(u64);
 
-impl<'a, T: 'a> FailibleUserspaceArgumentValidator<&'a T> for UserspaceArgument<&'a T> {
-    fn validate(self) -> Result<&'a T, ()> {
-        // TODO: Validate if pointer is valid (probably don't have a generic wrapper for &T)
-        Ok(self.get())
+impl<'a> FailibleSliceValidator<'a, u8> for UserspaceArgument<&'a u8> {
+    fn validate(self, len: usize) -> Result<&'a u8, ()> {
+        let current_process = get_current_process_expect();
+        let current_process = current_process.borrow();
+        let page_table = current_process.get_page_table();
+
+        let addr = self.get() as *const u8;
+        let last = addr.wrapping_add(len - 1);
+
+        if page_table
+            .translate_userspace_address_to_physical_address(last)
+            .is_none()
+        {
+            return Err(());
+        }
+
+        page_table
+            .translate_userspace_address_to_physical_address(addr)
+            .map(|ptr| unsafe { &*ptr })
+            .ok_or(())
     }
 }

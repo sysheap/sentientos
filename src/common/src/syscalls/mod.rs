@@ -22,6 +22,7 @@ syscalls!(
     sys_write_char(c: char) -> isize;
     sys_read_char() -> isize;
     sys_exit(status: isize) -> isize;
+    // TODO: Implement slice as argument using a wrapper
     sys_execute(name: &u8, length: usize) -> isize;
     sys_wait(pid: u64) -> isize;
     sys_mmap_pages(number_of_pages: usize) -> isize;

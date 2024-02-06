@@ -16,7 +16,7 @@ use crate::{
     syscalls::validator::UserspaceArgumentValidator,
 };
 
-use self::validator::FailibleUserspaceArgumentValidator;
+use self::validator::FailibleSliceValidator;
 
 struct SyscallHandler;
 
@@ -42,17 +42,9 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_execute(name: UserspaceArgument<&u8>, length: UserspaceArgument<usize>) -> isize {
-        // TODO: Move it into validator
-        // Check validity of userspointer before using it
-        let current_process = get_current_process_expect();
-        let current_process = current_process.borrow();
-        let physical_address = current_process
-            .get_page_table()
-            .translate_userspace_address_to_physical_address(name.validate().unwrap());
-
         let length = length.validate();
 
-        if let Some(physical_address) = physical_address {
+        if let Ok(physical_address) = name.validate(length) {
             let slice = unsafe { &*slice_from_raw_parts(physical_address, length) };
             let mut name = String::with_capacity(length);
             for c in slice {
