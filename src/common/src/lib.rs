@@ -5,7 +5,9 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+pub mod big_endian;
 pub mod mutex;
+pub mod numbers;
 pub mod syscalls;
 
 // Inspired by https://os.phil-opp.com/testing/
