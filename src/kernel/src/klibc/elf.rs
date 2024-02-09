@@ -1,6 +1,8 @@
+use common::big_endian::BigEndian;
+
 use crate::{assert::static_assert_size, debug};
 
-const ELF_MAGIC_NUMBER: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+const ELF_MAGIC_NUMBER: u32 = 0x7f454c46;
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
@@ -137,7 +139,7 @@ pub enum Machine {
 
 #[repr(C)]
 pub struct ElfHeader {
-    pub magic_number: [u8; 4],
+    pub magic_number: BigEndian<u32>,
     pub bit_format: BitFormat,
     pub endianess: Endianess,
     pub version: u8,
@@ -289,7 +291,7 @@ impl<'a> ElfFile<'a> {
 
         let header = unsafe { &*(data.as_ptr() as *const ElfHeader) };
 
-        if header.magic_number != ELF_MAGIC_NUMBER {
+        if header.magic_number.get() != ELF_MAGIC_NUMBER {
             return Some(ElfParseErrors::MagicNumberWrong);
         }
 
