@@ -61,6 +61,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "Supported SBI Versions >= 0.2"
     );
 
+    // The device tree must be parsed before the page allocator is initialized
+    // Otherwise we could accidentally overwrite the device tree
     let dtb = device_tree::parse(device_tree_pointer);
     println!("Device Tree:\n{:?}", dtb);
     assert!(
