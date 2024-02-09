@@ -46,10 +46,12 @@ extern "C" {
 }
 
 #[no_mangle]
-extern "C" fn kernel_init() {
+extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     QEMU_UART.lock().init();
 
     println!("Hello World from YaROS!\n");
+    println!("Hart ID: {}", hart_id);
+    println!("Device Tree Pointer: {:p}", device_tree_pointer);
 
     let version = sbi::extensions::base_extension::sbi_get_spec_version();
     info!("SBI version {}.{}", version.major, version.minor);
@@ -60,6 +62,12 @@ extern "C" fn kernel_init() {
 
     unsafe {
         info!("Initializing page allocator");
+        info!(
+            "Heap Start: {:#x}-{:#x} (size: {:#x})",
+            HEAP_START,
+            HEAP_START + HEAP_SIZE,
+            HEAP_SIZE
+        );
         memory::init_page_allocator(HEAP_START, HEAP_SIZE);
     }
 

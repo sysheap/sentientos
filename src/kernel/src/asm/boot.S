@@ -7,6 +7,9 @@
 .section .text.init
 
 # Execution starts here.
+# a0 is hart id
+# a1 is pointer to device tree
+# Preserve them during startup code
 .global _start
 _start:
 
@@ -24,14 +27,14 @@ _start:
 	csrw sie, zero
 
 	# Clear bss segment
-	la a0, _bss_start
-	la a1, _bss_end
-	bgeu a0, a1, bss_cleared
+	la t0, _bss_start
+	la t1, _bss_end
+	bgeu t0, t1, bss_cleared
 
 bss_loop:
-	sd zero, (a0)
-	addi a0, a0, 8
-	bltu a0, a1, bss_loop
+	sd zero, (t0)
+	addi t0, t0, 8
+	bltu t0, t1, bss_loop
 
 bss_cleared:
 
