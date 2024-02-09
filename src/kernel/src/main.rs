@@ -63,6 +63,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     let dtb = device_tree::parse(device_tree_pointer);
     println!("Device Tree:\n{:?}", dtb);
+    assert!(
+        dtb.get_reserved_areas().is_empty(),
+        "There should be no reserved memory regions"
+    );
 
     unsafe {
         info!("Initializing page allocator");

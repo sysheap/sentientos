@@ -1,5 +1,8 @@
 use common::big_endian::BigEndian;
-use core::fmt::Debug;
+use core::{
+    fmt::{Debug, Display},
+    slice,
+};
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
@@ -16,6 +19,29 @@ pub struct Header {
     boot_cpuid_phys: BigEndian<u32>,
     size_dt_strings: BigEndian<u32>,
     size_dt_struct: BigEndian<u32>,
+}
+
+impl Header {
+    fn offset_from_header<T>(&self, offset: usize) -> *const T {
+        (self as *const Header).wrapping_byte_add(offset) as *const T
+    }
+
+    pub fn get_reserved_areas(&self) -> &[ReserveEntry] {
+        let offset = self.off_mem_rsvmap.get();
+        let start: *const ReserveEntry = self.offset_from_header(offset as usize);
+        let mut len = 0;
+        unsafe {
+            loop {
+                let entry = &*start.add(len);
+                // The last entry is marked with address and size set to 0
+                if entry.address == 0 && entry.size == 0 {
+                    break;
+                }
+                len += 1;
+            }
+            slice::from_raw_parts(start, len)
+        }
+    }
 }
 
 impl Debug for Header {
@@ -53,6 +79,33 @@ impl Debug for Header {
                 &format_args!("{:#x}", self.size_dt_struct.get()),
             )
             .finish()
+    }
+}
+
+#[repr(C)]
+pub struct ReserveEntry {
+    address: u64,
+    size: u64,
+}
+
+impl Debug for ReserveEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ReserveEntry")
+            .field("address", &format_args!("{:#x}", self.address))
+            .field("size", &format_args!("{:#x}", self.size))
+            .finish()
+    }
+}
+
+impl Display for ReserveEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "RESERVED: {:#x} - {:#x} (size: {:#x})",
+            self.address,
+            self.address + self.size - 1,
+            self.size
+        )
     }
 }
 
