@@ -5,12 +5,9 @@ use core::{
     ptr::{null_mut, NonNull},
 };
 
-use common::mutex::Mutex;
+use common::{mutex::Mutex, util::align_up};
 
-use crate::{
-    assert::static_assert_size,
-    klibc::util::{align_up, minimum_amount_of_pages},
-};
+use crate::{assert::static_assert_size, klibc::util::minimum_amount_of_pages};
 
 use super::{page_allocator::PageAllocator, PAGE_SIZE};
 

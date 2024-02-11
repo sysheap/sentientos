@@ -1,15 +1,8 @@
 use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
 
-use crate::memory::PAGE_SIZE;
+use common::util::align_up;
 
-pub const fn align_up(value: usize, alignment: usize) -> usize {
-    let remainder = value % alignment;
-    if remainder == 0 {
-        value
-    } else {
-        value + alignment - remainder
-    }
-}
+use crate::memory::PAGE_SIZE;
 
 pub const fn minimum_amount_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE

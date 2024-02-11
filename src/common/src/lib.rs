@@ -6,9 +6,11 @@
 #![reexport_test_harness_main = "test_main"]
 
 pub mod big_endian;
+pub mod consumable_buffer;
 pub mod mutex;
 pub mod numbers;
 pub mod syscalls;
+pub mod util;
 
 // Inspired by https://os.phil-opp.com/testing/
 

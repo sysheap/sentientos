@@ -1,8 +1,11 @@
-use common::big_endian::BigEndian;
+use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
     fmt::{Debug, Display},
+    mem::size_of,
     slice,
 };
+
+use crate::info;
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
@@ -41,6 +44,29 @@ impl Header {
             }
             slice::from_raw_parts(start, len)
         }
+    }
+
+    pub fn get_structure_block(&self) -> StructureBlockIterator {
+        let offset = self.off_dt_struct.get();
+        let start = self.offset_from_header(offset as usize);
+        info!("Structure Block Start: {:p}", start);
+        StructureBlockIterator {
+            buffer: ConsumableBuffer::new(unsafe {
+                slice::from_raw_parts(start, self.size_dt_struct.get() as usize)
+            }),
+            header: self,
+        }
+    }
+
+    fn get_string(&self, offset: usize) -> Option<&str> {
+        let start: *const u8 = self.offset_from_header(self.off_dt_strings.get() as usize);
+        let size = self.size_dt_strings.get() as usize;
+        if offset >= size {
+            return None;
+        }
+        let strings_data = unsafe { slice::from_raw_parts(start, size) };
+        let mut consumable_buffer = ConsumableBuffer::new(&strings_data[offset..]);
+        consumable_buffer.consume_str()
     }
 }
 
@@ -106,6 +132,63 @@ impl Display for ReserveEntry {
             self.address + self.size - 1,
             self.size
         )
+    }
+}
+
+const FDT_BEGIN_NODE: u32 = 0x1;
+const FDT_END_NODE: u32 = 0x2;
+const FDT_PROP: u32 = 0x3;
+const FDT_NOP: u32 = 0x4;
+const FDT_END: u32 = 0x9;
+
+#[derive(Debug)]
+pub enum FdtToken<'a> {
+    BeginNode(&'a str),
+    EndNode,
+    Prop(&'a str, &'a [u8]),
+    Nop,
+    End,
+}
+
+pub struct StructureBlockIterator<'a> {
+    header: &'a Header,
+    buffer: ConsumableBuffer<'a>,
+}
+
+impl<'a> Iterator for StructureBlockIterator<'a> {
+    type Item = FdtToken<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.buffer.empty() {
+            return None;
+        }
+
+        let numeric_token_value = self.buffer.consume_sized_type::<BigEndian<u32>>()?;
+        let token = match numeric_token_value.get() {
+            FDT_BEGIN_NODE => {
+                let name = self.buffer.consume_str()?;
+                self.buffer.consume_alignment(size_of::<u32>());
+                FdtToken::BeginNode(name)
+            }
+            FDT_END_NODE => FdtToken::EndNode,
+            FDT_PROP => {
+                let len = self.buffer.consume_sized_type::<BigEndian<u32>>()?.get() as usize;
+                let string_offset =
+                    self.buffer.consume_sized_type::<BigEndian<u32>>()?.get() as usize;
+                let data = self.buffer.consume_slice(len)?;
+                self.buffer.consume_alignment(size_of::<u32>());
+                let string = self.header.get_string(string_offset)?;
+                FdtToken::Prop(string, data)
+            }
+            FDT_NOP => FdtToken::Nop,
+            FDT_END => {
+                assert!(self.buffer.empty());
+                FdtToken::End
+            }
+            _ => panic!("Unknown token: {:#x}", numeric_token_value.get()),
+        };
+
+        Some(token)
     }
 }
 

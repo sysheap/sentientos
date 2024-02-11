@@ -70,6 +70,11 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "There should be no reserved memory regions"
     );
 
+    let structured_block = dtb.get_structure_block();
+    for node in structured_block {
+        debug!("{:?}", node);
+    }
+
     unsafe {
         info!("Initializing page allocator");
         info!(
