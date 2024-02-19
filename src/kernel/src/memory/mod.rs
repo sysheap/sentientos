@@ -1,5 +1,4 @@
 use core::{
-    cell::OnceCell,
     mem::{transmute, MaybeUninit},
     ops::Range,
     ptr::NonNull,
@@ -20,25 +19,17 @@ pub mod page_tables;
 
 pub use page::PAGE_SIZE;
 
-static PAGE_ALLOCATOR: Mutex<OnceCell<MetadataPageAllocator>> = Mutex::new(OnceCell::new());
+static PAGE_ALLOCATOR: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
 pub struct StaticPageAllocator;
 
 impl PageAllocator for StaticPageAllocator {
     fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
-        PAGE_ALLOCATOR
-            .lock()
-            .get_mut()
-            .expect("PAGE_ALLOCATOR has to be initialized")
-            .alloc(number_of_pages_requested)
+        PAGE_ALLOCATOR.lock().alloc(number_of_pages_requested)
     }
 
     fn dealloc(page: NonNull<Page>) {
-        PAGE_ALLOCATOR
-            .lock()
-            .get_mut()
-            .expect("PAGE_ALLOCATOR has to be initialized")
-            .dealloc(page)
+        PAGE_ALLOCATOR.lock().dealloc(page)
     }
 }
 
@@ -48,8 +39,5 @@ pub fn init_page_allocator(heap_start: usize, heap_size: usize) {
         elem.write(0);
     }
     let initialized_memory = unsafe { transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(memory) };
-    PAGE_ALLOCATOR
-        .lock()
-        .set(MetadataPageAllocator::new(initialized_memory))
-        .expect("PAGE_ALLOCATOR has to be uninitialized");
+    PAGE_ALLOCATOR.lock().init(initialized_memory);
 }
