@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use common::syscalls::{sys_execute, sys_exit, sys_read_input, sys_wait};
 use userspace::{print, println, util::wait};
 
@@ -49,7 +49,8 @@ fn main() {
     }
 }
 
-fn parse_command_and_execute(command: String) {
+fn parse_command_and_execute(mut command: String) {
+    command = command.trim().to_string();
     match command.as_str() {
         "" => {}
         "exit" => {
@@ -61,18 +62,24 @@ fn parse_command_and_execute(command: String) {
             println!("exit - Exit the shell");
             println!("help - Print this help message");
         }
-        program => {
-            let reference = unsafe { &*program.as_ptr() };
-            let mut len = program.len();
+        _ => {
+            let mut background = false;
 
-            if program.ends_with('&') {
-                len -= 1;
+            if command.ends_with('&') {
+                background = true;
+                command.pop();
+                command = command.trim().to_string();
             }
+
+            let reference = unsafe { &*command.as_ptr() };
+            let len = command.len();
 
             let execute_result = sys_execute(reference, len);
             match execute_result {
                 Ok(pid) => {
-                    sys_wait(pid).unwrap();
+                    if !background {
+                        let _ = sys_wait(pid);
+                    }
                 }
                 Err(err) => {
                     println!("Error executing program: {:?}", err);
