@@ -84,7 +84,7 @@ fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_fr
 }
 
 fn handle_supervisor_timer_interrupt() {
-    timer::set_timer(10000);
+    timer::set_timer(10);
     scheduler::schedule();
 }
 
