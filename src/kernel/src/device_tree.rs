@@ -1,3 +1,5 @@
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
     fmt::{Debug, Display},
@@ -5,7 +7,10 @@ use core::{
     slice,
 };
 
-use crate::info;
+use crate::debug;
+
+// Use u64 for alignment purposes
+static mut PARSED_DEVICE_TREE: [u64; 8 * 1024] = [0; 8 * 1024];
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
@@ -49,7 +54,7 @@ impl Header {
     pub fn get_structure_block(&self) -> StructureBlockIterator {
         let offset = self.off_dt_struct.get();
         let start = self.offset_from_header(offset as usize);
-        info!("Structure Block Start: {:p}", start);
+        debug!("Structure Block Start: {:p}", start);
         StructureBlockIterator {
             buffer: ConsumableBuffer::new(unsafe {
                 slice::from_raw_parts(start, self.size_dt_struct.get() as usize)
@@ -145,7 +150,7 @@ const FDT_END: u32 = 0x9;
 pub enum FdtToken<'a> {
     BeginNode(&'a str),
     EndNode,
-    Prop(&'a str, &'a [u8]),
+    Prop(&'a str, ConsumableBuffer<'a>),
     Nop,
     End,
 }
@@ -178,7 +183,7 @@ impl<'a> Iterator for StructureBlockIterator<'a> {
                 let data = self.buffer.consume_slice(len)?;
                 self.buffer.consume_alignment(size_of::<u32>());
                 let string = self.header.get_string(string_offset)?;
-                FdtToken::Prop(string, data)
+                FdtToken::Prop(string, ConsumableBuffer::new(data))
             }
             FDT_NOP => FdtToken::Nop,
             FDT_END => {
@@ -192,7 +197,117 @@ impl<'a> Iterator for StructureBlockIterator<'a> {
     }
 }
 
-pub fn parse(device_tree_pointer: *const ()) -> &'static Header {
+impl<'a> StructureBlockIterator<'a> {
+    pub fn parse(self) -> Option<Node<'a>> {
+        let mut node_stack = Vec::new();
+        let fake_root = Node::new("");
+        node_stack.push(fake_root);
+        for node in self {
+            match node {
+                FdtToken::BeginNode(node_name) => {
+                    node_stack.push(Node::new(node_name));
+                }
+                FdtToken::Prop(name, mut data) => {
+                    let current_node = node_stack.last_mut()?;
+                    if name == "#address-cells" {
+                        let value = data.consume_sized_type::<BigEndian<u32>>()?;
+                        current_node.adress_cell = Some(value.get());
+                    }
+                    if name == "#size-cells" {
+                        let value = data.consume_sized_type::<BigEndian<u32>>()?;
+                        current_node.size_cell = Some(value.get());
+                    }
+                    data.reset();
+                    current_node.properties.insert(name, data);
+                }
+                FdtToken::EndNode => {
+                    let current_node = node_stack.pop()?;
+                    let parent = node_stack.last_mut()?;
+                    parent.children.insert(current_node.name, current_node);
+                }
+                FdtToken::Nop => {}
+                FdtToken::End => {
+                    assert!(node_stack.len() == 1);
+                }
+            }
+        }
+        assert!(node_stack.len() == 1);
+        let fake_root = node_stack.pop()?;
+        assert!(fake_root.children.len() == 1);
+        fake_root.children.into_values().next()
+    }
+}
+
+#[derive(Debug)]
+pub struct Node<'a> {
+    name: &'a str,
+    pub adress_cell: Option<u32>,
+    pub size_cell: Option<u32>,
+    properties: BTreeMap<&'a str, ConsumableBuffer<'a>>,
+    children: BTreeMap<&'a str, Node<'a>>,
+}
+
+pub struct NodeRefWithParentCellInfo<'a> {
+    pub node: &'a Node<'a>,
+    pub parent_adress_cell: Option<u32>,
+    pub parent_size_cell: Option<u32>,
+}
+
+impl<'a> Node<'a> {
+    fn new(name: &'a str) -> Self {
+        Self {
+            name,
+            properties: BTreeMap::new(),
+            children: BTreeMap::new(),
+            adress_cell: None,
+            size_cell: None,
+        }
+    }
+
+    pub fn get_property(&'a self, name: &'a str) -> Option<ConsumableBuffer<'a>> {
+        self.properties
+            .get(name)
+            .map(|buffer| buffer.reset_and_clone())
+    }
+
+    pub fn find_node(&'a self, node_name: &'a str) -> Option<NodeRefWithParentCellInfo<'a>> {
+        self.find_node_internal(node_name, None, None)
+    }
+
+    fn find_node_internal(
+        &'a self,
+        node_name: &'a str,
+        parent_adress_cell: Option<u32>,
+        parent_size_cell: Option<u32>,
+    ) -> Option<NodeRefWithParentCellInfo<'a>> {
+        debug!(
+            "find_internal: current={} parent_adress={:?}, parent_size={:?}",
+            self.name, parent_adress_cell, parent_size_cell
+        );
+        let current_name = match self.name.find('@') {
+            Some(index) => &self.name[..index],
+            None => self.name,
+        };
+
+        if current_name == node_name {
+            return Some(NodeRefWithParentCellInfo {
+                node: self,
+                parent_adress_cell,
+                parent_size_cell,
+            });
+        }
+        for children in self.children.values() {
+            let maybe_node =
+                children.find_node_internal(node_name, self.adress_cell, self.size_cell);
+            if maybe_node.is_some() {
+                return maybe_node;
+            }
+        }
+        None
+    }
+}
+
+pub fn parse_and_copy(device_tree_pointer: *const ()) -> &'static Header {
     let header = unsafe { &*(device_tree_pointer as *const Header) };
 
     assert_eq!(header.magic.get(), FDT_MAGIC, "Device tree magic missmatch");
@@ -202,5 +317,16 @@ pub fn parse(device_tree_pointer: *const ()) -> &'static Header {
         "Device tree version mismatch"
     );
 
-    header
+    let size = header.totalsize.get() as usize;
+
+    // SAFETY: We are the only thread that is running so accessing the static is safe
+    unsafe {
+        assert!(size <= PARSED_DEVICE_TREE.len());
+        core::ptr::copy_nonoverlapping(
+            device_tree_pointer as *const u8,
+            PARSED_DEVICE_TREE.as_mut_ptr() as *mut u8,
+            size,
+        );
+        &*(PARSED_DEVICE_TREE.as_ptr() as *const Header)
+    }
 }

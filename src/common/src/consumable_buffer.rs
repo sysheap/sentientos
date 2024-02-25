@@ -2,15 +2,27 @@ use core::slice;
 
 use crate::util::align_up;
 
+#[derive(Debug)]
 pub struct ConsumableBuffer<'a> {
     buffer: &'a [u8],
     position: usize,
 }
 
 impl<'a> ConsumableBuffer<'a> {
-    pub fn new(buffer: &'a [u8]) -> ConsumableBuffer<'a> {
-        ConsumableBuffer {
+    pub fn new(buffer: &'a [u8]) -> Self {
+        Self {
             buffer,
+            position: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.position = 0;
+    }
+
+    pub fn reset_and_clone(&self) -> Self {
+        Self {
+            buffer: self.buffer,
             position: 0,
         }
     }

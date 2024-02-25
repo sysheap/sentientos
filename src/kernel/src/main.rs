@@ -12,7 +12,6 @@
 #![feature(exposed_provenance)]
 #![feature(lazy_cell)]
 #![feature(let_chains)]
-#![feature(stmt_expr_attributes)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -20,7 +19,7 @@ use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
     memory::page_tables,
-    pci::{enumerate_devices, get_pci_host_bridge_address},
+    pci::enumerate_devices,
     processes::{scheduler, timer},
 };
 
@@ -51,7 +50,7 @@ extern "C" {
 }
 
 #[no_mangle]
-extern "C" fn kernel_init(hart_id: usize, mut device_tree_pointer: *const ()) {
+extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     QEMU_UART.lock().init();
 
     println!("Hello World from YaROS!\n");
@@ -67,25 +66,7 @@ extern "C" fn kernel_init(hart_id: usize, mut device_tree_pointer: *const ()) {
 
     // The device tree must be parsed before the page allocator is initialized
     // Otherwise we could accidentally overwrite the device tree
-    let dtb = device_tree::parse(device_tree_pointer);
-    println!("Device Tree:\n{:?}", dtb);
-    assert!(
-        dtb.get_reserved_areas().is_empty(),
-        "There should be no reserved memory regions"
-    );
-
-    for node in dtb.get_structure_block() {
-        debug!("{:?}", node);
-    }
-
-    let structured_block = dtb.get_structure_block();
-    let pci_host_bridge_address = get_pci_host_bridge_address(structured_block)
-        .expect("PCI Host Bridge Address must be known.");
-
-    // Forget device tree because it could be overwritten by the page allocator
-    let _ = dtb;
-    #[allow(unused_assignments)]
-    device_tree_pointer = core::ptr::null();
+    let dtb = device_tree::parse_and_copy(device_tree_pointer);
 
     unsafe {
         info!("Initializing page allocator");
@@ -98,8 +79,21 @@ extern "C" fn kernel_init(hart_id: usize, mut device_tree_pointer: *const ()) {
         memory::init_page_allocator(HEAP_START, HEAP_SIZE);
     }
 
-    // This function uses allocations. Therefore put this after initialization of the page allocator
-    enumerate_devices(pci_host_bridge_address);
+    assert!(
+        dtb.get_reserved_areas().is_empty(),
+        "There should be no reserved memory regions"
+    );
+
+    let parsed_structure_block = dtb
+        .get_structure_block()
+        .parse()
+        .expect("DTB must be parsable");
+
+    let pci_information =
+        pci::parse(&parsed_structure_block).expect("pci information must be parsable");
+    println!("pci information: {:#x?}", pci_information);
+
+    enumerate_devices(&pci_information);
 
     #[cfg(test)]
     test_main();
