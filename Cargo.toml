@@ -16,6 +16,9 @@ version = "0.1.0"
 panic = 'abort'
 lto = "fat"
 debug = true
+overflow-checks = true
+debug-assertions = true
 
 [profile.dev]
 panic = 'abort'
+overflow-checks = true
