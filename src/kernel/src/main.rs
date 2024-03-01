@@ -93,7 +93,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         pci::parse(&parsed_structure_block).expect("pci information must be parsable");
     println!("pci information: {:#x?}", pci_information);
 
-    enumerate_devices(&pci_information);
+    let pci_devices = enumerate_devices(&pci_information);
+    println!("Got {:#x?}", pci_devices);
 
     #[cfg(test)]
     test_main();
