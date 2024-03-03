@@ -1,8 +1,0 @@
-filename := "playground"
-
-run: build
-    qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -s -S -nographic -bios none -kernel {{filename}} -D log.txt -d int,cpu_reset,guest_errors
-
-build:
-    riscv64-unknown-elf-as {{filename}}.S -o {{filename}}.o
-    riscv64-unknown-elf-ld -Tvirt.ld {{filename}}.o -o {{filename}}
