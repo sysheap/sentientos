@@ -1,33 +1,49 @@
-use core::marker::PhantomData;
+use core::{
+    arch::asm,
+    ops::{Deref, DerefMut},
+};
 
 #[allow(clippy::upper_case_acronyms)]
-pub struct MMIO<Size: Sized> {
-    address: *mut Size,
-    phantom: PhantomData<Size>,
+pub struct MMIO<T: Sized> {
+    address: *mut T,
 }
 
 impl<Size> MMIO<Size> {
-    pub const fn new(address: usize) -> Self {
+    pub const unsafe fn new(address: usize) -> Self {
         Self {
             address: address as *mut Size,
-            phantom: PhantomData,
         }
     }
 
-    pub unsafe fn read(&self) -> Size {
-        self.address.read_volatile()
-    }
-
-    pub unsafe fn write(&self, value: Size) {
-        self.address.write_volatile(value);
-    }
-
-    pub fn add(&self, count: usize) -> Self {
+    pub unsafe fn add(&self, count: usize) -> Self {
         unsafe {
             Self {
                 address: self.address.add(count),
-                phantom: PhantomData,
             }
+        }
+    }
+}
+
+impl<T> Deref for MMIO<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            // The Rust default is memory globber
+            // Use it to force re-read of assembly
+            asm!("");
+            &*self.address
+        }
+    }
+}
+
+impl<T> DerefMut for MMIO<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe {
+            // The Rust default is memory globber
+            // Use it to force re-read of assembly
+            asm!("");
+            &mut *self.address
         }
     }
 }

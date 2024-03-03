@@ -41,8 +41,8 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                     device,
                     function,
                 );
-                let mmio: MMIO<u32> = MMIO::new(address);
-                let header = unsafe { mmio.read() };
+                let mmio: MMIO<u32> = unsafe { MMIO::new(address) };
+                let header = *mmio;
                 if header != 0xffff_ffff {
                     let vendor_id = header as u16;
                     let device_id = (header >> 16) as u16;
@@ -52,8 +52,9 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                         vendor_id, device_id, address, name
                     );
 
-                    let subsystem_id_address: MMIO<u16> = MMIO::new(address + SUBSYSTEM_ID_OFFSET);
-                    let subsystem_id = unsafe { subsystem_id_address.read() };
+                    let subsystem_id_address: MMIO<u16> =
+                        unsafe { MMIO::new(address + SUBSYSTEM_ID_OFFSET) };
+                    let subsystem_id = *subsystem_id_address;
 
                     // Add virtio devices to device list
                     if vendor_id == VIRTIO_VENDOR_ID
