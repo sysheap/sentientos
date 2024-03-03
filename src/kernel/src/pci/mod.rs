@@ -36,7 +36,7 @@ pub type PciAddress = usize;
 
 #[derive(Debug)]
 pub struct PciDeviceAddresses {
-    network_devices: Vec<PciAddress>,
+    pub network_devices: Vec<PciAddress>,
 }
 
 impl PciDeviceAddresses {
