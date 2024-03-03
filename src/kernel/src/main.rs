@@ -64,8 +64,6 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "Supported SBI Versions >= 0.2"
     );
 
-    // The device tree must be parsed before the page allocator is initialized
-    // Otherwise we could accidentally overwrite the device tree
     let dtb = device_tree::parse_and_copy(device_tree_pointer);
 
     unsafe {
@@ -84,6 +82,9 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "There should be no reserved memory regions"
     );
 
+    #[cfg(test)]
+    test_main();
+
     let parsed_structure_block = dtb
         .get_structure_block()
         .parse()
@@ -95,9 +96,6 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     let pci_devices = enumerate_devices(&pci_information);
     println!("Got {:#x?}", pci_devices);
-
-    #[cfg(test)]
-    test_main();
 
     page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
 
