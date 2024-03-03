@@ -15,6 +15,23 @@ const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
+#[repr(packed)]
+#[allow(dead_code)]
+struct CommonPciHeader {
+    vendor_id: u16,
+    device_id: u16,
+    command_register: u16,
+    status_register: u16,
+    revision_id: u8,
+    programming_interface_byte: u8,
+    subclass: u8,
+    class_code: u8,
+    cache_line_size: u8,
+    latency_timer: u8,
+    header_type: u8,
+    built_in_self_test: u8,
+}
+
 pub type PciAddress = usize;
 
 #[derive(Debug)]
@@ -41,11 +58,10 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                     device,
                     function,
                 );
-                let mmio: MMIO<u32> = unsafe { MMIO::new(address) };
-                let header = *mmio;
-                if header != 0xffff_ffff {
-                    let vendor_id = header as u16;
-                    let device_id = (header >> 16) as u16;
+                let device: MMIO<CommonPciHeader> = unsafe { MMIO::new(address) };
+                if device.vendor_id != 0xffff {
+                    let vendor_id = device.vendor_id;
+                    let device_id = device.device_id;
                     let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
                     info!(
                         "PCI Device {:#x}:{:#x} found at {:#x} ({})",
