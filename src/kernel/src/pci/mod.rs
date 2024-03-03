@@ -12,7 +12,7 @@ use self::devic_tree_parser::PCIInformation;
 
 const SUBSYSTEM_ID_OFFSET: usize = 0x2e;
 const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
-const VIRTIO_DEVICE_ID: core::ops::Range<u16> = 0x1000..0x103F;
+const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
 pub type PciAddress = usize;
