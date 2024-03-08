@@ -1,5 +1,6 @@
 use core::{
     arch::asm,
+    fmt::{self, Debug},
     ops::{Deref, DerefMut},
 };
 
@@ -8,10 +9,10 @@ pub struct MMIO<T: Sized> {
     address: *mut T,
 }
 
-impl<Size> MMIO<Size> {
+impl<T> MMIO<T> {
     pub const unsafe fn new(address: usize) -> Self {
         Self {
-            address: address as *mut Size,
+            address: address as *mut T,
         }
     }
 
@@ -22,6 +23,20 @@ impl<Size> MMIO<Size> {
             }
         }
     }
+
+    pub unsafe fn new_type_with_offset<U>(&self, offset: usize) -> MMIO<U> {
+        MMIO::<U> {
+            address: self.address.byte_add(offset) as *mut U,
+        }
+    }
+
+    fn memory_barrier(&self) {
+        // The Rust default is memory globber
+        // Use it to force re-read of assembly
+        unsafe {
+            asm!("");
+        }
+    }
 }
 
 impl<T> Deref for MMIO<T> {
@@ -29,9 +44,7 @@ impl<T> Deref for MMIO<T> {
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            // The Rust default is memory globber
-            // Use it to force re-read of assembly
-            asm!("");
+            self.memory_barrier();
             &*self.address
         }
     }
@@ -40,10 +53,14 @@ impl<T> Deref for MMIO<T> {
 impl<T> DerefMut for MMIO<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
-            // The Rust default is memory globber
-            // Use it to force re-read of assembly
-            asm!("");
+            self.memory_barrier();
             &mut *self.address
         }
+    }
+}
+
+impl<T> Debug for MMIO<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        fmt::Pointer::fmt(&self.address, f)
     }
 }

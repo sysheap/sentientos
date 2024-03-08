@@ -95,7 +95,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         pci::parse(&parsed_structure_block).expect("pci information must be parsable");
     println!("pci information: {:#x?}", pci_information);
 
-    let pci_devices = enumerate_devices(&pci_information);
+    let mut pci_devices = enumerate_devices(&pci_information);
     println!("Got {:#x?}", pci_devices);
 
     assert!(
@@ -104,7 +104,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     );
 
     let _network_device =
-        drivers::virtio::net::NetworkDevice::initialize(pci_devices.network_devices[0])
+        drivers::virtio::net::NetworkDevice::initialize(pci_devices.network_devices.pop().unwrap())
             .expect("Initialization must work.");
 
     page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());

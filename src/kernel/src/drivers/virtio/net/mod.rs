@@ -1,9 +1,16 @@
+use crate::{info, klibc::MMIO, pci::GeneralDevicePciHeader};
+
 pub struct NetworkDevice {
-    address: usize,
+    device: MMIO<GeneralDevicePciHeader>,
 }
 
 impl NetworkDevice {
-    pub fn initialize(address: usize) -> Result<Self, &'static str> {
-        Ok(Self { address })
+    pub fn initialize(pci_device: MMIO<GeneralDevicePciHeader>) -> Result<Self, &'static str> {
+        let capabilities = pci_device.capabilities();
+        info!("Network device has following capabilities");
+        for capability in capabilities {
+            info!("Found capability {:?}", *capability);
+        }
+        Ok(Self { device: pci_device })
     }
 }

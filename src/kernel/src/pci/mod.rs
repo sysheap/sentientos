@@ -10,6 +10,13 @@ pub use devic_tree_parser::parse;
 
 use self::devic_tree_parser::PCIInformation;
 
+const INVALID_VENDOR_ID: u16 = 0xffff;
+
+const GENERAL_DEVICE_TYPE: u8 = 0x0;
+const GENERAL_DEVICE_TYPE_MASK: u8 = !0x80;
+
+const CAPABILITY_POINTER_MASK: u8 = !0x3;
+
 const SUBSYSTEM_ID_OFFSET: usize = 0x2e;
 const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
@@ -17,7 +24,7 @@ const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
 #[repr(packed)]
 #[allow(dead_code)]
-struct CommonPciHeader {
+pub struct GeneralDevicePciHeader {
     vendor_id: u16,
     device_id: u16,
     command_register: u16,
@@ -30,13 +37,76 @@ struct CommonPciHeader {
     latency_timer: u8,
     header_type: u8,
     built_in_self_test: u8,
+    bar0: u32,
+    bar1: u32,
+    bar2: u32,
+    bar3: u32,
+    bar4: u32,
+    bar5: u32,
+    cardbus_cis_pointer: u32,
+    subsystem_vendor_id: u16,
+    subsystem_id: u16,
+    expnasion_rom_base_address: u32,
+    capabilities_pointer: u8,
 }
 
-pub type PciAddress = usize;
+pub struct PciCapabilityIter<'a> {
+    pci_device: &'a MMIO<GeneralDevicePciHeader>,
+    next_offset: u8, // 0 means there is no next pointer
+}
+
+#[derive(Debug)]
+#[repr(packed)]
+pub struct PciCapability {
+    id: u8,
+    next: u8,
+}
+
+impl<'a> Iterator for PciCapabilityIter<'a> {
+    type Item = MMIO<PciCapability>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let capability: MMIO<PciCapability> = match self.next_offset {
+            0 => return None,
+            _ => unsafe {
+                self.pci_device
+                    .new_type_with_offset(self.next_offset as usize)
+            },
+        };
+        self.next_offset = capability.next;
+        Some(capability)
+    }
+}
+
+impl MMIO<GeneralDevicePciHeader> {
+    unsafe fn try_new(address: usize) -> Option<Self> {
+        let pci_device = Self::new(address);
+        if pci_device.vendor_id == INVALID_VENDOR_ID {
+            return None;
+        }
+        assert!(pci_device.header_type & GENERAL_DEVICE_TYPE_MASK == GENERAL_DEVICE_TYPE);
+        Some(pci_device)
+    }
+
+    const CAPABILITIES_LIST_BIT: u16 = 1 << 4;
+    pub fn capabilities(&self) -> PciCapabilityIter {
+        if self.status_register & Self::CAPABILITIES_LIST_BIT == 0 {
+            PciCapabilityIter {
+                pci_device: self,
+                next_offset: 0,
+            }
+        } else {
+            PciCapabilityIter {
+                pci_device: self,
+                next_offset: self.capabilities_pointer & CAPABILITY_POINTER_MASK,
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct PciDeviceAddresses {
-    pub network_devices: Vec<PciAddress>,
+    pub network_devices: Vec<MMIO<GeneralDevicePciHeader>>,
 }
 
 impl PciDeviceAddresses {
@@ -58,8 +128,8 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                     device,
                     function,
                 );
-                let device: MMIO<CommonPciHeader> = unsafe { MMIO::new(address) };
-                if device.vendor_id != 0xffff {
+                let maybe_device = unsafe { MMIO::try_new(address) };
+                if let Some(device) = maybe_device {
                     let vendor_id = device.vendor_id;
                     let device_id = device.device_id;
                     let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
@@ -77,7 +147,9 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                         && VIRTIO_DEVICE_ID.contains(&device_id)
                         && subsystem_id == VIRTIO_NETWORK_SUBSYSTEM_ID
                     {
-                        pci_devices.network_devices.push(address);
+                        pci_devices
+                            .network_devices
+                            .push(unsafe { MMIO::new(address) });
                     }
                 }
             }
