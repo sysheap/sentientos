@@ -1,3 +1,4 @@
+use alloc::string::String;
 use core::fmt::Debug;
 
 use alloc::{boxed::Box, vec::Vec};
@@ -32,6 +33,7 @@ fn get_next_pid() -> Pid {
 }
 
 pub struct Process {
+    name: String,
     pid: Pid,
     register_state: Box<TrapFrame>,
     page_table: RootPageTableHolder,
@@ -103,6 +105,10 @@ impl Process {
         &self.page_table
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn get_pid(&self) -> Pid {
         self.pid
     }
@@ -111,7 +117,7 @@ impl Process {
         self.register_state[Register::a0] = return_code;
     }
 
-    pub fn from_elf(elf_file: &ElfFile) -> Self {
+    pub fn from_elf(elf_file: &ElfFile, name: &str) -> Self {
         debug!("Create process from elf file");
 
         let LoadedElf {
@@ -124,6 +130,7 @@ impl Process {
         register_state[Register::sp] = loader::STACK_START;
 
         Self {
+            name: name.into(),
             pid: get_next_pid(),
             register_state: Box::new(register_state),
             page_table,
@@ -157,14 +164,14 @@ mod tests {
     #[cfg_attr(not(miri), test_case)]
     fn create_process_from_elf() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let _process = Process::from_elf(&elf);
+        let _process = Process::from_elf(&elf, "prog1");
     }
 
     // Disable this test because it is slow in miri
     #[cfg_attr(not(miri), test_case)]
     fn mmap_process() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let mut process = Process::from_elf(&elf);
+        let mut process = Process::from_elf(&elf, "prog1");
         assert!(
             process.free_mmap_address == FREE_MMAP_START_ADDRESS,
             "Free MMAP Address must set to correct start"

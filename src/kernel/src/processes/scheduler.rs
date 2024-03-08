@@ -15,7 +15,7 @@ use super::process_list::add_process;
 
 pub fn initialize() {
     let elf = ElfFile::parse(INIT).expect("Cannot parse ELF file");
-    let process = Process::from_elf(&elf);
+    let process = Process::from_elf(&elf, "init");
     add_process(process);
 }
 
@@ -72,7 +72,7 @@ pub fn schedule_program(name: &str) -> Option<Pid> {
     for (prog_name, elf) in PROGRAMS {
         if name == *prog_name {
             let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
-            let process = Process::from_elf(&elf);
+            let process = Process::from_elf(&elf, prog_name);
             let pid = process.get_pid();
             add_process(process);
             return Some(pid);

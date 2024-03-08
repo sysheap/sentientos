@@ -60,13 +60,16 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
             (trap_frame[Register::a0], trap_frame[Register::a1]) = handle_syscall(nr, arg1, arg2);
         }
         _ => {
+            let current_process = get_current_process_expect();
+            let current_process = current_process.borrow();
             panic!(
-                "Unhandled exception! (Name: {}) (Exception code: {}) (stval: 0x{:x}) (sepc: 0x{:x}) (From Userspace: {})\nTrap Frame: {:?}",
+                "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
                 cause.get_reason(),
                 cause.get_exception_code(),
                 stval,
                 sepc,
-                get_current_process_expect().borrow().get_page_table().is_userspace_address(sepc),
+                current_process.get_page_table().is_userspace_address(sepc),
+                current_process.get_name(),
                 trap_frame
             );
         }
