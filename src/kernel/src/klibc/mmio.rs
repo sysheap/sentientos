@@ -37,6 +37,13 @@ impl<T> MMIO<T> {
             asm!("");
         }
     }
+
+    fn memory_fence(&self) {
+        // Make sure that io writes and reads are in order
+        unsafe {
+            asm!("fence");
+        }
+    }
 }
 
 impl<T> Deref for MMIO<T> {
@@ -45,7 +52,9 @@ impl<T> Deref for MMIO<T> {
     fn deref(&self) -> &Self::Target {
         unsafe {
             self.memory_barrier();
-            &*self.address
+            let deref = &*self.address;
+            self.memory_fence();
+            deref
         }
     }
 }
@@ -54,7 +63,9 @@ impl<T> DerefMut for MMIO<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             self.memory_barrier();
-            &mut *self.address
+            let deref_mut = &mut *self.address;
+            self.memory_fence();
+            deref_mut
         }
     }
 }
