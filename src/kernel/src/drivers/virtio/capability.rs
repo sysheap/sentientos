@@ -1,18 +1,18 @@
 // cfg_type values
 /* Common configuration */
-const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
+pub const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
 /* Notifications */
-const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
+pub const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
 /* ISR Status */
-const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
+pub const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
 /* Device specific configuration */
-const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
+pub const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 /* PCI configuration access */
-const VIRTIO_PCI_CAP_PCI_CFG: u8 = 5;
+pub const VIRTIO_PCI_CAP_PCI_CFG: u8 = 5;
 /* Shared memory region */
-const VIRTIO_PCI_CAP_SHARED_MEMORY_CFG: u8 = 8;
+pub const VIRTIO_PCI_CAP_SHARED_MEMORY_CFG: u8 = 8;
 /* Vendor-specific data */
-const VIRTIO_PCI_CAP_VENDOR_CFG: u8 = 9;
+pub const VIRTIO_PCI_CAP_VENDOR_CFG: u8 = 9;
 
 #[derive(Debug)]
 #[repr(packed)]
@@ -26,4 +26,14 @@ pub(super) struct VirtioPciCap {
     padding: [u8; 2], /* Pad to full dword. */
     offset: u32,      /* Offset within bar. */
     length: u32,      /* Length of the structure, in bytes. */
+}
+
+impl VirtioPciCap {
+    pub fn cfg_type(&self) -> u8 {
+        self.cfg_type
+    }
+
+    pub fn bar(&self) -> u8 {
+        self.bar
+    }
 }

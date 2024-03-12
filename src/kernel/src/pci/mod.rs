@@ -22,6 +22,11 @@ const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
+pub mod command_register {
+    pub const IO_SPACE: u16 = 1 << 0;
+    pub const MEMORY_SPACE: u16 = 1 << 1;
+}
+
 #[repr(packed)]
 #[allow(dead_code)]
 pub struct GeneralDevicePciHeader {
@@ -37,17 +42,36 @@ pub struct GeneralDevicePciHeader {
     latency_timer: u8,
     header_type: u8,
     built_in_self_test: u8,
-    bar0: u32,
-    bar1: u32,
-    bar2: u32,
-    bar3: u32,
-    bar4: u32,
-    bar5: u32,
+    bars: [u32; 6],
     cardbus_cis_pointer: u32,
     subsystem_vendor_id: u16,
     subsystem_id: u16,
     expnasion_rom_base_address: u32,
     capabilities_pointer: u8,
+}
+
+impl GeneralDevicePciHeader {
+    pub fn bar(&self, index: u8) -> u32 {
+        assert!(index < 6);
+        self.bars[index as usize]
+    }
+
+    pub fn write_bar(&mut self, index: u8, value: u32) {
+        assert!(index < 6);
+        self.bars[index as usize] = value;
+    }
+
+    pub fn set_command_register_bits(&mut self, bits: u16) {
+        self.command_register |= bits;
+    }
+
+    pub fn command_register(&self) -> u16 {
+        self.command_register
+    }
+
+    pub fn write_command_register(&mut self, value: u16) {
+        self.command_register = value;
+    }
 }
 
 pub struct PciCapabilityIter<'a> {
