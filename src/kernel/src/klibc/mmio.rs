@@ -24,6 +24,10 @@ impl<T> MMIO<T> {
         }
     }
 
+    pub unsafe fn new_type<U>(&self) -> MMIO<U> {
+        self.new_type_with_offset(0)
+    }
+
     pub unsafe fn new_type_with_offset<U>(&self, offset: usize) -> MMIO<U> {
         MMIO::<U> {
             address: self.address.byte_add(offset) as *mut U,

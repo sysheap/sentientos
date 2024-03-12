@@ -62,6 +62,12 @@ pub struct PciCapability {
     next: u8,
 }
 
+impl PciCapability {
+    pub fn id(&self) -> u8 {
+        self.id
+    }
+}
+
 impl<'a> Iterator for PciCapabilityIter<'a> {
     type Item = MMIO<PciCapability>;
 
