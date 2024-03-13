@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 use crate::device_tree::*;
 use alloc::vec::Vec;
 use common::big_endian::BigEndian;
@@ -9,10 +11,66 @@ pub struct PCIInformation {
     ranges: Vec<PCIRange>,
 }
 
+#[repr(transparent)]
+pub struct PCIBitField(u32);
+
+impl PCIBitField {
+    pub const CONFIGURATION_SPACE_CODE: u8 = 0b00;
+    pub const IO_SPACE_CODE: u8 = 0b01;
+    pub const MEMORY_SPACE_32_BIT_CODE: u8 = 0b10;
+    pub const MEMORY_SPACE_64_BIT_CODE: u8 = 0b11;
+
+    fn high_bits(&self) -> u8 {
+        (self.0 >> 24) as u8
+    }
+
+    pub fn relocatable(&self) -> bool {
+        self.high_bits() & 0b1000_0000 != 0
+    }
+
+    pub fn prefetchable(&self) -> bool {
+        self.high_bits() & 0b0100_0000 != 0
+    }
+
+    pub fn alias_address(&self) -> bool {
+        self.high_bits() & 0b0010_0000 != 0
+    }
+
+    pub fn space_code(&self) -> u8 {
+        self.high_bits() & 0b0000_0011
+    }
+}
+
+impl Debug for PCIBitField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let typ = match self.space_code() {
+            Self::CONFIGURATION_SPACE_CODE => "configuration space",
+            Self::IO_SPACE_CODE => "I/O space",
+            Self::MEMORY_SPACE_32_BIT_CODE => "32 bit memory space",
+            Self::MEMORY_SPACE_64_BIT_CODE => "64 bit memory space",
+            _ => panic!("invalid space code"),
+        };
+        write!(
+            f,
+            "relocatable={}, prefetchable={}, aliased_address={}, space_code={}",
+            self.relocatable(),
+            self.prefetchable(),
+            self.alias_address(),
+            typ
+        )
+    }
+}
+
+impl From<u32> for PCIBitField {
+    fn from(value: u32) -> Self {
+        PCIBitField(value)
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct PCIRange {
-    pci_bitfield: u32,
+    pci_bitfield: PCIBitField,
     pci_child_address: usize,
     parent_address: usize,
     size: usize,
@@ -77,7 +135,7 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
         };
 
         pci_information.ranges.push(PCIRange {
-            pci_bitfield,
+            pci_bitfield: pci_bitfield.into(),
             pci_child_address,
             parent_address,
             size,
