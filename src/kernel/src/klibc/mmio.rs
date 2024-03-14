@@ -56,9 +56,8 @@ impl<T> Deref for MMIO<T> {
     fn deref(&self) -> &Self::Target {
         unsafe {
             self.memory_barrier();
-            let deref = &*self.address;
             self.memory_fence();
-            deref
+            &*self.address
         }
     }
 }
@@ -67,9 +66,8 @@ impl<T> DerefMut for MMIO<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             self.memory_barrier();
-            let deref_mut = &mut *self.address;
             self.memory_fence();
-            deref_mut
+            &mut *self.address
         }
     }
 }

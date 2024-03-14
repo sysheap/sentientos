@@ -11,6 +11,14 @@ pub struct PCIInformation {
     ranges: Vec<PCIRange>,
 }
 
+impl PCIInformation {
+    pub fn get_first_range_for_type(&self, space_code: u8) -> Option<&PCIRange> {
+        self.ranges
+            .iter()
+            .find(|range| range.pci_bitfield.space_code() == space_code)
+    }
+}
+
 #[repr(transparent)]
 pub struct PCIBitField(u32);
 
@@ -70,10 +78,10 @@ impl From<u32> for PCIBitField {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct PCIRange {
-    pci_bitfield: PCIBitField,
-    pci_child_address: usize,
-    parent_address: usize,
-    size: usize,
+    pub pci_bitfield: PCIBitField,
+    pub pci_child_address: usize,
+    pub parent_address: usize,
+    pub size: usize,
 }
 
 pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {

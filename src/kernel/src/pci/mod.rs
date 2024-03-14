@@ -1,3 +1,4 @@
+use crate::assert::static_assert_size;
 use crate::{info, klibc::MMIO};
 use alloc::vec::Vec;
 
@@ -8,7 +9,9 @@ use lookup::lookup;
 
 pub use devic_tree_parser::parse;
 
-use self::devic_tree_parser::PCIInformation;
+pub use self::devic_tree_parser::PCIBitField;
+pub use self::devic_tree_parser::PCIInformation;
+pub use self::devic_tree_parser::PCIRange;
 
 const INVALID_VENDOR_ID: u16 = 0xffff;
 
@@ -63,6 +66,10 @@ impl GeneralDevicePciHeader {
 
     pub fn set_command_register_bits(&mut self, bits: u16) {
         self.command_register |= bits;
+    }
+
+    pub fn clear_command_register_bits(&mut self, bits: u16) {
+        self.command_register &= !bits;
     }
 
     pub fn command_register(&self) -> u16 {

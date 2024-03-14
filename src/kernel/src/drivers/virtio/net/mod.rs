@@ -2,7 +2,7 @@ use crate::{
     drivers::virtio::capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG},
     info,
     klibc::MMIO,
-    pci::{command_register, GeneralDevicePciHeader},
+    pci::{command_register, GeneralDevicePciHeader, PCIBitField, PCIInformation, PCIRange},
 };
 use alloc::vec::Vec;
 
@@ -13,14 +13,10 @@ pub struct NetworkDevice {
 }
 
 impl NetworkDevice {
-    pub fn initialize(mut pci_device: MMIO<GeneralDevicePciHeader>) -> Result<Self, &'static str> {
-        info!("Bar 0: {:#x}", pci_device.bar(0));
-        info!("Bar 1: {:#x}", pci_device.bar(1));
-        info!("Bar 2: {:#x}", pci_device.bar(2));
-        info!("Bar 3: {:#x}", pci_device.bar(3));
-        info!("Bar 4: {:#x}", pci_device.bar(4));
-        info!("Bar 5: {:#x}", pci_device.bar(5));
-
+    pub fn initialize(
+        pci_information: &PCIInformation,
+        mut pci_device: MMIO<GeneralDevicePciHeader>,
+    ) -> Result<Self, &'static str> {
         let capabilities = pci_device.capabilities();
         let virtio_capabilities: Vec<MMIO<VirtioPciCap>> = capabilities
             .filter(|cap| cap.id() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
@@ -42,10 +38,9 @@ impl NetworkDevice {
         );
 
         // Disable I/O space and memory space to determine bar size
-        let original_command_register = pci_device.command_register();
-
-        pci_device
-            .set_command_register_bits(command_register::IO_SPACE | command_register::MEMORY_SPACE);
+        pci_device.clear_command_register_bits(
+            command_register::IO_SPACE | command_register::MEMORY_SPACE,
+        );
 
         let bar_index = common_cfg.bar();
 
@@ -69,11 +64,40 @@ impl NetworkDevice {
             bar_index, bar_value, size
         );
 
-        pci_device.write_bar(bar_index, original_bar_value);
+        // Let's use some pci address space
+        let range = pci_information
+            .get_first_range_for_type(PCIBitField::MEMORY_SPACE_64_BIT_CODE)
+            .unwrap();
 
-        // Restore original command register
-        pci_device.write_command_register(original_command_register);
+        info!("Range: {:#x?}", range);
+
+        assert!(
+            range.pci_child_address % (size as usize) == 0,
+            "Address must be aligned"
+        );
+
+        pci_device.write_bar(bar_index, range.pci_child_address as u32);
+        pci_device.write_bar(bar_index + 1, (range.pci_child_address >> 32) as u32);
+
+        pci_device.set_command_register_bits(command_register::MEMORY_SPACE);
+
+        let common_cfg: MMIO<VirtioPciCommonCfg> = unsafe { MMIO::new(range.parent_address) };
+
+        info!("Common config: {:#x?}", *common_cfg);
 
         Ok(Self { device: pci_device })
     }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+struct VirtioPciCommonCfg {
+    device_feature_select: u32,
+    device_feature: u32,
+    driver_feature_select: u32,
+    driver_feature: u32,
+    config_msix_vector: u32,
+    num_queues: u32,
+    device_status: u8,
+    config_generation: u8,
 }
