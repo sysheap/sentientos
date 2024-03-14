@@ -10,8 +10,6 @@ qemu-system-riscv64 \
     -m 128M \
     -nographic \
     -serial mon:stdio \
-    -d int,cpu_reset,guest_errors \
-    -D /tmp/yaros_qemu_log.txt \
     -netdev user,id=netdev1 -device virtio-net-pci,netdev=netdev1 \
     -kernel 
 """
