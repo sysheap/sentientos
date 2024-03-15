@@ -95,6 +95,14 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         pci::parse(&parsed_structure_block).expect("pci information must be parsable");
     println!("pci information: {:#x?}", pci_information);
 
+    {
+        let pci_space_64_bit = pci_information
+            .get_first_range_for_type(pci::PCIBitField::MEMORY_SPACE_64_BIT_CODE)
+            .expect("There must be a 64 bit allocation space.");
+        let mut pci_allocator = pci::PCI_ALLOCATOR_64_BIT.lock();
+        pci_allocator.init(pci_space_64_bit);
+    }
+
     let mut pci_devices = enumerate_devices(&pci_information);
     println!("Got {:#x?}", pci_devices);
 

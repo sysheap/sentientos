@@ -36,4 +36,8 @@ impl VirtioPciCap {
     pub fn bar(&self) -> u8 {
         self.bar
     }
+
+    pub fn offset(&self) -> usize {
+        self.offset as usize
+    }
 }

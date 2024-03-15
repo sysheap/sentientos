@@ -79,8 +79,8 @@ impl From<u32> for PCIBitField {
 #[derive(Debug)]
 pub struct PCIRange {
     pub pci_bitfield: PCIBitField,
-    pub pci_child_address: usize,
-    pub parent_address: usize,
+    pub pci_address: usize,
+    pub cpu_address: usize,
     pub size: usize,
 }
 
@@ -144,8 +144,8 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
 
         pci_information.ranges.push(PCIRange {
             pci_bitfield: pci_bitfield.into(),
-            pci_child_address,
-            parent_address,
+            pci_address: pci_child_address,
+            cpu_address: parent_address,
             size,
         });
     }

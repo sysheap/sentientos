@@ -2,7 +2,7 @@ use crate::{
     drivers::virtio::capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG},
     info,
     klibc::MMIO,
-    pci::{command_register, GeneralDevicePciHeader, PCIBitField, PCIInformation, PCIRange},
+    pci::{command_register, GeneralDevicePciHeader, PCIBitField, PCIInformation},
 };
 use alloc::vec::Vec;
 
@@ -37,51 +37,12 @@ impl NetworkDevice {
             **common_cfg
         );
 
-        // Disable I/O space and memory space to determine bar size
-        pci_device.clear_command_register_bits(
-            command_register::IO_SPACE | command_register::MEMORY_SPACE,
-        );
-
         let bar_index = common_cfg.bar();
 
-        let original_bar_value = pci_device.bar(bar_index);
+        let config_bar = pci_device.initialize_bar(bar_index);
 
-        assert!(original_bar_value & 0x1 == 0, "Bar must be memory mapped");
-        assert!(
-            (original_bar_value & 0b110) >> 1 == 0x2,
-            "Bar must be 64-bit wide"
-        );
-
-        pci_device.write_bar(bar_index, 0xffffffff);
-        let bar_value = pci_device.bar(bar_index);
-
-        // Mask out the 4 lower bits because they describe the type of the bar
-        // Invert the value and add 1 to get the size (because the bits that are not set are zero because of alignment)
-        let size = !(bar_value & !0b1111) + 1;
-
-        info!(
-            "Bar {} value: {:#x} size: {:#x}",
-            bar_index, bar_value, size
-        );
-
-        // Let's use some pci address space
-        let range = pci_information
-            .get_first_range_for_type(PCIBitField::MEMORY_SPACE_64_BIT_CODE)
-            .unwrap();
-
-        info!("Range: {:#x?}", range);
-
-        assert!(
-            range.pci_child_address % (size as usize) == 0,
-            "Address must be aligned"
-        );
-
-        pci_device.write_bar(bar_index, range.pci_child_address as u32);
-        pci_device.write_bar(bar_index + 1, (range.pci_child_address >> 32) as u32);
-
-        pci_device.set_command_register_bits(command_register::MEMORY_SPACE);
-
-        let common_cfg: MMIO<VirtioPciCommonCfg> = unsafe { MMIO::new(range.parent_address) };
+        let common_cfg: MMIO<VirtioPciCommonCfg> =
+            unsafe { MMIO::new(config_bar.cpu_address + common_cfg.offset()) };
 
         info!("Common config: {:#x?}", *common_cfg);
 

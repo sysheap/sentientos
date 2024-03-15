@@ -1,17 +1,23 @@
 use crate::assert::static_assert_size;
+use crate::{debug, pci};
 use crate::{info, klibc::MMIO};
 use alloc::vec::Vec;
 
+mod allocator;
 mod devic_tree_parser;
 mod lookup;
 
+use common::mutex::Mutex;
 use lookup::lookup;
 
 pub use devic_tree_parser::parse;
 
+use self::allocator::{PCIAllocatedSpace, PCIAllocator};
 pub use self::devic_tree_parser::PCIBitField;
 pub use self::devic_tree_parser::PCIInformation;
 pub use self::devic_tree_parser::PCIRange;
+
+pub static PCI_ALLOCATOR_64_BIT: Mutex<PCIAllocator> = Mutex::new(PCIAllocator::new());
 
 const INVALID_VENDOR_ID: u16 = 0xffff;
 
@@ -30,7 +36,7 @@ pub mod command_register {
     pub const MEMORY_SPACE: u16 = 1 << 1;
 }
 
-#[repr(packed)]
+#[repr(C)]
 #[allow(dead_code)]
 pub struct GeneralDevicePciHeader {
     vendor_id: u16,
@@ -64,20 +70,47 @@ impl GeneralDevicePciHeader {
         self.bars[index as usize] = value;
     }
 
+    pub fn initialize_bar(&mut self, index: u8) -> PCIAllocatedSpace {
+        self.clear_command_register_bits(
+            command_register::IO_SPACE | command_register::MEMORY_SPACE,
+        );
+
+        let original_bar_value = self.bar(index);
+        assert!(original_bar_value & 0x1 == 0, "Bar must be memory mapped");
+        assert!(
+            (original_bar_value & 0b110) >> 1 == 0x2,
+            "Bar must be 64-bit wide"
+        );
+
+        // Determine size of bar
+        self.write_bar(index, 0xffffffff);
+        let bar_value = self.bar(index);
+
+        // Mask out the 4 lower bits because they describe the type of the bar
+        // Invert the value and add 1 to get the size (because the bits that are not set are zero because of alignment)
+        let size = !(bar_value & !0b1111) + 1;
+
+        debug!("Bar {} size: {:#x}", index, size);
+
+        let space = pci::PCI_ALLOCATOR_64_BIT
+            .lock()
+            .allocate(size as usize)
+            .expect("There must be enough space for the bar");
+
+        self.write_bar(index, space.pci_address as u32);
+        self.write_bar(index + 1, (space.pci_address >> 32) as u32);
+
+        self.set_command_register_bits(command_register::MEMORY_SPACE);
+
+        space
+    }
+
     pub fn set_command_register_bits(&mut self, bits: u16) {
         self.command_register |= bits;
     }
 
     pub fn clear_command_register_bits(&mut self, bits: u16) {
         self.command_register &= !bits;
-    }
-
-    pub fn command_register(&self) -> u16 {
-        self.command_register
-    }
-
-    pub fn write_command_register(&mut self, value: u16) {
-        self.command_register = value;
     }
 }
 
@@ -87,7 +120,7 @@ pub struct PciCapabilityIter<'a> {
 }
 
 #[derive(Debug)]
-#[repr(packed)]
+#[repr(C)]
 pub struct PciCapability {
     id: u8,
     next: u8,
