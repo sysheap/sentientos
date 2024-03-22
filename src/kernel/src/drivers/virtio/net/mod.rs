@@ -1,10 +1,15 @@
 use crate::{
-    drivers::virtio::capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG},
+    drivers::virtio::{
+        capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG},
+        virtqueue::VirtQueue,
+    },
     info,
     klibc::MMIO,
-    pci::{command_register, GeneralDevicePciHeader, PCIBitField, PCIInformation},
+    pci::{GeneralDevicePciHeader, PCIInformation},
 };
 use alloc::vec::Vec;
+
+const EXPECTED_QUEUE_SIZE: usize = 0x100;
 
 const VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID: u8 = 0x9;
 
@@ -92,6 +97,35 @@ impl NetworkDevice {
             "Device features not ok"
         );
 
+        // Intialize virtqueues
+        // index 0
+        common_cfg.queue_select = 0;
+        let receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE> = VirtQueue::new(common_cfg.queue_size);
+        // index 1
+        common_cfg.queue_select = 1;
+        let transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE> = VirtQueue::new(common_cfg.queue_size);
+
+        common_cfg.queue_select = 0;
+        common_cfg.queue_desc = receive_queue.descriptor_area_physical_address() as u64;
+        common_cfg.queue_driver = receive_queue.driver_area_physical_address() as u64;
+        common_cfg.queue_device = receive_queue.device_area_physical_address() as u64;
+        common_cfg.queue_enable = 1;
+
+        common_cfg.queue_select = 1;
+        common_cfg.queue_desc = transmit_queue.descriptor_area_physical_address() as u64;
+        common_cfg.queue_driver = transmit_queue.driver_area_physical_address() as u64;
+        common_cfg.queue_device = transmit_queue.device_area_physical_address() as u64;
+        common_cfg.queue_enable = 1;
+
+        common_cfg.device_status = common_cfg.device_status | DEVICE_STATUS_DRIVER_OK;
+
+        assert!(
+            common_cfg.device_status & DEVICE_STATUS_DRIVER_OK != 0,
+            "Device driver not ok"
+        );
+
+        info!("Device initialized: {:#x?}", common_cfg.device_status);
+
         Ok(Self { device: pci_device })
     }
 }
@@ -116,6 +150,4 @@ struct VirtioPciCommonCfg {
     queue_desc: u64,
     queue_driver: u64,
     queue_device: u64,
-    queue_notify_data: u16,
-    queue_reset: u16,
 }
