@@ -26,6 +26,9 @@ const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
 pub struct NetworkDevice {
     device: MMIO<GeneralDevicePciHeader>,
+    common_cfg: MMIO<VirtioPciCommonCfg>,
+    transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
+    receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
 }
 
 impl NetworkDevice {
@@ -126,7 +129,19 @@ impl NetworkDevice {
 
         info!("Device initialized: {:#x?}", common_cfg.device_status);
 
-        Ok(Self { device: pci_device })
+        Ok(Self {
+            device: pci_device,
+            common_cfg,
+            receive_queue,
+            transmit_queue,
+        })
+    }
+}
+
+impl Drop for NetworkDevice {
+    fn drop(&mut self) {
+        info!("Reset network device becuase of drop");
+        self.common_cfg.device_status = 0x0;
     }
 }
 

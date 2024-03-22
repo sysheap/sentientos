@@ -15,6 +15,8 @@
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use core::mem;
+
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
@@ -111,11 +113,16 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "There should be one virtio net interface."
     );
 
-    let _network_device = drivers::virtio::net::NetworkDevice::initialize(
+    let network_device = drivers::virtio::net::NetworkDevice::initialize(
         &pci_information,
         pci_devices.network_devices.pop().unwrap(),
     )
     .expect("Initialization must work.");
+
+    // TODO: Remove when done
+    // This prevents the network device from being dropped and causing a panic because page tables
+    // are not properly configured now
+    mem::forget(network_device);
 
     page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
 
