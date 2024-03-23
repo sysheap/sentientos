@@ -1,11 +1,30 @@
+use core::arch::asm;
+
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+
+use crate::cpu;
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
 pub struct VirtQueue<const QUEUE_SIZE: usize> {
     descriptor_area: Box<[virtq_desc; QUEUE_SIZE]>,
+    free_descriptor_indices: Vec<u16>,
+    outstanding_buffers: BTreeMap<u16, Vec<u8>>,
+    last_used_ring_index: u16,
     driver_area: Box<virtq_avail<QUEUE_SIZE>>,
     device_area: Box<virtq_used<QUEUE_SIZE>>,
+}
+
+pub enum BufferDirection {
+    DriverWritable,
+    DeviceWritable,
+}
+
+#[derive(Debug)]
+pub enum QueueError {
+    NoFreeDescriptors,
 }
 
 impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
@@ -14,6 +33,9 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         assert!(queue_size % 2 == 0, "Queue size must be a power of 2");
         let queue = VirtQueue {
             descriptor_area: Box::new(core::array::from_fn(|_| virtq_desc::default())),
+            free_descriptor_indices: (0..queue_size as u16).collect(),
+            outstanding_buffers: BTreeMap::new(),
+            last_used_ring_index: 0,
             driver_area: Box::new(virtq_avail::default()),
             device_area: Box::new(virtq_used::default()),
         };
@@ -44,6 +66,76 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     pub fn device_area_physical_address(&self) -> u64 {
         &*self.device_area as *const _ as u64
     }
+
+    /// Put a buffer into the virtque.
+    /// Returns the id of the descriptor if the request was successful.
+    /// Returns the original request data in case the request was errornous.
+    pub fn put_buffer(
+        &mut self,
+        buffer: Vec<u8>,
+        direction: BufferDirection,
+    ) -> Result<u16, QueueError> {
+        let free_descriptor_index = self
+            .free_descriptor_indices
+            .pop()
+            .ok_or(QueueError::NoFreeDescriptors)?;
+        let descriptor = &mut self.descriptor_area[free_descriptor_index as usize];
+        descriptor.addr = buffer.as_ptr() as u64;
+        descriptor.len = buffer.len() as u32;
+        descriptor.flags = match direction {
+            BufferDirection::DeviceWritable => VIRTQ_DESC_F_WRITE,
+            BufferDirection::DriverWritable => 0,
+        };
+        descriptor.next = 0;
+
+        // Set available ring
+        // avail->ring[avail->idx % qsz] = head;
+        self.driver_area.ring[self.driver_area.idx as usize % QUEUE_SIZE] = free_descriptor_index;
+
+        cpu::memory_fence();
+
+        self.driver_area.idx = self.driver_area.idx.wrapping_add(1);
+
+        cpu::memory_fence();
+
+        let insert_result = self
+            .outstanding_buffers
+            .insert(free_descriptor_index, buffer)
+            .is_none();
+
+        assert!(
+            insert_result == true,
+            "Outstanding buffers is not allowed to contain this index"
+        );
+
+        Ok(free_descriptor_index)
+    }
+
+    pub fn receive_buffer(&mut self) -> Vec<UsedBuffer> {
+        // Prevent re/reading the hardware. Only tackle the current amount of buffers.
+        let current_device_index = self.device_area.idx;
+        if self.last_used_ring_index == current_device_index {
+            return Vec::new();
+        }
+        let mut return_buffers: Vec<UsedBuffer> = Vec::new();
+        while self.last_used_ring_index != current_device_index {
+            let result_descriptor =
+                &mut self.device_area.ring[self.last_used_ring_index as usize % QUEUE_SIZE];
+            let index = result_descriptor.id as u16;
+            let buffer = self
+                .outstanding_buffers
+                .remove(&index)
+                .expect("There must be an outstanding buffer for this id");
+            return_buffers.push(UsedBuffer { index, buffer });
+            self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
+        }
+        return_buffers
+    }
+}
+
+pub struct UsedBuffer {
+    index: u16,
+    buffer: Vec<u8>,
 }
 
 /* This marks a buffer as continuing via the next field. */
