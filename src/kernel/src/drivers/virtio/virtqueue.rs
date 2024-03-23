@@ -1,5 +1,3 @@
-use core::arch::asm;
-
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -11,10 +9,35 @@ use crate::cpu;
 pub struct VirtQueue<const QUEUE_SIZE: usize> {
     descriptor_area: Box<[virtq_desc; QUEUE_SIZE]>,
     free_descriptor_indices: Vec<u16>,
-    outstanding_buffers: BTreeMap<u16, Vec<u8>>,
+    outstanding_buffers: BTreeMap<u16, DeconstructedVec>,
     last_used_ring_index: u16,
     driver_area: Box<virtq_avail<QUEUE_SIZE>>,
     device_area: Box<virtq_used<QUEUE_SIZE>>,
+}
+
+struct DeconstructedVec {
+    ptr: *mut u8,
+    length: usize,
+    capacity: usize,
+}
+
+impl DeconstructedVec {
+    fn from_vec(vec: Vec<u8>) -> Self {
+        let (ptr, length, capacity) = vec.into_raw_parts();
+        Self {
+            ptr,
+            length,
+            capacity,
+        }
+    }
+
+    fn into_vec_with_len(self, length: usize) -> Vec<u8> {
+        assert!(
+            length <= self.capacity,
+            "Length must be smaller or equal capacity"
+        );
+        unsafe { Vec::from_raw_parts(self.ptr, self.length, self.capacity) }
+    }
 }
 
 pub enum BufferDirection {
@@ -100,7 +123,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
 
         let insert_result = self
             .outstanding_buffers
-            .insert(free_descriptor_index, buffer)
+            .insert(free_descriptor_index, DeconstructedVec::from_vec(buffer))
             .is_none();
 
         assert!(
@@ -125,7 +148,8 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             let buffer = self
                 .outstanding_buffers
                 .remove(&index)
-                .expect("There must be an outstanding buffer for this id");
+                .expect("There must be an outstanding buffer for this id")
+                .into_vec_with_len(result_descriptor.len as usize);
             return_buffers.push(UsedBuffer { index, buffer });
             self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
         }
