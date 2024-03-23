@@ -1,6 +1,6 @@
 use crate::{
     drivers::virtio::{
-        capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG},
+        capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG},
         virtqueue::VirtQueue,
     },
     info,
@@ -26,7 +26,8 @@ const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
 pub struct NetworkDevice {
     device: MMIO<GeneralDevicePciHeader>,
-    common_cfg: MMIO<VirtioPciCommonCfg>,
+    common_cfg: MMIO<virtio_pci_commonf_cfg>,
+    net_cfg: MMIO<virtio_net_config>,
     transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
     receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
 }
@@ -56,7 +57,7 @@ impl NetworkDevice {
 
         let config_bar = pci_device.initialize_bar(bar_index);
 
-        let mut common_cfg: MMIO<VirtioPciCommonCfg> =
+        let mut common_cfg: MMIO<virtio_pci_commonf_cfg> =
             unsafe { MMIO::new(config_bar.cpu_address + common_cfg.offset()) };
 
         info!("Common config: {:#x?}", *common_cfg);
@@ -129,9 +130,33 @@ impl NetworkDevice {
 
         info!("Device initialized: {:#x?}", common_cfg.device_status);
 
+        // Get device configuration
+        let net_cfg_cap = virtio_capabilities
+            .iter()
+            .find(|cap| cap.cfg_type() == VIRTIO_PCI_CAP_DEVICE_CFG)
+            .ok_or("Device configuration capability not found")?;
+
+        info!(
+            "Device configuration capability found at {:?}",
+            **net_cfg_cap
+        );
+
+        let net_config_bar_index = net_cfg_cap.bar();
+
+        // TODO: Remember which bar is already configured
+        assert!(net_config_bar_index == bar_index);
+
+        // let net_config_bar = pci_device.initialize_bar(net_config_bar_index);
+
+        let net_cfg: MMIO<virtio_net_config> =
+            unsafe { MMIO::new(config_bar.cpu_address + net_cfg_cap.offset()) };
+
+        info!("Net config: {:#x?}", *net_cfg);
+
         Ok(Self {
             device: pci_device,
             common_cfg,
+            net_cfg,
             receive_queue,
             transmit_queue,
         })
@@ -145,9 +170,10 @@ impl Drop for NetworkDevice {
     }
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug)]
 #[repr(C)]
-struct VirtioPciCommonCfg {
+struct virtio_pci_commonf_cfg {
     device_feature_select: u32,
     device_feature: u32,
     driver_feature_select: u32,
@@ -165,4 +191,31 @@ struct VirtioPciCommonCfg {
     queue_desc: u64,
     queue_driver: u64,
     queue_device: u64,
+}
+
+// struct virtio_net_config {
+//     u8 mac[6];
+//     le16 status;
+//     le16 max_virtqueue_pairs;
+//     le16 mtu;
+//     le32 speed;
+//     u8 duplex;
+//     u8 rss_max_key_size;
+//     le16 rss_max_indirection_table_length;
+//     le32 supported_hash_types;
+//     };
+
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+#[repr(C)]
+struct virtio_net_config {
+    mac: [u8; 6],
+    status: u16,
+    max_virtqueue_pairs: u16,
+    mtu: u16,
+    speed: u32,
+    duplex: u8,
+    rss_max_key_size: u8,
+    rss_max_indirection_table_length: u16,
+    supported_hash_types: u32,
 }
