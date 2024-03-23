@@ -1,7 +1,10 @@
+use core::mem;
+
 use crate::{
+    assert::static_assert_size,
     drivers::virtio::{
         capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG},
-        virtqueue::VirtQueue,
+        virtqueue::{BufferDirection, VirtQueue},
     },
     info,
     klibc::MMIO,
@@ -104,7 +107,8 @@ impl NetworkDevice {
         // Intialize virtqueues
         // index 0
         common_cfg.queue_select = 0;
-        let receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE> = VirtQueue::new(common_cfg.queue_size);
+        let mut receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE> =
+            VirtQueue::new(common_cfg.queue_size);
         // index 1
         common_cfg.queue_select = 1;
         let transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE> = VirtQueue::new(common_cfg.queue_size);
@@ -153,6 +157,51 @@ impl NetworkDevice {
 
         info!("Net config: {:#x?}", *net_cfg);
 
+        // Fill receive buffers
+        for _ in 0..EXPECTED_QUEUE_SIZE {
+            let receive_buffer = vec![0xabu8; 1526];
+            let id = receive_queue
+                .put_buffer(receive_buffer, BufferDirection::DeviceWritable)
+                .expect("Receive buffer must be insertable to the queue");
+            info!("Inserted {id}");
+        }
+
+        info!("Checking for any received buffers...");
+        loop {
+            let received = receive_queue.receive_buffer();
+            if received.is_empty() {
+                continue;
+            }
+            info!("Got buffer!!");
+            for used_buf in received {
+                // info!("Used buffer: {used_buf:?}");
+                let buf = used_buf.buffer;
+                // SAFETY: Ensure that the buffer is large enough and properly aligned to contain MyStruct.
+                let (struct_bytes, data_bytes) = buf.split_at(mem::size_of::<virtio_net_hdr>());
+
+                info!("got struct bytes len: {len}", len = struct_bytes.len());
+                info!("got data bytes len: {len}", len = data_bytes.len());
+
+                assert!(struct_bytes.len() == 12);
+
+                // SAFETY: Transmute the byte slice into a reference to MyStruct.
+                // We must ensure that the bytes actually represent a MyStruct and that the alignment is correct.
+                let net_hdr: &virtio_net_hdr = unsafe {
+                    let ptr = struct_bytes.as_ptr() as *const virtio_net_hdr;
+                    assert!(ptr.is_aligned(), "net hdr must be aligned");
+                    &*ptr
+                };
+
+                info!("Net header: {net_hdr:#x?}");
+                // assert!(
+                //     net_hdr.num_buffers == 1,
+                //     "Everything must be in a single buffer"
+                // );
+                info!("Data: {data_bytes:x?}");
+            }
+            panic!("Abort here");
+        }
+
         Ok(Self {
             device: pci_device,
             common_cfg,
@@ -193,18 +242,6 @@ struct virtio_pci_commonf_cfg {
     queue_device: u64,
 }
 
-// struct virtio_net_config {
-//     u8 mac[6];
-//     le16 status;
-//     le16 max_virtqueue_pairs;
-//     le16 mtu;
-//     le32 speed;
-//     u8 duplex;
-//     u8 rss_max_key_size;
-//     le16 rss_max_indirection_table_length;
-//     le32 supported_hash_types;
-//     };
-
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
 #[repr(C)]
@@ -219,3 +256,32 @@ struct virtio_net_config {
     rss_max_indirection_table_length: u16,
     supported_hash_types: u32,
 }
+
+const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
+const VIRTIO_NET_HDR_F_DATA_VALID: u8 = 2;
+const VIRTIO_NET_HDR_F_RSC_INFO: u8 = 4;
+
+const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
+const VIRTIO_NET_HDR_GSO_TCPV4: u8 = 1;
+const VIRTIO_NET_HDR_GSO_UDP: u8 = 3;
+const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
+const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
+const VIRTIO_NET_HDR_GSO_ECN: u8 = 0x80;
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Debug)]
+struct virtio_net_hdr {
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    gso_size: u16,
+    csum_start: u16,
+    csum_offset: u16,
+    num_buffers: u16,
+    // hash_value: u32,
+    // hash_report: u16,
+    // padding_reserved: u16,
+}
+
+static_assert_size!(virtio_net_hdr, 12);

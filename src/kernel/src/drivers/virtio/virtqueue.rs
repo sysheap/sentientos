@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::cpu;
+use crate::{cpu, info};
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
@@ -36,7 +36,7 @@ impl DeconstructedVec {
             length <= self.capacity,
             "Length must be smaller or equal capacity"
         );
-        unsafe { Vec::from_raw_parts(self.ptr, self.length, self.capacity) }
+        unsafe { Vec::from_raw_parts(self.ptr, length, self.capacity) }
     }
 }
 
@@ -135,15 +135,25 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     }
 
     pub fn receive_buffer(&mut self) -> Vec<UsedBuffer> {
+        cpu::memory_fence();
         // Prevent re/reading the hardware. Only tackle the current amount of buffers.
         let current_device_index = self.device_area.idx;
         if self.last_used_ring_index == current_device_index {
             return Vec::new();
         }
+        info!("Current device index: {:#x?}", current_device_index);
         let mut return_buffers: Vec<UsedBuffer> = Vec::new();
         while self.last_used_ring_index != current_device_index {
+            info!("last used ring index: {:#x?}", self.last_used_ring_index);
             let result_descriptor =
                 &mut self.device_area.ring[self.last_used_ring_index as usize % QUEUE_SIZE];
+            let descriptor_entry = &mut self.descriptor_area[result_descriptor.id as usize];
+            info!("Received packet from descriptor {:#x?}", descriptor_entry);
+            assert!(
+                descriptor_entry.flags == VIRTQ_DESC_F_WRITE,
+                "Only the \"device writable\" flag is allowed for the descriptor entry"
+            );
+            info!("Result descriptor {:#x?}", result_descriptor);
             let index = result_descriptor.id as u16;
             let buffer = self
                 .outstanding_buffers
@@ -151,15 +161,18 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
                 .expect("There must be an outstanding buffer for this id")
                 .into_vec_with_len(result_descriptor.len as usize);
             return_buffers.push(UsedBuffer { index, buffer });
+            descriptor_entry.addr = 0;
+            descriptor_entry.len = 0;
             self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
         }
         return_buffers
     }
 }
 
+#[derive(Debug)]
 pub struct UsedBuffer {
-    index: u16,
-    buffer: Vec<u8>,
+    pub index: u16,
+    pub buffer: Vec<u8>,
 }
 
 /* This marks a buffer as continuing via the next field. */
@@ -171,7 +184,7 @@ const VIRTQ_DESC_F_INDIRECT: u16 = 4;
 
 #[allow(non_camel_case_types)]
 #[repr(C, align(16))]
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct virtq_desc {
     addr: u64,
     len: u32,
@@ -225,7 +238,7 @@ impl<const QUEUE_SIZE: usize> Default for virtq_used<QUEUE_SIZE> {
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct virtq_used_elem {
     id: u32, /* Index of start of used descriptor chain. */
     len: u32, /*

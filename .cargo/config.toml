@@ -12,6 +12,7 @@ qemu-system-riscv64 \
     -serial mon:stdio \
     -d guest_errors,cpu_reset,unimp \
     --trace virtio* \
-    -netdev user,id=netdev1 -device virtio-net-pci,netdev=netdev1,mac=00:11:22:33:44:55 \
+    --trace net* \
+    -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1,mac=00:11:22:33:44:55 \
     -kernel 
 """
