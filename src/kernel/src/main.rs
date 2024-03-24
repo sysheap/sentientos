@@ -37,6 +37,7 @@ mod io;
 mod klibc;
 mod logging;
 mod memory;
+mod net;
 mod panic;
 mod pci;
 mod processes;
@@ -120,10 +121,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     )
     .expect("Initialization must work.");
 
-    // TODO: Remove when done
-    // This prevents the network device from being dropped and causing a panic because page tables
-    // are not properly configured now
-    mem::forget(network_device);
+    net::assig_network_device(network_device);
 
     page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
 

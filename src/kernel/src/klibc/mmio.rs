@@ -1,6 +1,6 @@
 use core::{
     arch::asm,
-    fmt::{self, Debug},
+    fmt::{self, Debug, Pointer},
     ops::{Deref, DerefMut},
 };
 
@@ -74,6 +74,12 @@ impl<T> DerefMut for MMIO<T> {
 
 impl<T> Debug for MMIO<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        fmt::Pointer::fmt(&self.address, f)
+    }
+}
+
+impl<T> Pointer for MMIO<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Pointer::fmt(&self.address, f)
     }
 }

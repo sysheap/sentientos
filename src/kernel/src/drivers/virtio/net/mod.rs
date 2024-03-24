@@ -2,6 +2,7 @@ use core::mem;
 
 use crate::{
     assert::static_assert_size,
+    debug,
     drivers::virtio::{
         capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG},
         virtqueue::{BufferDirection, VirtQueue},
@@ -51,7 +52,7 @@ impl NetworkDevice {
             .find(|cap| cap.cfg_type() == VIRTIO_PCI_CAP_COMMON_CFG)
             .ok_or("Common configuration capability not found")?;
 
-        info!(
+        debug!(
             "Common configuration capability found at {:?}",
             **common_cfg
         );
@@ -63,7 +64,7 @@ impl NetworkDevice {
         let mut common_cfg: MMIO<virtio_pci_commonf_cfg> =
             unsafe { MMIO::new(config_bar.cpu_address + common_cfg.offset()) };
 
-        info!("Common config: {:#x?}", *common_cfg);
+        debug!("Common config: {:#x?}", *common_cfg);
 
         // Let's try to initialize the device
         common_cfg.device_status = 0x0;
@@ -132,7 +133,7 @@ impl NetworkDevice {
             "Device driver not ok"
         );
 
-        info!("Device initialized: {:#x?}", common_cfg.device_status);
+        debug!("Device initialized: {:#x?}", common_cfg.device_status);
 
         // Get device configuration
         let net_cfg_cap = virtio_capabilities
@@ -140,7 +141,7 @@ impl NetworkDevice {
             .find(|cap| cap.cfg_type() == VIRTIO_PCI_CAP_DEVICE_CFG)
             .ok_or("Device configuration capability not found")?;
 
-        info!(
+        debug!(
             "Device configuration capability found at {:?}",
             **net_cfg_cap
         );
@@ -155,52 +156,20 @@ impl NetworkDevice {
         let net_cfg: MMIO<virtio_net_config> =
             unsafe { MMIO::new(config_bar.cpu_address + net_cfg_cap.offset()) };
 
-        info!("Net config: {:#x?}", *net_cfg);
+        debug!("Net config: {:#x?}", *net_cfg);
 
         // Fill receive buffers
         for _ in 0..EXPECTED_QUEUE_SIZE {
-            let receive_buffer = vec![0xabu8; 1526];
-            let id = receive_queue
+            let receive_buffer = vec![0xffu8; 1526];
+            receive_queue
                 .put_buffer(receive_buffer, BufferDirection::DeviceWritable)
                 .expect("Receive buffer must be insertable to the queue");
-            info!("Inserted {id}");
         }
 
-        info!("Checking for any received buffers...");
-        loop {
-            let received = receive_queue.receive_buffer();
-            if received.is_empty() {
-                continue;
-            }
-            info!("Got buffer!!");
-            for used_buf in received {
-                // info!("Used buffer: {used_buf:?}");
-                let buf = used_buf.buffer;
-                // SAFETY: Ensure that the buffer is large enough and properly aligned to contain MyStruct.
-                let (struct_bytes, data_bytes) = buf.split_at(mem::size_of::<virtio_net_hdr>());
-
-                info!("got struct bytes len: {len}", len = struct_bytes.len());
-                info!("got data bytes len: {len}", len = data_bytes.len());
-
-                assert!(struct_bytes.len() == 12);
-
-                // SAFETY: Transmute the byte slice into a reference to MyStruct.
-                // We must ensure that the bytes actually represent a MyStruct and that the alignment is correct.
-                let net_hdr: &virtio_net_hdr = unsafe {
-                    let ptr = struct_bytes.as_ptr() as *const virtio_net_hdr;
-                    assert!(ptr.is_aligned(), "net hdr must be aligned");
-                    &*ptr
-                };
-
-                info!("Net header: {net_hdr:#x?}");
-                // assert!(
-                //     net_hdr.num_buffers == 1,
-                //     "Everything must be in a single buffer"
-                // );
-                info!("Data: {data_bytes:x?}");
-            }
-            panic!("Abort here");
-        }
+        info!(
+            "Successfully initialized network device at {:p}",
+            pci_device
+        );
 
         Ok(Self {
             device: pci_device,
@@ -209,6 +178,37 @@ impl NetworkDevice {
             receive_queue,
             transmit_queue,
         })
+    }
+
+    pub fn receive_packets(&mut self) -> Vec<Vec<u8>> {
+        let new_receive_buffers = self.receive_queue.receive_buffer();
+        let mut received_packets = Vec::new();
+
+        for receive_buffer in new_receive_buffers {
+            let (header_bytes, data_bytes) = receive_buffer
+                .buffer
+                .split_at(mem::size_of::<virtio_net_hdr>());
+
+            let net_hdr: &virtio_net_hdr = unsafe {
+                assert!(header_bytes.len() == mem::size_of::<virtio_net_hdr>());
+                let ptr: *const virtio_net_hdr = header_bytes.as_ptr() as *const virtio_net_hdr;
+                assert!(ptr.is_aligned(), "net hdr must be aligned");
+                &*ptr
+            };
+
+            assert!(net_hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE);
+            assert!(net_hdr.flags == 0);
+
+            let data = data_bytes.to_vec();
+            received_packets.push(data);
+
+            // Put buffer back into receive queue
+            self.receive_queue
+                .put_buffer(receive_buffer.buffer, BufferDirection::DeviceWritable)
+                .expect("Receive buffer must be insertable into the queue.");
+        }
+
+        received_packets
     }
 }
 
