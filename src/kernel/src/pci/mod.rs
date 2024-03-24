@@ -1,4 +1,3 @@
-use crate::assert::static_assert_size;
 use crate::{debug, pci};
 use crate::{info, klibc::MMIO};
 use alloc::vec::Vec;
@@ -26,7 +25,6 @@ const GENERAL_DEVICE_TYPE_MASK: u8 = !0x80;
 
 const CAPABILITY_POINTER_MASK: u8 = !0x3;
 
-const SUBSYSTEM_ID_OFFSET: usize = 0x2e;
 const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
@@ -115,7 +113,7 @@ impl GeneralDevicePciHeader {
 }
 
 pub struct PciCapabilityIter<'a> {
-    pci_device: &'a MMIO<GeneralDevicePciHeader>,
+    pci_device: &'a PCIDevice,
     next_offset: u8, // 0 means there is no next pointer
 }
 
@@ -140,6 +138,7 @@ impl<'a> Iterator for PciCapabilityIter<'a> {
             0 => return None,
             _ => unsafe {
                 self.pci_device
+                    .configuration_space
                     .new_type_with_offset(self.next_offset as usize)
             },
         };
@@ -148,19 +147,34 @@ impl<'a> Iterator for PciCapabilityIter<'a> {
     }
 }
 
-impl MMIO<GeneralDevicePciHeader> {
+#[derive(Debug)]
+pub struct PCIDevice {
+    configuration_space: MMIO<GeneralDevicePciHeader>,
+}
+
+impl PCIDevice {
+    pub fn configuration_space_mut(&mut self) -> &mut MMIO<GeneralDevicePciHeader> {
+        &mut self.configuration_space
+    }
+
+    pub fn configuration_space(&self) -> &MMIO<GeneralDevicePciHeader> {
+        &self.configuration_space
+    }
+
     unsafe fn try_new(address: usize) -> Option<Self> {
-        let pci_device = Self::new(address);
+        let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address);
         if pci_device.vendor_id == INVALID_VENDOR_ID {
             return None;
         }
         assert!(pci_device.header_type & GENERAL_DEVICE_TYPE_MASK == GENERAL_DEVICE_TYPE);
-        Some(pci_device)
+        Some(Self {
+            configuration_space: pci_device,
+        })
     }
 
     const CAPABILITIES_LIST_BIT: u16 = 1 << 4;
     pub fn capabilities(&self) -> PciCapabilityIter {
-        if self.status_register & Self::CAPABILITIES_LIST_BIT == 0 {
+        if self.configuration_space.status_register & Self::CAPABILITIES_LIST_BIT == 0 {
             PciCapabilityIter {
                 pci_device: self,
                 next_offset: 0,
@@ -168,7 +182,8 @@ impl MMIO<GeneralDevicePciHeader> {
         } else {
             PciCapabilityIter {
                 pci_device: self,
-                next_offset: self.capabilities_pointer & CAPABILITY_POINTER_MASK,
+                next_offset: self.configuration_space.capabilities_pointer
+                    & CAPABILITY_POINTER_MASK,
             }
         }
     }
@@ -176,7 +191,7 @@ impl MMIO<GeneralDevicePciHeader> {
 
 #[derive(Debug)]
 pub struct PciDeviceAddresses {
-    pub network_devices: Vec<MMIO<GeneralDevicePciHeader>>,
+    pub network_devices: Vec<PCIDevice>,
 }
 
 impl PciDeviceAddresses {
@@ -198,28 +213,22 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                     device,
                     function,
                 );
-                let maybe_device = unsafe { MMIO::try_new(address) };
+                let maybe_device = unsafe { PCIDevice::try_new(address) };
                 if let Some(device) = maybe_device {
-                    let vendor_id = device.vendor_id;
-                    let device_id = device.device_id;
+                    let vendor_id = device.configuration_space.vendor_id;
+                    let device_id = device.configuration_space.device_id;
                     let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
                     info!(
                         "PCI Device {:#x}:{:#x} found at {:#x} ({})",
                         vendor_id, device_id, address, name
                     );
 
-                    let subsystem_id_address: MMIO<u16> =
-                        unsafe { MMIO::new(address + SUBSYSTEM_ID_OFFSET) };
-                    let subsystem_id = *subsystem_id_address;
-
                     // Add virtio devices to device list
                     if vendor_id == VIRTIO_VENDOR_ID
                         && VIRTIO_DEVICE_ID.contains(&device_id)
-                        && subsystem_id == VIRTIO_NETWORK_SUBSYSTEM_ID
+                        && device.configuration_space.subsystem_id == VIRTIO_NETWORK_SUBSYSTEM_ID
                     {
-                        pci_devices
-                            .network_devices
-                            .push(unsafe { MMIO::new(address) });
+                        pci_devices.network_devices.push(device);
                     }
                 }
             }

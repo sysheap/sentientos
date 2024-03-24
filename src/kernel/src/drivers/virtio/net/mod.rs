@@ -9,7 +9,7 @@ use crate::{
     },
     info,
     klibc::MMIO,
-    pci::{GeneralDevicePciHeader, PCIInformation},
+    pci::PCIDevice,
 };
 use alloc::vec::Vec;
 
@@ -29,7 +29,7 @@ const VIRTIO_NET_F_MAC: u64 = 1 << 5;
 const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
 pub struct NetworkDevice {
-    device: MMIO<GeneralDevicePciHeader>,
+    device: PCIDevice,
     common_cfg: MMIO<virtio_pci_commonf_cfg>,
     net_cfg: MMIO<virtio_net_config>,
     transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
@@ -37,10 +37,7 @@ pub struct NetworkDevice {
 }
 
 impl NetworkDevice {
-    pub fn initialize(
-        pci_information: &PCIInformation,
-        mut pci_device: MMIO<GeneralDevicePciHeader>,
-    ) -> Result<Self, &'static str> {
+    pub fn initialize(mut pci_device: PCIDevice) -> Result<Self, &'static str> {
         let capabilities = pci_device.capabilities();
         let virtio_capabilities: Vec<MMIO<VirtioPciCap>> = capabilities
             .filter(|cap| cap.id() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
@@ -59,7 +56,9 @@ impl NetworkDevice {
 
         let bar_index = common_cfg.bar();
 
-        let config_bar = pci_device.initialize_bar(bar_index);
+        let config_bar = pci_device
+            .configuration_space_mut()
+            .initialize_bar(bar_index);
 
         let mut common_cfg: MMIO<virtio_pci_commonf_cfg> =
             unsafe { MMIO::new(config_bar.cpu_address + common_cfg.offset()) };
@@ -168,7 +167,7 @@ impl NetworkDevice {
 
         info!(
             "Successfully initialized network device at {:p}",
-            pci_device
+            *pci_device.configuration_space()
         );
 
         Ok(Self {

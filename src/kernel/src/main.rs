@@ -115,11 +115,9 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "There should be one virtio net interface."
     );
 
-    let network_device = drivers::virtio::net::NetworkDevice::initialize(
-        &pci_information,
-        pci_devices.network_devices.pop().unwrap(),
-    )
-    .expect("Initialization must work.");
+    let network_device =
+        drivers::virtio::net::NetworkDevice::initialize(pci_devices.network_devices.pop().unwrap())
+            .expect("Initialization must work.");
 
     net::assig_network_device(network_device);
 
