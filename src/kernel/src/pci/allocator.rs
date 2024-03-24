@@ -46,3 +46,57 @@ pub struct PCIAllocatedSpace {
     pub cpu_address: usize,
     pub size: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        info,
+        pci::{PCIBitField, PCIRange},
+    };
+
+    use super::PCIAllocator;
+
+    fn init_allocator(size: usize) -> PCIAllocator {
+        let mut allocator = PCIAllocator::new();
+        allocator.init(&PCIRange {
+            cpu_address: 4096,
+            pci_address: 8192,
+            size,
+            pci_bitfield: PCIBitField::from(0),
+        });
+        allocator
+    }
+
+    #[test_case]
+    fn empty_allocator() {
+        let mut allocator = PCIAllocator::new();
+        assert!(
+            allocator.allocate(0x100).is_none(),
+            "Empty allocator must be none"
+        );
+    }
+
+    #[test_case]
+    fn alignment() {
+        let mut allocator = init_allocator(8192);
+        let _ = allocator.allocate(3).unwrap();
+        let allocation = allocator.allocate(4096).unwrap();
+        assert!(
+            allocation.cpu_address % 4096 == 0,
+            "cpu address must be properly aligned"
+        );
+        assert!(
+            allocation.pci_address % 4096 == 0,
+            "pci address must be properly aligned"
+        );
+    }
+
+    #[test_case]
+    fn exhausted() {
+        let mut allocator = init_allocator(128);
+        assert!(allocator.allocate(64).is_some());
+        assert!(allocator.allocate(128).is_none());
+        assert!(allocator.allocate(64).is_some());
+        assert!(allocator.allocate(1).is_none());
+    }
+}
