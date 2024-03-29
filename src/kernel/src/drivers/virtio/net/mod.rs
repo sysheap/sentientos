@@ -8,7 +8,8 @@ use crate::{
         virtqueue::{BufferDirection, VirtQueue},
     },
     info,
-    klibc::MMIO,
+    klibc::{util::BufferExtension, MMIO},
+    net::mac::MacAddress,
     pci::PCIDevice,
 };
 use alloc::vec::Vec;
@@ -34,6 +35,7 @@ pub struct NetworkDevice {
     net_cfg: MMIO<virtio_net_config>,
     transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
     receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
+    mac_address: MacAddress,
 }
 
 impl NetworkDevice {
@@ -165,15 +167,19 @@ impl NetworkDevice {
                 .expect("Receive buffer must be insertable to the queue");
         }
 
+        let mac_address = net_cfg.mac;
+
         info!(
-            "Successfully initialized network device at {:p}",
-            *pci_device.configuration_space()
+            "Successfully initialized network device at {:p} with mac {}",
+            *pci_device.configuration_space(),
+            mac_address
         );
 
         Ok(Self {
             device: pci_device,
             common_cfg,
             net_cfg,
+            mac_address,
             receive_queue,
             transmit_queue,
         })
@@ -184,16 +190,7 @@ impl NetworkDevice {
         let mut received_packets = Vec::new();
 
         for receive_buffer in new_receive_buffers {
-            let (header_bytes, data_bytes) = receive_buffer
-                .buffer
-                .split_at(mem::size_of::<virtio_net_hdr>());
-
-            let net_hdr: &virtio_net_hdr = unsafe {
-                assert!(header_bytes.len() == mem::size_of::<virtio_net_hdr>());
-                let ptr: *const virtio_net_hdr = header_bytes.as_ptr() as *const virtio_net_hdr;
-                assert!(ptr.is_aligned(), "net hdr must be aligned");
-                &*ptr
-            };
+            let (net_hdr, data_bytes) = receive_buffer.buffer.split_as::<virtio_net_hdr>();
 
             assert!(net_hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE);
             assert!(net_hdr.flags == 0);
@@ -208,6 +205,10 @@ impl NetworkDevice {
         }
 
         received_packets
+    }
+
+    pub fn get_mac_address(&self) -> MacAddress {
+        self.mac_address
     }
 }
 
@@ -245,7 +246,7 @@ struct virtio_pci_commonf_cfg {
 #[derive(Debug)]
 #[repr(C)]
 struct virtio_net_config {
-    mac: [u8; 6],
+    mac: MacAddress,
     status: u16,
     max_virtqueue_pairs: u16,
     mtu: u16,

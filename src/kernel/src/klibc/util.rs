@@ -13,6 +13,31 @@ pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
     dst[..src.len()].copy_from_slice(src);
 }
 
+pub trait BufferExtension {
+    fn interpret_as<T>(&self) -> &T;
+    fn split_as<T>(&self) -> (&T, &[u8]);
+}
+
+impl BufferExtension for [u8] {
+    fn interpret_as<T>(&self) -> &T {
+        unsafe {
+            assert!(self.len() == core::mem::size_of::<T>());
+            let ptr: *const T = self.as_ptr() as *const T;
+            assert!(
+                ptr.is_aligned(),
+                "pointer not aligned for {}",
+                core::any::type_name::<T>()
+            );
+            &*ptr
+        }
+    }
+
+    fn split_as<T>(&self) -> (&T, &[u8]) {
+        let (header_bytes, rest) = self.split_at(core::mem::size_of::<T>());
+        (header_bytes.interpret_as(), rest)
+    }
+}
+
 pub fn set_or_clear_bit<DataType>(
     data: &mut DataType,
     should_set_bit: bool,

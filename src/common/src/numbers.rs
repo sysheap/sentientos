@@ -25,6 +25,7 @@ macro_rules! impl_number {
     };
 }
 
+impl_number!(u16);
 impl_number!(u32);
 impl_number!(u64);
 impl_number!(u128);

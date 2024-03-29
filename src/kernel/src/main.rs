@@ -119,7 +119,14 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         drivers::virtio::net::NetworkDevice::initialize(pci_devices.network_devices.pop().unwrap())
             .expect("Initialization must work.");
 
-    net::assig_network_device(network_device);
+    net::assign_network_device(network_device);
+
+    loop {
+        let packages = net::receive_packets();
+        if !packages.is_empty() {
+            println!("Received: {:x?}", packages);
+        }
+    }
 
     page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
 

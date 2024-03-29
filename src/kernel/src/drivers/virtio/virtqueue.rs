@@ -163,6 +163,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             return_buffers.push(UsedBuffer { index, buffer });
             descriptor_entry.addr = 0;
             descriptor_entry.len = 0;
+            self.free_descriptor_indices.push(index);
             self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
         }
         return_buffers
