@@ -9,7 +9,7 @@ use crate::{
     io::{stdin_buf::STDIN_BUFFER, uart},
     memory::page_tables::{activate_page_table, KERNEL_PAGE_TABLES},
     processes::{
-        scheduler::{self, get_current_process_expect},
+        scheduler::{self, get_current_process},
         timer,
     },
     syscalls::handle_syscall,
@@ -60,18 +60,31 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
             (trap_frame[Register::a0], trap_frame[Register::a1]) = handle_syscall(nr, arg1, arg2);
         }
         _ => {
-            let current_process = get_current_process_expect();
-            let current_process = current_process.borrow();
-            panic!(
+            let current_process = get_current_process();
+            if let Some(current_process) = current_process {
+                let current_process = current_process.borrow();
+                panic!(
+                    "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
+                    cause.get_reason(),
+                    cause.get_exception_code(),
+                    stval,
+                    sepc,
+                    current_process.get_page_table().is_userspace_address(sepc),
+                    current_process.get_name(),
+                    trap_frame
+                );
+            } else {
+                panic!(
                 "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
                 cause.get_reason(),
                 cause.get_exception_code(),
                 stval,
                 sepc,
-                current_process.get_page_table().is_userspace_address(sepc),
-                current_process.get_name(),
+                false,
+                "No scheduled process",
                 trap_frame
             );
+            }
         }
     }
 }

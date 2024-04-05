@@ -26,11 +26,13 @@ extern "C" {
 }
 
 pub fn get_current_process_expect() -> Rc<RefCell<Process>> {
-    CURRENT_PROCESS
-        .lock()
-        .as_ref()
+    get_current_process()
         .expect("There must be a running current process")
         .clone()
+}
+
+pub fn get_current_process() -> Option<Rc<RefCell<Process>>> {
+    CURRENT_PROCESS.lock().as_ref().map(|p| p.clone())
 }
 
 pub fn schedule() -> ! {
