@@ -3,7 +3,7 @@ target = "riscv64gc-unknown-none-elf"
 
 [target.riscv64gc-unknown-none-elf]
 runner = """
-/home/hieronymusma/src/qemu/build/qemu-system-riscv64 \
+qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
     -smp 1 \

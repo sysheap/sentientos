@@ -8,7 +8,7 @@ use common::big_endian::BigEndian;
 pub struct PCIInformation {
     pub pci_host_bridge_address: usize,
     pub pci_host_bridge_length: usize,
-    ranges: Vec<PCIRange>,
+    pub ranges: Vec<PCIRange>,
 }
 
 impl PCIInformation {

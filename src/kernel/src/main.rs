@@ -16,10 +16,12 @@
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use alloc::vec::Vec;
+
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
-    memory::page_tables,
+    memory::{page_tables, RuntimeMapping},
     pci::enumerate_devices,
     processes::{scheduler, timer},
 };
@@ -105,6 +107,34 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         pci_allocator.init(pci_space_64_bit);
     }
 
+    let mut runtime_mapping = Vec::new();
+
+    runtime_mapping.push(RuntimeMapping {
+        virtual_address_start: pci_information.pci_host_bridge_address,
+        size: pci_information.pci_host_bridge_length,
+        privileges: page_tables::XWRMode::ReadWrite,
+        name: "PCI Space",
+    });
+
+    for range in &pci_information.ranges {
+        runtime_mapping.push(RuntimeMapping {
+            virtual_address_start: range.cpu_address,
+            size: range.size,
+            privileges: page_tables::XWRMode::ReadWrite,
+            name: "PCI Range",
+        });
+    }
+
+    memory::initialize_runtime_mappings(&runtime_mapping);
+
+    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
+
+    interrupts::set_sscratch_to_kernel_trap_frame();
+
+    plic::init_uart_interrupt();
+
+    scheduler::initialize();
+
     let mut pci_devices = enumerate_devices(&pci_information);
     println!("Got {:#x?}", pci_devices);
 
@@ -126,12 +156,5 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         }
     }
 
-    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
-
-    interrupts::set_sscratch_to_kernel_trap_frame();
-
-    plic::init_uart_interrupt();
-
-    scheduler::initialize();
     timer::set_timer(0);
 }

@@ -17,7 +17,7 @@ use crate::{
     processes::timer,
 };
 
-use super::page::Page;
+use super::{page::Page, runtime_mappings::get_runtime_mappings};
 
 pub static KERNEL_PAGE_TABLES: Mutex<LazyCell<&'static RootPageTableHolder>> =
     Mutex::new(LazyCell::new(|| {
@@ -200,6 +200,15 @@ impl RootPageTableHolder {
             XWRMode::ReadWrite,
             "Qemu Test Device",
         );
+
+        for runtime_mapping in get_runtime_mappings() {
+            root_page_table_holder.map_identity_kernel(
+                runtime_mapping.virtual_address_start,
+                runtime_mapping.size,
+                runtime_mapping.privileges,
+                runtime_mapping.name,
+            );
+        }
 
         root_page_table_holder
     }

@@ -16,8 +16,11 @@ pub mod heap;
 pub mod page;
 mod page_allocator;
 pub mod page_tables;
+mod runtime_mappings;
 
 pub use page::PAGE_SIZE;
+
+pub use runtime_mappings::{initialize_runtime_mappings, RuntimeMapping};
 
 static PAGE_ALLOCATOR: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
