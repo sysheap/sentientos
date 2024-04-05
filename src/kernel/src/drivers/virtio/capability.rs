@@ -44,7 +44,7 @@ impl virtio_pci_cap {
     }
 
     pub fn length(&self) -> u32 {
-        self.length as u32
+        self.length
     }
 
     pub fn offset(&self) -> usize {
