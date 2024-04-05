@@ -3,13 +3,15 @@ use common::mutex::Mutex;
 
 use crate::{debug, drivers::virtio::net::NetworkDevice};
 
-use self::{ethernet::EthernetHeader, mac::MacAddress};
+use self::{ethernet::EthernetHeader, ip_address::IpV4Address, mac::MacAddress};
 
 mod arp;
 mod ethernet;
+pub mod ip_address;
 pub mod mac;
 
 static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
+static IP_ADDR: IpV4Address = IpV4Address::new(10, 0, 2, 15);
 
 pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);
@@ -22,12 +24,16 @@ pub fn receive_packets() -> Vec<Vec<u8>> {
         .expect("There must be a configured network device.")
         .receive_packets();
 
-    let processed_packets = packets
-        .into_iter()
-        .filter_map(|p| process_packet(p))
-        .collect();
+    packets.into_iter().filter_map(process_packet).collect()
+}
 
-    processed_packets
+pub fn send_packet(packet: Vec<u8>) {
+    NETWORK_DEVICE
+        .lock()
+        .as_mut()
+        .expect("There must be a configured network device.")
+        .send_packet(packet)
+        .expect("Packet must be sendable");
 }
 
 pub fn current_mac_address() -> MacAddress {
@@ -47,11 +53,12 @@ fn process_packet(packet: Vec<u8>) -> Option<Vec<u8>> {
         }
     };
 
+    debug!("Received ethernet packet: {}", ethernet_header);
+
     let ether_type = ethernet_header.ether_type();
 
     match ether_type {
         ethernet::EtherTypes::Arp => {
-            debug!("Received ARP packet");
             arp::process_and_respond(rest);
             return None;
         }

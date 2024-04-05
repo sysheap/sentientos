@@ -4,9 +4,14 @@ use crate::{consumable_buffer::FromU8Buffer, numbers::Number};
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 #[repr(transparent)]
-pub struct BigEndian<T: Number>(pub T);
+pub struct BigEndian<T: Number>(T);
 
 impl<T: Number> BigEndian<T> {
+    pub fn from_little_endian(value: T) -> Self {
+        // Use from_be to invert byte order
+        BigEndian(T::from_be(value))
+    }
+
     pub fn get(&self) -> T {
         T::from_be(self.0)
     }

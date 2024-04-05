@@ -2,8 +2,6 @@ use core::arch::asm;
 
 use common::syscalls::trap_frame::TrapFrame;
 
-use crate::asm;
-
 pub fn write_sscratch_register(value: *const TrapFrame) {
     unsafe {
         asm!("csrw sscratch, {}", in(reg) value);

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::{cpu, info};
+use crate::{cpu, info, klibc::MMIO};
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
@@ -13,8 +13,11 @@ pub struct VirtQueue<const QUEUE_SIZE: usize> {
     last_used_ring_index: u16,
     driver_area: Box<virtq_avail<QUEUE_SIZE>>,
     device_area: Box<virtq_used<QUEUE_SIZE>>,
+    queue_index: u16,
+    notify: Option<MMIO<u16>>,
 }
 
+#[allow(dead_code)]
 struct DeconstructedVec {
     ptr: *mut u8,
     length: usize,
@@ -51,16 +54,18 @@ pub enum QueueError {
 }
 
 impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
-    pub fn new(queue_size: u16) -> Self {
+    pub fn new(queue_size: u16, queue_index: u16) -> Self {
         assert!(queue_size == QUEUE_SIZE as u16, "Queue size must be equal");
         assert!(queue_size % 2 == 0, "Queue size must be a power of 2");
         let queue = VirtQueue {
             descriptor_area: Box::new(core::array::from_fn(|_| virtq_desc::default())),
-            free_descriptor_indices: (0..queue_size as u16).collect(),
+            free_descriptor_indices: (0..queue_size).collect(),
             outstanding_buffers: BTreeMap::new(),
             last_used_ring_index: 0,
-            driver_area: Box::new(virtq_avail::default()),
-            device_area: Box::new(virtq_used::default()),
+            driver_area: Box::<virtq_avail<QUEUE_SIZE>>::default(),
+            device_area: Box::<virtq_used<QUEUE_SIZE>>::default(),
+            queue_index,
+            notify: None,
         };
         assert!(
             queue.descriptor_area_physical_address() % 16 == 0,
@@ -76,6 +81,10 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         );
 
         queue
+    }
+
+    pub fn set_notify(&mut self, notify: MMIO<u16>) {
+        self.notify = Some(notify);
     }
 
     pub fn descriptor_area_physical_address(&self) -> u64 {
@@ -127,7 +136,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             .is_none();
 
         assert!(
-            insert_result == true,
+            insert_result,
             "Outstanding buffers is not allowed to contain this index"
         );
 
@@ -168,6 +177,12 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         }
         return_buffers
     }
+
+    pub fn notify(&mut self) {
+        if let Some(notify) = &mut self.notify {
+            **notify = self.queue_index;
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -177,10 +192,12 @@ pub struct UsedBuffer {
 }
 
 /* This marks a buffer as continuing via the next field. */
+#[allow(dead_code)]
 const VIRTQ_DESC_F_NEXT: u16 = 1;
 /* This marks a buffer as device write-only (otherwise device read-only). */
 const VIRTQ_DESC_F_WRITE: u16 = 2;
 /* This means the buffer contains a list of buffer descriptors. */
+#[allow(dead_code)]
 const VIRTQ_DESC_F_INDIRECT: u16 = 4;
 
 #[allow(non_camel_case_types)]

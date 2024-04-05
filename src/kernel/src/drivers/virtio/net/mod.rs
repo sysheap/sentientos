@@ -1,18 +1,24 @@
-use core::mem;
-
 use crate::{
     assert::static_assert_size,
     debug,
     drivers::virtio::{
-        capability::{VirtioPciCap, VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG},
+        capability::{
+            virtio_pci_cap, VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG,
+            VIRTIO_PCI_CAP_NOTIFY_CFG,
+        },
         virtqueue::{BufferDirection, VirtQueue},
     },
     info,
-    klibc::{util::BufferExtension, MMIO},
+    klibc::{
+        util::{is_power_of_2_or_zero, BufferExtension, ByteInterpretable},
+        MMIO,
+    },
     net::mac::MacAddress,
     pci::PCIDevice,
 };
 use alloc::vec::Vec;
+
+use super::virtqueue::QueueError;
 
 const EXPECTED_QUEUE_SIZE: usize = 0x100;
 
@@ -23,16 +29,18 @@ const DEVICE_STATUS_DRIVER: u8 = 2;
 const DEVICE_STATUS_DRIVER_OK: u8 = 4;
 const DEVICE_STATUS_FEATURES_OK: u8 = 8;
 const DEVICE_STATUS_FAILED: u8 = 128;
-const DEVICE_STATUS_DEVICE_NEEDS_RESTARTL: u8 = 64;
+#[allow(dead_code)]
+const DEVICE_STATUS_DEVICE_NEEDS_RESTART: u8 = 64;
 
-const VIRTIO_NET_F_CSUM: u64 = 1 << 0;
 const VIRTIO_NET_F_MAC: u64 = 1 << 5;
 const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
+#[allow(dead_code)]
 pub struct NetworkDevice {
     device: PCIDevice,
-    common_cfg: MMIO<virtio_pci_commonf_cfg>,
+    common_cfg: MMIO<virtio_pci_common_cfg>,
     net_cfg: MMIO<virtio_net_config>,
+    notify_cfg: MMIO<virtio_pci_notify_cap>,
     transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
     receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
     mac_address: MacAddress,
@@ -41,9 +49,9 @@ pub struct NetworkDevice {
 impl NetworkDevice {
     pub fn initialize(mut pci_device: PCIDevice) -> Result<Self, &'static str> {
         let capabilities = pci_device.capabilities();
-        let virtio_capabilities: Vec<MMIO<VirtioPciCap>> = capabilities
+        let virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities
             .filter(|cap| cap.id() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
-            .map(|cap| unsafe { cap.new_type::<VirtioPciCap>() })
+            .map(|cap| unsafe { cap.new_type::<virtio_pci_cap>() })
             .collect();
 
         let common_cfg = virtio_capabilities
@@ -56,23 +64,32 @@ impl NetworkDevice {
             **common_cfg
         );
 
-        let bar_index = common_cfg.bar();
+        let config_bar = pci_device.get_or_initialize_bar(common_cfg.bar());
 
-        let config_bar = pci_device
-            .configuration_space_mut()
-            .initialize_bar(bar_index);
-
-        let mut common_cfg: MMIO<virtio_pci_commonf_cfg> =
+        let mut common_cfg: MMIO<virtio_pci_common_cfg> =
             unsafe { MMIO::new(config_bar.cpu_address + common_cfg.offset()) };
 
         debug!("Common config: {:#x?}", *common_cfg);
 
         // Let's try to initialize the device
         common_cfg.device_status = 0x0;
+
+        #[allow(clippy::while_immutable_condition)]
         while common_cfg.device_status != 0x0 {}
 
-        common_cfg.device_status = common_cfg.device_status | DEVICE_STATUS_ACKNOWLEDGE;
-        common_cfg.device_status = common_cfg.device_status | DEVICE_STATUS_DRIVER;
+        common_cfg.device_status |= DEVICE_STATUS_ACKNOWLEDGE;
+
+        assert!(
+            common_cfg.device_status & DEVICE_STATUS_FAILED == 0,
+            "Device failed"
+        );
+
+        common_cfg.device_status |= DEVICE_STATUS_DRIVER;
+
+        assert!(
+            common_cfg.device_status & DEVICE_STATUS_FAILED == 0,
+            "Device failed"
+        );
 
         // Read features and write subset to it
         common_cfg.device_feature_select = 0;
@@ -99,35 +116,89 @@ impl NetworkDevice {
         common_cfg.driver_feature_select = 1;
         common_cfg.driver_feature = (wanted_features >> 32) as u32;
 
-        common_cfg.device_status = common_cfg.device_status | DEVICE_STATUS_FEATURES_OK;
+        common_cfg.device_status |= DEVICE_STATUS_FEATURES_OK;
+
+        assert!(
+            common_cfg.device_status & DEVICE_STATUS_FAILED == 0,
+            "Device failed"
+        );
 
         assert!(
             common_cfg.device_status & DEVICE_STATUS_FEATURES_OK != 0,
             "Device features not ok"
         );
 
+        // Get notification configuration
+        let notify_cfg = virtio_capabilities
+            .iter()
+            .find(|cap| cap.cfg_type() == VIRTIO_PCI_CAP_NOTIFY_CFG)
+            .ok_or("Notification capability not found")?;
+
+        // SAFTEY: Notification capability is a different type
+        let notify_cfg = unsafe { notify_cfg.new_type::<virtio_pci_notify_cap>() };
+
+        assert!(
+            is_power_of_2_or_zero(notify_cfg.notify_off_multiplier),
+            "Notify offset multiplier must be a power of 2 or zero"
+        );
+
+        assert!(
+            notify_cfg.cap.offset() % 16 == 0,
+            "Notify offset must be 2 byte aligned"
+        );
+
+        assert!(
+            notify_cfg.cap.length() >= 2,
+            "Notify length must be at least 2"
+        );
+
+        let notify_bar = pci_device.get_or_initialize_bar(notify_cfg.cap.bar());
+
         // Intialize virtqueues
         // index 0
         common_cfg.queue_select = 0;
         let mut receive_queue: VirtQueue<EXPECTED_QUEUE_SIZE> =
-            VirtQueue::new(common_cfg.queue_size);
+            VirtQueue::new(common_cfg.queue_size, 0);
         // index 1
         common_cfg.queue_select = 1;
-        let transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE> = VirtQueue::new(common_cfg.queue_size);
+        let mut transmit_queue: VirtQueue<EXPECTED_QUEUE_SIZE> =
+            VirtQueue::new(common_cfg.queue_size, 1);
+
+        assert!(
+            notify_cfg.cap.length()
+                >= common_cfg.queue_notify_off as u32 * notify_cfg.notify_off_multiplier + 2,
+            "Notify length must be at least the notify offset"
+        );
+
+        let transmit_notify: MMIO<u16> = unsafe {
+            MMIO::new(
+                notify_bar.cpu_address
+                    + notify_cfg.cap.offset()
+                    + common_cfg.queue_notify_off as usize
+                        * notify_cfg.notify_off_multiplier as usize,
+            )
+        };
+
+        transmit_queue.set_notify(transmit_notify);
 
         common_cfg.queue_select = 0;
-        common_cfg.queue_desc = receive_queue.descriptor_area_physical_address() as u64;
-        common_cfg.queue_driver = receive_queue.driver_area_physical_address() as u64;
-        common_cfg.queue_device = receive_queue.device_area_physical_address() as u64;
+        common_cfg.queue_desc = receive_queue.descriptor_area_physical_address();
+        common_cfg.queue_driver = receive_queue.driver_area_physical_address();
+        common_cfg.queue_device = receive_queue.device_area_physical_address();
         common_cfg.queue_enable = 1;
 
         common_cfg.queue_select = 1;
-        common_cfg.queue_desc = transmit_queue.descriptor_area_physical_address() as u64;
-        common_cfg.queue_driver = transmit_queue.driver_area_physical_address() as u64;
-        common_cfg.queue_device = transmit_queue.device_area_physical_address() as u64;
+        common_cfg.queue_desc = transmit_queue.descriptor_area_physical_address();
+        common_cfg.queue_driver = transmit_queue.driver_area_physical_address();
+        common_cfg.queue_device = transmit_queue.device_area_physical_address();
         common_cfg.queue_enable = 1;
 
-        common_cfg.device_status = common_cfg.device_status | DEVICE_STATUS_DRIVER_OK;
+        common_cfg.device_status |= DEVICE_STATUS_DRIVER_OK;
+
+        assert!(
+            common_cfg.device_status & DEVICE_STATUS_FAILED == 0,
+            "Device failed"
+        );
 
         assert!(
             common_cfg.device_status & DEVICE_STATUS_DRIVER_OK != 0,
@@ -136,7 +207,7 @@ impl NetworkDevice {
 
         debug!("Device initialized: {:#x?}", common_cfg.device_status);
 
-        // Get device configuration
+        // Get net configuration
         let net_cfg_cap = virtio_capabilities
             .iter()
             .find(|cap| cap.cfg_type() == VIRTIO_PCI_CAP_DEVICE_CFG)
@@ -147,15 +218,10 @@ impl NetworkDevice {
             **net_cfg_cap
         );
 
-        let net_config_bar_index = net_cfg_cap.bar();
-
-        // TODO: Remember which bar is already configured
-        assert!(net_config_bar_index == bar_index);
-
-        // let net_config_bar = pci_device.initialize_bar(net_config_bar_index);
+        let net_config_bar = pci_device.get_or_initialize_bar(net_cfg_cap.bar());
 
         let net_cfg: MMIO<virtio_net_config> =
-            unsafe { MMIO::new(config_bar.cpu_address + net_cfg_cap.offset()) };
+            unsafe { MMIO::new(net_config_bar.cpu_address + net_cfg_cap.offset()) };
 
         debug!("Net config: {:#x?}", *net_cfg);
 
@@ -179,6 +245,7 @@ impl NetworkDevice {
             device: pci_device,
             common_cfg,
             net_cfg,
+            notify_cfg,
             mac_address,
             receive_queue,
             transmit_queue,
@@ -207,6 +274,33 @@ impl NetworkDevice {
         received_packets
     }
 
+    pub fn send_packet(&mut self, data: Vec<u8>) -> Result<u16, QueueError> {
+        // First free all already transmited packets
+        for transmitted_packet in self.transmit_queue.receive_buffer() {
+            debug!("Transmitted packet: {:?}", transmitted_packet.index);
+        }
+
+        let header = virtio_net_hdr {
+            flags: 0,
+            gso_type: VIRTIO_NET_HDR_GSO_NONE,
+            hdr_len: 0,
+            gso_size: 0,
+            csum_start: 0,
+            csum_offset: 0,
+            num_buffers: 0,
+        };
+
+        let data = [header.as_slice(), data.as_slice()].concat();
+        let index = self
+            .transmit_queue
+            .put_buffer(data, BufferDirection::DriverWritable);
+
+        // Notify device
+        self.transmit_queue.notify();
+
+        index
+    }
+
     pub fn get_mac_address(&self) -> MacAddress {
         self.mac_address
     }
@@ -222,7 +316,7 @@ impl Drop for NetworkDevice {
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
 #[repr(C)]
-struct virtio_pci_commonf_cfg {
+struct virtio_pci_common_cfg {
     device_feature_select: u32,
     device_feature: u32,
     driver_feature_select: u32,
@@ -257,16 +351,7 @@ struct virtio_net_config {
     supported_hash_types: u32,
 }
 
-const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
-const VIRTIO_NET_HDR_F_DATA_VALID: u8 = 2;
-const VIRTIO_NET_HDR_F_RSC_INFO: u8 = 4;
-
 const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
-const VIRTIO_NET_HDR_GSO_TCPV4: u8 = 1;
-const VIRTIO_NET_HDR_GSO_UDP: u8 = 3;
-const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
-const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
-const VIRTIO_NET_HDR_GSO_ECN: u8 = 0x80;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -285,3 +370,13 @@ struct virtio_net_hdr {
 }
 
 static_assert_size!(virtio_net_hdr, 12);
+
+impl ByteInterpretable for virtio_net_hdr {}
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Debug)]
+struct virtio_pci_notify_cap {
+    cap: virtio_pci_cap,
+    notify_off_multiplier: u32,
+}

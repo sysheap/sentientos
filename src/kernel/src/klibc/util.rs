@@ -1,4 +1,4 @@
-use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr};
+use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr, Sub};
 
 use common::util::align_up;
 
@@ -36,6 +36,23 @@ impl BufferExtension for [u8] {
         let (header_bytes, rest) = self.split_at(core::mem::size_of::<T>());
         (header_bytes.interpret_as(), rest)
     }
+}
+
+pub trait ByteInterpretable {
+    fn as_slice(&self) -> &[u8] {
+        // SAFETY: It is always safe to interpret a allocated struct as bytes
+        unsafe {
+            core::slice::from_raw_parts(self as *const _ as *const u8, core::mem::size_of_val(self))
+        }
+    }
+}
+
+pub fn is_power_of_2_or_zero<DataType>(value: DataType) -> bool
+where
+    DataType:
+        BitAnd<Output = DataType> + PartialEq<DataType> + From<u8> + Sub<Output = DataType> + Copy,
+{
+    value & (value - DataType::from(1)) == DataType::from(0)
 }
 
 pub fn set_or_clear_bit<DataType>(

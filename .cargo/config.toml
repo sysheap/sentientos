@@ -3,7 +3,7 @@ target = "riscv64gc-unknown-none-elf"
 
 [target.riscv64gc-unknown-none-elf]
 runner = """
-qemu-system-riscv64 \
+/home/hieronymusma/src/qemu/build/qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
     -smp 1 \
@@ -11,7 +11,8 @@ qemu-system-riscv64 \
     -nographic \
     -serial mon:stdio \
     -d guest_errors,cpu_reset,unimp \
-    -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1,mac=00:11:22:33:44:55 \
+    --trace virtio* \
+    -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1 \
     -object filter-dump,id=f1,netdev=netdev1,file=network.pcap \
     -kernel 
 """

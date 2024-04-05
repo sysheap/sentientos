@@ -1,19 +1,30 @@
+use core::fmt::Display;
+
 use common::big_endian::BigEndian;
 
-use crate::{debug, klibc::util::BufferExtension};
+use crate::{
+    assert::static_assert_size,
+    debug,
+    klibc::util::{BufferExtension, ByteInterpretable},
+};
 
 use super::{current_mac_address, mac::MacAddress};
 
 const BROADCAST_MAC: MacAddress = MacAddress::new([0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
 
-#[repr(packed)]
+#[derive(Debug)]
+#[repr(C)]
 pub struct EthernetHeader {
     destination_mac: MacAddress,
     source_mac: MacAddress,
-    ether_type: BigEndian<u16>,
+    pub ether_type: BigEndian<u16>,
     // data: [u8],
     // chksum: u32,
 }
+
+static_assert_size!(EthernetHeader, 14);
+
+impl ByteInterpretable for EthernetHeader {}
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -24,6 +35,7 @@ pub enum ParseError {
 
 const ETHERTYPE_ARP: u16 = 0x0806;
 
+#[derive(Debug)]
 pub enum EtherTypes {
     Arp,
 }
@@ -39,9 +51,30 @@ impl TryFrom<BigEndian<u16>> for EtherTypes {
     }
 }
 
+impl From<EtherTypes> for BigEndian<u16> {
+    fn from(value: EtherTypes) -> Self {
+        match value {
+            EtherTypes::Arp => BigEndian::from_little_endian(ETHERTYPE_ARP),
+        }
+    }
+}
+
 impl EthernetHeader {
-    const CHECKSUM_LENGTH: usize = core::mem::size_of::<u32>();
-    const MIN_LENGTH: usize = core::mem::size_of::<EthernetHeader>() + Self::CHECKSUM_LENGTH; // 4 byte checksum at the end
+    // const CHECKSUM_LENGTH: usize = core::mem::size_of::<u32>();
+    const MIN_LENGTH: usize = core::mem::size_of::<EthernetHeader>(); // 4 byte checksum at the end
+
+    pub fn new(
+        destination_mac: MacAddress,
+        source_mac: MacAddress,
+        ether_type: EtherTypes,
+    ) -> Self {
+        Self {
+            destination_mac,
+            source_mac,
+            ether_type: ether_type.into(),
+        }
+    }
+
     pub fn try_parse(data: &[u8]) -> Result<(&Self, &[u8]), ParseError> {
         if data.len() < Self::MIN_LENGTH {
             return Err(ParseError::PacketTooSmall);
@@ -72,5 +105,17 @@ impl EthernetHeader {
 
     pub fn ether_type(&self) -> EtherTypes {
         EtherTypes::try_from(self.ether_type).expect("Must be already parsed.")
+    }
+}
+
+impl Display for EthernetHeader {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "Ethernet packet: destination_mac: {}, source_mac: {}, ether_type: {:?}",
+            self.destination_mac,
+            self.source_mac,
+            self.ether_type(),
+        )
     }
 }

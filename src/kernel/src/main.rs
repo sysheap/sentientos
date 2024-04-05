@@ -16,8 +16,6 @@
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::mem;
-
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,

@@ -21,8 +21,7 @@ impl PCIAllocator {
     }
 
     pub fn init(&mut self, pci_range: &PCIRange) {
-        self.free_space_pci_space =
-            pci_range.pci_address..pci_range.pci_address + pci_range.size as usize;
+        self.free_space_pci_space = pci_range.pci_address..pci_range.pci_address + pci_range.size;
         self.offset_to_cpu_space = pci_range.cpu_address as i64 - pci_range.pci_address as i64;
     }
 
@@ -41,6 +40,7 @@ impl PCIAllocator {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct PCIAllocatedSpace {
     pub pci_address: usize,
     pub cpu_address: usize,

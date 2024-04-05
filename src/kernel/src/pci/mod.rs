@@ -1,5 +1,6 @@
 use crate::{debug, pci};
 use crate::{info, klibc::MMIO};
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 mod allocator;
@@ -68,41 +69,6 @@ impl GeneralDevicePciHeader {
         self.bars[index as usize] = value;
     }
 
-    pub fn initialize_bar(&mut self, index: u8) -> PCIAllocatedSpace {
-        self.clear_command_register_bits(
-            command_register::IO_SPACE | command_register::MEMORY_SPACE,
-        );
-
-        let original_bar_value = self.bar(index);
-        assert!(original_bar_value & 0x1 == 0, "Bar must be memory mapped");
-        assert!(
-            (original_bar_value & 0b110) >> 1 == 0x2,
-            "Bar must be 64-bit wide"
-        );
-
-        // Determine size of bar
-        self.write_bar(index, 0xffffffff);
-        let bar_value = self.bar(index);
-
-        // Mask out the 4 lower bits because they describe the type of the bar
-        // Invert the value and add 1 to get the size (because the bits that are not set are zero because of alignment)
-        let size = !(bar_value & !0b1111) + 1;
-
-        debug!("Bar {} size: {:#x}", index, size);
-
-        let space = pci::PCI_ALLOCATOR_64_BIT
-            .lock()
-            .allocate(size as usize)
-            .expect("There must be enough space for the bar");
-
-        self.write_bar(index, space.pci_address as u32);
-        self.write_bar(index + 1, (space.pci_address >> 32) as u32);
-
-        self.set_command_register_bits(command_register::MEMORY_SPACE);
-
-        space
-    }
-
     pub fn set_command_register_bits(&mut self, bits: u16) {
         self.command_register |= bits;
     }
@@ -150,6 +116,7 @@ impl<'a> Iterator for PciCapabilityIter<'a> {
 #[derive(Debug)]
 pub struct PCIDevice {
     configuration_space: MMIO<GeneralDevicePciHeader>,
+    initialized_bars: BTreeMap<u8, PCIAllocatedSpace>,
 }
 
 impl PCIDevice {
@@ -169,6 +136,7 @@ impl PCIDevice {
         assert!(pci_device.header_type & GENERAL_DEVICE_TYPE_MASK == GENERAL_DEVICE_TYPE);
         Some(Self {
             configuration_space: pci_device,
+            initialized_bars: BTreeMap::new(),
         })
     }
 
@@ -186,6 +154,53 @@ impl PCIDevice {
                     & CAPABILITY_POINTER_MASK,
             }
         }
+    }
+
+    pub fn get_or_initialize_bar(&mut self, index: u8) -> PCIAllocatedSpace {
+        if let Some(allocated_space) = self.initialized_bars.get(&index) {
+            return *allocated_space;
+        }
+
+        let configuration_space = self.configuration_space_mut();
+
+        configuration_space.clear_command_register_bits(
+            command_register::IO_SPACE | command_register::MEMORY_SPACE,
+        );
+
+        let original_bar_value = configuration_space.bar(index);
+        assert!(original_bar_value & 0x1 == 0, "Bar must be memory mapped");
+        assert!(
+            (original_bar_value & 0b110) >> 1 == 0x2,
+            "Bar must be 64-bit wide"
+        );
+
+        // Determine size of bar
+        configuration_space.write_bar(index, 0xffffffff);
+        let bar_value = configuration_space.bar(index);
+
+        // Mask out the 4 lower bits because they describe the type of the bar
+        // Invert the value and add 1 to get the size (because the bits that are not set are zero because of alignment)
+        let size = !(bar_value & !0b1111) + 1;
+
+        debug!("Bar {} size: {:#x}", index, size);
+
+        let space = pci::PCI_ALLOCATOR_64_BIT
+            .lock()
+            .allocate(size as usize)
+            .expect("There must be enough space for the bar");
+
+        configuration_space.write_bar(index, space.pci_address as u32);
+        configuration_space.write_bar(index + 1, (space.pci_address >> 32) as u32);
+
+        configuration_space.set_command_register_bits(command_register::MEMORY_SPACE);
+
+        assert!(
+            !self.initialized_bars.contains_key(&index),
+            "Bar is already initialized"
+        );
+        self.initialized_bars.insert(index, space);
+
+        space
     }
 }
 
