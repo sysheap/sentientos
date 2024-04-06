@@ -163,6 +163,7 @@ mod tests {
     // Disable this test because it is slow in miri
     #[cfg_attr(not(miri), test_case)]
     fn create_process_from_elf() {
+        crate::memory::initialize_runtime_mappings(&[]);
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
         let _process = Process::from_elf(&elf, "prog1");
     }
