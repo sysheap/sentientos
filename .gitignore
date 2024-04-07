@@ -2,3 +2,5 @@
 /target-userspace
 /log.txt
 /network.pcap
+/src/kernel/network.pcap
+/.gdb_history

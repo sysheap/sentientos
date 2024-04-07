@@ -113,7 +113,11 @@ fn handle_external_interrupt() {
     );
 
     let input = uart::read().expect("There should be input from the uart.");
-    STDIN_BUFFER.lock().push(input);
+
+    match input {
+        4 => crate::debug::dump_current_state(),
+        _ => STDIN_BUFFER.lock().push(input),
+    }
 
     plic::complete_interrupt(plic_interrupt);
 }

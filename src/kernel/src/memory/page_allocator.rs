@@ -67,8 +67,15 @@ impl<'a> MetadataPageAllocator<'a> {
         debug!("Number of pages:\t{}\n", self.total_heap_pages());
     }
 
-    fn total_heap_pages(&self) -> usize {
+    pub fn total_heap_pages(&self) -> usize {
         self.metadata.len()
+    }
+
+    pub fn used_heap_pages(&self) -> usize {
+        self.metadata
+            .iter()
+            .filter(|m| **m != PageStatus::Free)
+            .count()
     }
 
     fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<Page> {
@@ -116,20 +123,24 @@ impl<'a> MetadataPageAllocator<'a> {
         }
     }
 
-    pub fn dealloc(&mut self, page: NonNull<Page>) {
+    pub fn dealloc(&mut self, page: NonNull<Page>) -> usize {
+        let mut count = 0;
         let mut idx = self.page_pointer_to_page_idx(page);
 
         while self.metadata[idx] != PageStatus::Last {
             self.metadata[idx] = PageStatus::Free;
             idx += 1;
+            count += 1;
         }
         self.metadata[idx] = PageStatus::Free;
+        count += 1;
+        count
     }
 }
 
 pub trait PageAllocator {
     fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>>;
-    fn dealloc(page: NonNull<Page>);
+    fn dealloc(page: NonNull<Page>) -> usize;
 }
 
 #[cfg(test)]
@@ -160,7 +171,7 @@ mod tests {
         PAGE_ALLOC.lock().alloc(number_of_pages)
     }
 
-    fn dealloc(pages: Range<NonNull<Page>>) {
+    fn dealloc(pages: Range<NonNull<Page>>) -> usize {
         PAGE_ALLOC.lock().dealloc(pages.start)
     }
 

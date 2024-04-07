@@ -1,4 +1,4 @@
-use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Shl, Shr, Sub};
+use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Rem, Shl, Shr, Sub};
 
 use common::util::align_up;
 
@@ -53,6 +53,13 @@ where
         BitAnd<Output = DataType> + PartialEq<DataType> + From<u8> + Sub<Output = DataType> + Copy,
 {
     value & (value - DataType::from(1)) == DataType::from(0)
+}
+
+pub fn is_aligned<DataType>(value: DataType, alignment: DataType) -> bool
+where
+    DataType: Rem<DataType, Output = DataType> + PartialEq<DataType> + From<u8>,
+{
+    value % alignment == DataType::from(0)
 }
 
 pub fn set_or_clear_bit<DataType>(

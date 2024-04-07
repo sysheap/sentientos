@@ -115,6 +115,7 @@ impl FreeBlock {
 struct Heap<Allocator: PageAllocator> {
     genesis_block: FreeBlock,
     allocator: PhantomData<Allocator>,
+    allocated_memory: usize,
 }
 
 impl<Allocator: PageAllocator> Heap<Allocator> {
@@ -122,7 +123,12 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         Self {
             genesis_block: FreeBlock::new(),
             allocator: PhantomData,
+            allocated_memory: 0,
         }
+    }
+
+    pub fn allocated_memory(&self) -> usize {
+        self.allocated_memory
     }
 
     fn is_page_allocator_allocation(&self, layout: &Layout) -> bool {
@@ -134,6 +140,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
             // Allocate directly from the page allocator
             let pages = minimum_amount_of_pages(layout.size());
             if let Some(allocation) = Allocator::alloc(pages) {
+                self.allocated_memory += pages * PAGE_SIZE;
                 return allocation.start.cast().as_ptr();
             } else {
                 return null_mut();
@@ -158,6 +165,8 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         // Make smaller if needed
         self.split_if_necessary(block, requested_size);
 
+        self.allocated_memory += requested_size.total_size();
+
         block.cast().as_ptr()
     }
 
@@ -166,7 +175,8 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         if self.is_page_allocator_allocation(&layout) {
             // Deallocate directly to the page allocator
             unsafe {
-                Allocator::dealloc(NonNull::new_unchecked(ptr).cast());
+                let pages = Allocator::dealloc(NonNull::new_unchecked(ptr).cast());
+                self.allocated_memory -= pages * PAGE_SIZE;
             }
             return;
         }
@@ -177,6 +187,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
             free_block_ptr.write(free_block);
             self.insert(free_block_ptr);
         }
+        self.allocated_memory -= size.total_size();
     }
 
     fn insert(&mut self, mut block_ptr: NonNull<FreeBlock>) {
@@ -248,6 +259,11 @@ unsafe impl<Allocator: PageAllocator> GlobalAlloc for MutexHeap<Allocator> {
 #[global_allocator]
 static HEAP: MutexHeap<super::StaticPageAllocator> = MutexHeap::new();
 
+#[cfg(not(miri))]
+pub fn allocated_size() -> usize {
+    HEAP.inner.lock().allocated_memory()
+}
+
 #[cfg(test)]
 mod test {
     use core::{
@@ -277,7 +293,7 @@ mod test {
             PAGE_ALLOC.lock().alloc(number_of_pages_requested)
         }
 
-        fn dealloc(page: NonNull<Page>) {
+        fn dealloc(page: NonNull<Page>) -> usize {
             PAGE_ALLOC.lock().dealloc(page)
         }
     }

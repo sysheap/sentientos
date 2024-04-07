@@ -46,3 +46,12 @@ pub fn memory_fence() {
         asm!("fence");
     }
 }
+
+pub fn disable_gloabl_interrupts() {
+    unsafe {
+        asm!(
+            "li t0, 0b10
+            csrc sstatus, t0"
+        );
+    }
+}

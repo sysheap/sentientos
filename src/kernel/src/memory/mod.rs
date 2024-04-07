@@ -31,7 +31,7 @@ impl PageAllocator for StaticPageAllocator {
         PAGE_ALLOCATOR.lock().alloc(number_of_pages_requested)
     }
 
-    fn dealloc(page: NonNull<Page>) {
+    fn dealloc(page: NonNull<Page>) -> usize {
         PAGE_ALLOCATOR.lock().dealloc(page)
     }
 }
@@ -43,4 +43,12 @@ pub fn init_page_allocator(heap_start: usize, heap_size: usize) {
     }
     let initialized_memory = unsafe { transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(memory) };
     PAGE_ALLOCATOR.lock().init(initialized_memory);
+}
+
+pub fn used_heap_pages() -> usize {
+    PAGE_ALLOCATOR.lock().used_heap_pages()
+}
+
+pub fn total_heap_pages() -> usize {
+    PAGE_ALLOCATOR.lock().total_heap_pages()
 }

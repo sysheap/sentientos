@@ -5,7 +5,9 @@ use core::panic::PanicInfo;
 #[cfg(not(miri))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    crate::cpu::disable_gloabl_interrupts();
     println!("");
+    crate::debug::dump_current_state();
     println!("KERNEL Panic Occured!");
     if let Some(message) = info.message() {
         println!("Message: {}", message);

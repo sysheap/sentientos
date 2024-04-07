@@ -11,7 +11,8 @@ use crate::{
     io::TEST_DEVICE_ADDRESSS,
     klibc::{
         elf,
-        util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
+        sizes::{GiB, MiB},
+        util::{get_bit, get_multiple_bits, is_aligned, set_multiple_bits, set_or_clear_bit},
     },
     memory::page::PAGE_SIZE,
     processes::timer,
@@ -41,12 +42,12 @@ impl Drop for RootPageTableHolder {
         assert!(!self.is_active(), "Page table is dropped while active");
         let table = self.table();
         for first_level_entry in table.0.iter() {
-            if !first_level_entry.get_validity() {
+            if !first_level_entry.get_validity() || first_level_entry.is_leaf() {
                 continue;
             }
             let second_level_table = first_level_entry.get_target_page_table();
             for second_level_entry in second_level_table.0.iter() {
-                if !second_level_entry.get_validity() {
+                if !second_level_entry.get_validity() || second_level_entry.is_leaf() {
                     continue;
                 }
                 let third_level_table = second_level_entry.get_physical_address();
@@ -282,12 +283,80 @@ impl RootPageTableHolder {
 
         let root_page_table = self.table_mut();
 
-        for offset in (0..size).step_by(PAGE_SIZE) {
-            let current_virtual_address = virtual_address_start + offset;
-            let current_physical_address = physical_address_start + offset;
+        let mut offset = 0;
 
-            let first_level_entry =
-                root_page_table.get_entry_for_virtual_address_mut(current_virtual_address, 2);
+        let virtual_address_with_offset = |offset| virtual_address_start + offset;
+        let physical_address_with_offset = |offset| physical_address_start + offset;
+
+        let can_be_mapped_with = |mapped_bytes, offset| {
+            mapped_bytes <= (size - offset)
+                && is_aligned(virtual_address_with_offset(offset), mapped_bytes)
+                && is_aligned(physical_address_with_offset(offset), mapped_bytes)
+        };
+
+        // Any level of PTE can be a leaf PTE
+        // So we can have 4KiB pages, 2MiB pages, and 1GiB pages in the same page table
+        // They have to be aligned on 4KiB, 2MiB, and 1GiB boundaries respectively
+        // We try to be smart and save memory by mapping as least as possible
+
+        while offset < size {
+            // Check if we can map a 1GiB page
+            if can_be_mapped_with(GiB(1), offset) {
+                let first_level_entry = root_page_table
+                    .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 2);
+
+                assert!(
+                    !first_level_entry.get_validity()
+                        && first_level_entry.get_physical_address().is_null(),
+                    "Entry must be an invalid value and physical address must be zero"
+                );
+                first_level_entry.set_xwr_mode(privileges);
+                first_level_entry.set_validity(true);
+                first_level_entry.set_leaf_address(physical_address_with_offset(offset));
+                first_level_entry.set_user_mode_accessible(is_user_mode_accessible);
+                offset += GiB(1);
+                continue;
+            }
+
+            // Check if we can map a 2MiB page
+            if can_be_mapped_with(MiB(2), offset) {
+                let first_level_entry = root_page_table
+                    .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 2);
+                if first_level_entry.get_physical_address().is_null() {
+                    let page = Box::leak(Box::new(PageTable::zero()));
+                    first_level_entry.set_physical_address(&mut *page);
+                    first_level_entry.set_validity(true);
+                }
+
+                let second_level_entry = first_level_entry
+                    .get_target_page_table()
+                    .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 1);
+                assert!(
+                    !second_level_entry.get_validity()
+                        && second_level_entry.get_physical_address().is_null(),
+                    "Entry must be an invalid value and physical address must be zero"
+                );
+
+                second_level_entry.set_xwr_mode(privileges);
+                second_level_entry.set_validity(true);
+                second_level_entry.set_leaf_address(physical_address_with_offset(offset));
+                second_level_entry.set_user_mode_accessible(is_user_mode_accessible);
+                offset += MiB(2);
+                continue;
+            }
+
+            assert!(
+                is_aligned(virtual_address_with_offset(offset), PAGE_SIZE),
+                "Virtual address must be aligned with page size"
+            );
+            assert!(
+                is_aligned(physical_address_with_offset(offset), PAGE_SIZE),
+                "Physical address must be aligned with page size"
+            );
+
+            // Map single page
+            let first_level_entry = root_page_table
+                .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 2);
             if first_level_entry.get_physical_address().is_null() {
                 let page = Box::leak(Box::new(PageTable::zero()));
                 first_level_entry.set_physical_address(&mut *page);
@@ -296,7 +365,7 @@ impl RootPageTableHolder {
 
             let second_level_entry = first_level_entry
                 .get_target_page_table()
-                .get_entry_for_virtual_address_mut(current_virtual_address, 1);
+                .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 1);
             if second_level_entry.get_physical_address().is_null() {
                 let page = Box::leak(Box::new(PageTable::zero()));
                 second_level_entry.set_physical_address(&mut *page);
@@ -305,14 +374,16 @@ impl RootPageTableHolder {
 
             let third_level_entry = second_level_entry
                 .get_target_page_table()
-                .get_entry_for_virtual_address_mut(current_virtual_address, 0);
+                .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 0);
 
             assert!(!third_level_entry.get_validity());
 
             third_level_entry.set_xwr_mode(privileges);
             third_level_entry.set_validity(true);
-            third_level_entry.set_leaf_address(current_physical_address);
+            third_level_entry.set_leaf_address(physical_address_with_offset(offset));
             third_level_entry.set_user_mode_accessible(is_user_mode_accessible);
+
+            offset += PAGE_SIZE;
         }
     }
 
