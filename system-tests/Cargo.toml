@@ -1,0 +1,8 @@
+[package]
+name = "system-tests"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+tokio = { version = "1.42.0", features = ["full"] }

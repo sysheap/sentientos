@@ -1,0 +1,4 @@
+[[language]]
+name = "rust"
+workspace-lsp-roots = ["./", "system-tests"]
+
