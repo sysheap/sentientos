@@ -6,6 +6,7 @@ const ELF_MAGIC_NUMBER: u32 = 0x7f454c46;
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum BitFormat {
     Bit32 = 1,
@@ -14,6 +15,7 @@ pub enum BitFormat {
 
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum Endianess {
     Little = 1,
@@ -23,6 +25,7 @@ pub enum Endianess {
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u8)]
 #[derive(PartialEq, Eq)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum OsAbi {
     SystemV = 0x0,
@@ -49,6 +52,7 @@ pub enum OsAbi {
 #[allow(non_camel_case_types)]
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum FileType {
     None = 0x0,
@@ -66,6 +70,7 @@ pub enum FileType {
 #[repr(u16)]
 #[derive(PartialEq, Eq)]
 #[allow(dead_code)]
+#[non_exhaustive]
 pub enum Machine {
     NoSpecificInstructionSet = 0x0,
     AT_T_WE_32100 = 0x01,
@@ -166,6 +171,7 @@ static_assert_size!(ElfHeader, 64);
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum ProgramHeaderType {
     PT_NULL = 0x0,
@@ -187,6 +193,7 @@ pub enum ProgramHeaderType {
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[allow(clippy::upper_case_acronyms)]
+#[non_exhaustive]
 #[allow(dead_code)]
 pub enum ProgramHeaderFlags {
     X = 0x1,
