@@ -34,10 +34,13 @@ pub enum ParseError {
 }
 
 const ETHERTYPE_ARP: u16 = 0x0806;
+#[allow(non_upper_case_globals)]
+const ETHERTYPE_IPV4: u16 = 0x0800;
 
 #[derive(Debug)]
 pub enum EtherTypes {
     Arp,
+    IPv4,
 }
 
 impl TryFrom<BigEndian<u16>> for EtherTypes {
@@ -46,6 +49,7 @@ impl TryFrom<BigEndian<u16>> for EtherTypes {
     fn try_from(value: BigEndian<u16>) -> Result<Self, Self::Error> {
         match value.get() {
             ETHERTYPE_ARP => Ok(EtherTypes::Arp),
+            ETHERTYPE_IPV4 => Ok(EtherTypes::IPv4),
             _ => Err(ParseError::UnknownEtherType),
         }
     }
@@ -55,6 +59,7 @@ impl From<EtherTypes> for BigEndian<u16> {
     fn from(value: EtherTypes) -> Self {
         match value {
             EtherTypes::Arp => BigEndian::from_little_endian(ETHERTYPE_ARP),
+            EtherTypes::IPv4 => BigEndian::from_little_endian(ETHERTYPE_IPV4),
         }
     }
 }

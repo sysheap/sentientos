@@ -49,10 +49,7 @@ pub struct PCIAllocatedSpace {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        info,
-        pci::{PCIBitField, PCIRange},
-    };
+    use crate::pci::{PCIBitField, PCIRange};
 
     use super::PCIAllocator;
 

@@ -2,18 +2,26 @@ use core::fmt::{Debug, Display};
 
 use crate::{consumable_buffer::FromU8Buffer, numbers::Number};
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Default)]
 #[repr(transparent)]
 pub struct BigEndian<T: Number>(T);
 
 impl<T: Number> BigEndian<T> {
+    pub fn from_big_endian(value: T) -> Self {
+        Self(value)
+    }
+
     pub fn from_little_endian(value: T) -> Self {
         // Use from_be to invert byte order
-        BigEndian(T::from_be(value))
+        Self(T::from_be(value))
     }
 
     pub fn get(&self) -> T {
         T::from_be(self.0)
+    }
+
+    pub fn get_original(&self) -> T {
+        self.0
     }
 }
 

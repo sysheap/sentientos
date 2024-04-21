@@ -1,14 +1,21 @@
 use alloc::vec::Vec;
 use common::mutex::Mutex;
 
-use crate::{debug, drivers::virtio::net::NetworkDevice};
+use crate::{
+    debug,
+    drivers::virtio::net::NetworkDevice,
+    info,
+    net::{ipv4::IpV4Header, udp::UdpHeader},
+};
 
 use self::{ethernet::EthernetHeader, ip_address::IpV4Address, mac::MacAddress};
 
 mod arp;
 mod ethernet;
 pub mod ip_address;
+mod ipv4;
 pub mod mac;
+mod udp;
 
 static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
 static IP_ADDR: IpV4Address = IpV4Address::new(10, 0, 2, 15);
@@ -17,14 +24,16 @@ pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);
 }
 
-pub fn receive_packets() -> Vec<Vec<u8>> {
+pub fn receive_and_process_packets() {
     let packets = NETWORK_DEVICE
         .lock()
         .as_mut()
         .expect("There must be a configured network device.")
         .receive_packets();
 
-    packets.into_iter().filter_map(process_packet).collect()
+    for packet in packets {
+        process_packet(packet);
+    }
 }
 
 pub fn send_packet(packet: Vec<u8>) {
@@ -44,12 +53,12 @@ pub fn current_mac_address() -> MacAddress {
         .get_mac_address()
 }
 
-fn process_packet(packet: Vec<u8>) -> Option<Vec<u8>> {
+fn process_packet(packet: Vec<u8>) {
     let (ethernet_header, rest) = match EthernetHeader::try_parse(&packet) {
         Ok(p) => p,
         Err(err) => {
             debug!("Could not parse ethernet header: {:?}", err);
-            return None;
+            return;
         }
     };
 
@@ -60,9 +69,15 @@ fn process_packet(packet: Vec<u8>) -> Option<Vec<u8>> {
     match ether_type {
         ethernet::EtherTypes::Arp => {
             arp::process_and_respond(rest);
-            return None;
+        }
+        ethernet::EtherTypes::IPv4 => {
+            let (ipv4_header, rest) =
+                IpV4Header::process(rest).expect("IPv4 packet must be processed.");
+            // We already asserted that it must be UDP in the IpV4Header::process method
+            let (udp_header, data) =
+                UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
+            let text = core::str::from_utf8(data).expect("Must be valid text.");
+            info!("Got data: {text}");
         }
     }
-
-    Some(packet)
 }

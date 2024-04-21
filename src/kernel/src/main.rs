@@ -152,10 +152,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     net::assign_network_device(network_device);
 
     loop {
-        let packages = net::receive_packets();
-        if !packages.is_empty() {
-            println!("Received: {:x?}", packages);
-        }
+        net::receive_and_process_packets();
     }
 
     timer::set_timer(0);
