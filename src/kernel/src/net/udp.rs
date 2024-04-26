@@ -77,10 +77,10 @@ impl UdpHeader {
             udp_header.length.get() as usize - UdpHeader::UDP_HEADER_SIZE
         );
 
-        let ip = ip_header.source_ip.as_big_endian_u32();
+        let ip = ip_header.source_ip.to_bits();
         sum += ip >> 16;
         sum += ip & 0xffff;
-        let ip = ip_header.destination_ip.as_big_endian_u32();
+        let ip = ip_header.destination_ip.to_bits();
         sum += ip >> 16;
         sum += ip & 0xffff;
         sum += Self::UDP_PROTOCOL_TYPE as u32;
@@ -120,16 +120,25 @@ impl UdpHeader {
 mod tests {
     use common::big_endian::BigEndian;
 
-    use crate::net::{ip_address::IpV4Address, ipv4::IpV4Header};
+    use crate::net::ipv4::IpV4Header;
+    use core::net::Ipv4Addr;
 
     use super::UdpHeader;
 
     #[test_case]
     fn checksum_calculation() {
-        let mut ip_header = IpV4Header::default();
-
-        ip_header.source_ip = IpV4Address::new(10, 0, 2, 2);
-        ip_header.destination_ip = IpV4Address::new(10, 0, 2, 15);
+        let mut ip_header = IpV4Header {
+            version_and_ihl: BigEndian::from_little_endian(0),
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(0),
+            identification: BigEndian::from_little_endian(0),
+            flags_and_offset: BigEndian::from_little_endian(0),
+            ttl: BigEndian::from_little_endian(0),
+            upper_protocol: BigEndian::from_little_endian(0),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: Ipv4Addr::new(10, 0, 2, 2),
+            destination_ip: Ipv4Addr::new(10, 0, 2, 15),
+        };
 
         let mut udp_header = UdpHeader {
             source_port: BigEndian::from_little_endian(33015),

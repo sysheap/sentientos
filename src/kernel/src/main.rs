@@ -14,6 +14,7 @@
 #![feature(lazy_cell)]
 #![feature(let_chains)]
 #![feature(vec_into_raw_parts)]
+#![feature(ip_bits)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 

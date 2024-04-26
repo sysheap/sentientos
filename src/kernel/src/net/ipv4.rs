@@ -1,3 +1,5 @@
+use core::net::Ipv4Addr;
+
 use common::big_endian::BigEndian;
 
 use crate::{
@@ -5,9 +7,7 @@ use crate::{
     klibc::util::{BufferExtension, ByteInterpretable},
 };
 
-use super::ip_address::IpV4Address;
-
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct IpV4Header {
     pub version_and_ihl: BigEndian<u8>,
@@ -18,8 +18,8 @@ pub struct IpV4Header {
     pub ttl: BigEndian<u8>,
     pub upper_protocol: BigEndian<u8>,
     pub header_checksum: BigEndian<u16>,
-    pub source_ip: IpV4Address,
-    pub destination_ip: IpV4Address,
+    pub source_ip: Ipv4Addr,
+    pub destination_ip: Ipv4Addr,
     // options_padding: BigEndian<u32>, This field is optional
 }
 

@@ -1,3 +1,5 @@
+use core::net::Ipv4Addr;
+
 use alloc::vec::Vec;
 use common::mutex::Mutex;
 
@@ -8,17 +10,16 @@ use crate::{
     net::{ipv4::IpV4Header, udp::UdpHeader},
 };
 
-use self::{ethernet::EthernetHeader, ip_address::IpV4Address, mac::MacAddress};
+use self::{ethernet::EthernetHeader, mac::MacAddress};
 
 mod arp;
 mod ethernet;
-pub mod ip_address;
 mod ipv4;
 pub mod mac;
 mod udp;
 
 static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
-static IP_ADDR: IpV4Address = IpV4Address::new(10, 0, 2, 15);
+static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
 
 pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);
