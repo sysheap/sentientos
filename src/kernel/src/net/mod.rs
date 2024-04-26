@@ -1,4 +1,4 @@
-use core::net::Ipv4Addr;
+use core::{cell::LazyCell, net::Ipv4Addr};
 
 use alloc::vec::Vec;
 use common::mutex::Mutex;
@@ -6,20 +6,22 @@ use common::mutex::Mutex;
 use crate::{
     debug,
     drivers::virtio::net::NetworkDevice,
-    info,
     net::{ipv4::IpV4Header, udp::UdpHeader},
 };
 
-use self::{ethernet::EthernetHeader, mac::MacAddress};
+use self::{ethernet::EthernetHeader, mac::MacAddress, sockets::OpenSockets};
 
 mod arp;
 mod ethernet;
 mod ipv4;
 pub mod mac;
+pub mod sockets;
 mod udp;
 
 static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
 static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
+static OPEN_UDP_SOCKETS: Mutex<LazyCell<OpenSockets>> =
+    Mutex::new(LazyCell::new(|| OpenSockets::new()));
 
 pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);
@@ -77,8 +79,9 @@ fn process_packet(packet: Vec<u8>) {
             // We already asserted that it must be UDP in the IpV4Header::process method
             let (udp_header, data) =
                 UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
-            let text = core::str::from_utf8(data).expect("Must be valid text.");
-            info!("Got data: {text}");
+            OPEN_UDP_SOCKETS
+                .lock()
+                .put_data(udp_header.destination_port(), data);
         }
     }
 }

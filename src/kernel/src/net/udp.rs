@@ -30,6 +30,10 @@ impl UdpHeader {
     const UDP_HEADER_SIZE: usize = core::mem::size_of::<Self>();
     const UDP_PROTOCOL_TYPE: u8 = 17;
 
+    pub fn destination_port(&self) -> u16 {
+        self.destination_port.get()
+    }
+
     pub fn process<'a>(
         data: &'a [u8],
         ip_header: &IpV4Header,

@@ -1,9 +1,10 @@
-use alloc::string::String;
+use alloc::{collections::BTreeMap, string::String};
 use core::fmt::Debug;
 
 use alloc::{boxed::Box, vec::Vec};
 use common::{
     mutex::Mutex,
+    net::UDPDescriptor,
     syscalls::trap_frame::{Register, TrapFrame},
 };
 
@@ -11,6 +12,7 @@ use crate::{
     debug,
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
+    net::sockets::SharedAssignedSocket,
     processes::loader::{self, LoadedElf},
 };
 
@@ -41,6 +43,7 @@ pub struct Process {
     allocated_pages: Vec<PinnedHeapPages>,
     state: ProcessState,
     free_mmap_address: usize,
+    open_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
 }
 
 impl Debug for Process {
@@ -138,6 +141,7 @@ impl Process {
             allocated_pages,
             state: ProcessState::Runnable,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
+            open_sockets: BTreeMap::new(),
         }
     }
 }
