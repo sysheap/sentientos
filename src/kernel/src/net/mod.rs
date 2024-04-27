@@ -1,6 +1,6 @@
 use core::{cell::LazyCell, net::Ipv4Addr};
 
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, vec::Vec};
 use common::mutex::Mutex;
 
 use crate::{
@@ -16,12 +16,13 @@ mod ethernet;
 mod ipv4;
 pub mod mac;
 pub mod sockets;
-mod udp;
+pub mod udp;
 
 static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
 static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
-static OPEN_UDP_SOCKETS: Mutex<LazyCell<OpenSockets>> =
-    Mutex::new(LazyCell::new(|| OpenSockets::new()));
+pub static ARP_CACHE: Mutex<BTreeMap<Ipv4Addr, MacAddress>> = Mutex::new(BTreeMap::new());
+pub static OPEN_UDP_SOCKETS: Mutex<LazyCell<OpenSockets>> =
+    Mutex::new(LazyCell::new(OpenSockets::new));
 
 pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);
@@ -79,9 +80,12 @@ fn process_packet(packet: Vec<u8>) {
             // We already asserted that it must be UDP in the IpV4Header::process method
             let (udp_header, data) =
                 UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
-            OPEN_UDP_SOCKETS
-                .lock()
-                .put_data(udp_header.destination_port(), data);
+            OPEN_UDP_SOCKETS.lock().put_data(
+                ipv4_header.source_ip,
+                udp_header.source_port(),
+                udp_header.destination_port(),
+                data,
+            );
         }
     }
 }

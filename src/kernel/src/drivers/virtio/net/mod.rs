@@ -276,6 +276,7 @@ impl NetworkDevice {
 
     pub fn send_packet(&mut self, data: Vec<u8>) -> Result<u16, QueueError> {
         // First free all already transmited packets
+        debug!("Going to free all buffers which were used to send packets.");
         for transmitted_packet in self.transmit_queue.receive_buffer() {
             debug!("Transmitted packet: {:?}", transmitted_packet.index);
         }

@@ -1,4 +1,6 @@
-use super::{SysExecuteError, SysWaitError};
+use crate::net::UDPDescriptor;
+
+use super::{SysExecuteError, SysSocketError, SysWaitError};
 
 pub trait SyscallArgument {
     fn into_reg(self) -> usize;
@@ -74,6 +76,16 @@ impl SyscallArgument for u8 {
     }
 }
 
+impl SyscallArgument for u16 {
+    fn into_reg(self) -> usize {
+        self as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        value as u16
+    }
+}
+
 impl SyscallArgument for isize {
     fn into_reg(self) -> usize {
         self as usize
@@ -114,6 +126,16 @@ impl<T> SyscallArgument for &T {
     }
 }
 
+impl<T> SyscallArgument for &mut T {
+    fn into_reg(self) -> usize {
+        self as *mut T as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        unsafe { &mut *(value as *mut T) }
+    }
+}
+
 impl SyscallArgument for () {
     fn into_reg(self) -> usize {
         0
@@ -143,6 +165,26 @@ impl SyscallArgument for SysWaitError {
 }
 
 impl SyscallArgument for SysExecuteError {
+    fn into_reg(self) -> usize {
+        self as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl SyscallArgument for UDPDescriptor {
+    fn into_reg(self) -> usize {
+        self.get() as usize
+    }
+
+    fn from_reg(value: usize) -> Self {
+        UDPDescriptor::new(value as u64)
+    }
+}
+
+impl SyscallArgument for SysSocketError {
     fn into_reg(self) -> usize {
         self as usize
     }

@@ -43,7 +43,8 @@ pub struct Process {
     allocated_pages: Vec<PinnedHeapPages>,
     state: ProcessState,
     free_mmap_address: usize,
-    open_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
+    next_free_descriptor: u64,
+    open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
 }
 
 impl Debug for Process {
@@ -141,8 +142,28 @@ impl Process {
             allocated_pages,
             state: ProcessState::Runnable,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
-            open_sockets: BTreeMap::new(),
+            next_free_descriptor: 0,
+            open_udp_sockets: BTreeMap::new(),
         }
+    }
+
+    pub fn put_new_udp_socket(&mut self, socket: SharedAssignedSocket) -> UDPDescriptor {
+        let descriptor = UDPDescriptor::new(self.next_free_descriptor);
+        self.next_free_descriptor += 1;
+
+        assert!(
+            self.open_udp_sockets.insert(descriptor, socket).is_none(),
+            "Descriptor must be empty."
+        );
+
+        descriptor
+    }
+
+    pub fn get_shared_udp_socket(
+        &mut self,
+        descriptor: UDPDescriptor,
+    ) -> Option<&mut SharedAssignedSocket> {
+        self.open_udp_sockets.get_mut(&descriptor)
     }
 }
 

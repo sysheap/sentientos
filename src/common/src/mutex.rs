@@ -25,12 +25,14 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
+        #[allow(clippy::never_loop)]
         while self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            core::hint::spin_loop();
+            panic!("Lock held twice.");
+            // core::hint::spin_loop();
         }
         MutexGuard { mutex: self }
     }

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::{cpu, info, klibc::MMIO};
+use crate::{cpu, debug, klibc::MMIO};
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
@@ -150,19 +150,15 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         if self.last_used_ring_index == current_device_index {
             return Vec::new();
         }
-        info!("Current device index: {:#x?}", current_device_index);
+        debug!("Current device index: {:#x?}", current_device_index);
         let mut return_buffers: Vec<UsedBuffer> = Vec::new();
         while self.last_used_ring_index != current_device_index {
-            info!("last used ring index: {:#x?}", self.last_used_ring_index);
+            debug!("last used ring index: {:#x?}", self.last_used_ring_index);
             let result_descriptor =
                 &mut self.device_area.ring[self.last_used_ring_index as usize % QUEUE_SIZE];
             let descriptor_entry = &mut self.descriptor_area[result_descriptor.id as usize];
-            info!("Received packet from descriptor {:#x?}", descriptor_entry);
-            assert!(
-                descriptor_entry.flags == VIRTQ_DESC_F_WRITE,
-                "Only the \"device writable\" flag is allowed for the descriptor entry"
-            );
-            info!("Result descriptor {:#x?}", result_descriptor);
+            debug!("Received packet from descriptor {:#x?}", descriptor_entry);
+            debug!("Result descriptor {:#x?}", result_descriptor);
             let index = result_descriptor.id as u16;
             let buffer = self
                 .outstanding_buffers

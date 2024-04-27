@@ -35,6 +35,8 @@ pub enum IpV4ParseError {
 const UDP_PROTOCOL_TYPE_UDP: u8 = 17;
 
 impl IpV4Header {
+    pub const HEADER_SIZE: usize = core::mem::size_of::<Self>();
+
     pub fn process(data: &[u8]) -> Result<(&IpV4Header, &[u8]), IpV4ParseError> {
         if data.len() < core::mem::size_of::<IpV4Header>() {
             return Err(IpV4ParseError::PacketTooSmall);
@@ -67,7 +69,7 @@ impl IpV4Header {
     }
 
     /// Code taken from the RFC at https://www.rfc-editor.org/rfc/rfc1071#section-4
-    fn calculate_checksum(&self) -> u16 {
+    pub fn calculate_checksum(&self) -> u16 {
         let bytes = self.as_slice();
 
         // Represents the offset but the name is from the RFC

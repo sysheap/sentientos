@@ -50,3 +50,20 @@ pub fn ecall_2(nr: usize, arg1: usize, arg2: usize) -> (usize, usize) {
     }
     (ret1, ret2)
 }
+
+pub fn ecall_3(nr: usize, arg1: usize, arg2: usize, arg3: usize) -> (usize, usize) {
+    let ret1: usize;
+    let ret2: usize;
+    unsafe {
+        asm!(
+            "ecall",
+            in("a0") nr,
+            in("a1") arg1,
+            in("a2") arg2,
+            in("a3") arg3,
+            lateout("a0") ret1,
+            lateout("a1") ret2,
+        );
+    }
+    (ret1, ret2)
+}

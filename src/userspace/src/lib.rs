@@ -6,6 +6,7 @@
 
 mod _start;
 mod heap;
+pub mod net;
 mod panic;
 pub mod print;
 pub mod util;

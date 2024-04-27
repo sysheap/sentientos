@@ -11,7 +11,6 @@ qemu-system-riscv64 \
     -nographic \
     -serial mon:stdio \
     -d guest_errors,cpu_reset,unimp \
-    --trace virtio* \
     -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1 \
     -object filter-dump,id=f1,netdev=netdev1,file=network.pcap \
     -kernel 

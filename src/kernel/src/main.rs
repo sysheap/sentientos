@@ -152,9 +152,5 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     net::assign_network_device(network_device);
 
-    loop {
-        net::receive_and_process_packets();
-    }
-
     timer::set_timer(0);
 }

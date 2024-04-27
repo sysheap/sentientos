@@ -264,6 +264,11 @@ pub fn allocated_size() -> usize {
     HEAP.inner.lock().allocated_memory()
 }
 
+#[cfg(miri)]
+pub fn allocated_size() -> usize {
+    0
+}
+
 #[cfg(test)]
 mod test {
     use core::{

@@ -1,3 +1,5 @@
+use core::net::Ipv4Addr;
+
 use alloc::{
     collections::{btree_map::Entry, BTreeMap},
     sync::{Arc, Weak},
@@ -44,7 +46,7 @@ impl OpenSockets {
         Some(arc_socket)
     }
 
-    pub fn put_data(&self, port: u16, data: &[u8]) {
+    pub fn put_data(&self, from: Ipv4Addr, from_port: u16, port: u16, data: &[u8]) {
         let mut sockets = self.sockets.lock();
         match sockets.entry(port) {
             Entry::Vacant(_) => debug!("Recived packet on {} but there is no listener.", port),
@@ -53,7 +55,7 @@ impl OpenSockets {
                 .upgrade()
                 .expect("There must an assigned socket.")
                 .lock()
-                .put_data(data),
+                .put_data(from, from_port, data),
         }
     }
 }
@@ -61,6 +63,8 @@ impl OpenSockets {
 pub struct AssignedSocket {
     buffer: Vec<u8>,
     port: u16,
+    received_from: Option<Ipv4Addr>,
+    received_port: Option<u16>,
     open_sockets: WeakSharedSocketMap,
 }
 
@@ -69,16 +73,39 @@ impl AssignedSocket {
         Self {
             buffer: Vec::new(),
             port,
+            received_from: None,
+            received_port: None,
             open_sockets,
         }
     }
 
-    fn put_data(&mut self, data: &[u8]) {
+    pub fn get_port(&self) -> u16 {
+        self.port
+    }
+
+    fn put_data(&mut self, from: Ipv4Addr, from_port: u16, data: &[u8]) {
+        self.received_from = Some(from);
+        self.received_port = Some(from_port);
         self.buffer.extend_from_slice(data)
     }
 
-    fn get_data(&mut self) -> Vec<u8> {
-        core::mem::take(&mut self.buffer)
+    pub fn get_data(&mut self, out_buffer: &mut [u8]) -> usize {
+        let len = usize::min(self.buffer.len(), out_buffer.len());
+        let mut count = 0;
+
+        for (idx, item) in self.buffer.drain(0..len).enumerate() {
+            out_buffer[idx] = item;
+            count += 1;
+        }
+        count
+    }
+
+    pub fn get_from(&self) -> Option<Ipv4Addr> {
+        self.received_from
+    }
+
+    pub fn get_received_port(&self) -> Option<u16> {
+        self.received_port
     }
 }
 
@@ -98,16 +125,21 @@ impl Drop for AssignedSocket {
 
 #[cfg(test)]
 mod tests {
+    use core::net::Ipv4Addr;
+
     use super::OpenSockets;
 
     const PORT1: u16 = 1234;
+    const FROM1: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1);
+
     const PORT2: u16 = 4444;
+    const FROM2: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 2);
 
     #[test_case]
     fn duplicate_ports() {
-        let mut open_sockets = OpenSockets::new();
+        let open_sockets = OpenSockets::new();
 
-        let assigned_socket = open_sockets
+        let _assigned_socket = open_sockets
             .try_get_socket(PORT1)
             .expect("There must be a free port.");
 
@@ -119,7 +151,7 @@ mod tests {
 
     #[test_case]
     fn data_delivery() {
-        let mut open_sockets = OpenSockets::new();
+        let open_sockets = OpenSockets::new();
 
         let assigned_port1 = open_sockets
             .try_get_socket(PORT1)
@@ -141,7 +173,7 @@ mod tests {
         let port1_data = [1, 2, 3];
         let port2_data = [3, 2, 1];
 
-        open_sockets.put_data(PORT1, &port1_data);
+        open_sockets.put_data(FROM1, PORT1, PORT1, &port1_data);
 
         assert!(
             &assigned_port1.lock().buffer == &port1_data,
@@ -152,16 +184,24 @@ mod tests {
             "Buffer must be still empty."
         );
 
-        open_sockets.put_data(PORT2, &port2_data);
+        open_sockets.put_data(FROM2, PORT2, PORT2, &port2_data);
 
-        assert!(
-            &assigned_port1.lock().get_data() == &port1_data,
-            "Data must be unchanged."
+        let mut buf1 = [0; 10];
+        let mut buf2 = [0; 10];
+
+        assert_eq!(
+            assigned_port1.lock().get_data(&mut buf1),
+            3,
+            "Data must be copied completely."
         );
-        assert!(
-            &assigned_port2.lock().get_data() == &port2_data,
-            "Data must be delivered properly."
+        assert_eq!(
+            assigned_port2.lock().get_data(&mut buf2),
+            3,
+            "Data must be copied completely."
         );
+
+        assert_eq!(buf1[0..3], port1_data, "Data must be the same.");
+        assert_eq!(buf2[0..3], port2_data, "Data must be the same.");
 
         assert!(
             assigned_port1.lock().buffer.is_empty(),
@@ -174,8 +214,79 @@ mod tests {
     }
 
     #[test_case]
+    fn correct_number_of_data() {
+        let open_sockets = OpenSockets::new();
+
+        let socket = open_sockets
+            .try_get_socket(PORT1)
+            .expect("Socket must be free");
+
+        socket
+            .lock()
+            .put_data(Ipv4Addr::UNSPECIFIED, PORT1, &[1, 2, 3, 4, 5]);
+
+        let mut small_buffer = [0; 1];
+        assert_eq!(
+            socket.lock().get_data(&mut small_buffer),
+            1,
+            "Only one byte must be transfered"
+        );
+
+        assert_eq!(small_buffer[0], 1, "Correct byte must be transfered.");
+
+        let mut big_buffer = [42; 32];
+
+        assert_eq!(
+            socket.lock().get_data(&mut big_buffer),
+            4,
+            "4 bytes must be transferred."
+        );
+
+        let mut correct_buffer = [42; 32];
+        correct_buffer[0] = 2;
+        correct_buffer[1] = 3;
+        correct_buffer[2] = 4;
+        correct_buffer[3] = 5;
+
+        assert_eq!(
+            big_buffer, correct_buffer,
+            "Correct data must be transfered and rest ist unchanged."
+        );
+    }
+
+    #[test_case]
+    fn received_ip() {
+        let open_sockets = OpenSockets::new();
+
+        let assigned_socket = open_sockets
+            .try_get_socket(PORT1)
+            .expect("There must be a free socket.");
+
+        assert!(
+            assigned_socket.lock().get_from().is_none(),
+            "From must be initially empty."
+        );
+
+        open_sockets.put_data(FROM1, PORT1, PORT1, &[1, 2, 3]);
+
+        assert_eq!(
+            assigned_socket.lock().get_from(),
+            Some(FROM1),
+            "There must be the last received ip address."
+        );
+
+        open_sockets.put_data(FROM2, PORT1, PORT1, &[1, 2, 3]);
+
+        assert_eq!(
+            assigned_socket.lock().get_from(),
+            Some(FROM2),
+            "There must be the last received ip address."
+        );
+    }
+
+    #[test_case]
     fn drop_must_work_correctly() {
-        let mut open_sockets = OpenSockets::new();
+        let open_sockets = OpenSockets::new();
 
         let assigned_socket = open_sockets
             .try_get_socket(PORT1)

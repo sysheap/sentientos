@@ -1,13 +1,15 @@
 use core::{fmt::Display, net::Ipv4Addr};
 
-use alloc::collections::BTreeMap;
-use common::{big_endian::BigEndian, mutex::Mutex};
+use common::big_endian::BigEndian;
 
 use crate::{
     assert::static_assert_size,
     debug,
     klibc::util::{BufferExtension, ByteInterpretable},
-    net::ethernet::{EtherTypes, EthernetHeader},
+    net::{
+        ethernet::{EtherTypes, EthernetHeader},
+        ARP_CACHE,
+    },
 };
 
 use super::{current_mac_address, mac::MacAddress, IP_ADDR};
@@ -17,8 +19,6 @@ const ARP_RESPONSE: u16 = 2;
 
 const HARDWARE_ADDRESS_TYPE_ETHERNET: u16 = 1;
 const PROTOCOL_ADDRESS_TYPE_IPV4: u16 = 0x0800;
-
-static ARP_CACHE: Mutex<BTreeMap<Ipv4Addr, MacAddress>> = Mutex::new(BTreeMap::new());
 
 #[derive(Debug)]
 #[repr(C)]

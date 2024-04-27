@@ -1,12 +1,16 @@
+use alloc::vec::Vec;
+use core::net::Ipv4Addr;
+
 use common::big_endian::BigEndian;
 
 use crate::{
     assert::static_assert_size,
-    info,
+    debug,
     klibc::util::{BufferExtension, ByteInterpretable},
+    net::ethernet::EthernetHeader,
 };
 
-use super::ipv4::IpV4Header;
+use super::{ipv4::IpV4Header, mac::MacAddress};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -33,6 +37,66 @@ impl UdpHeader {
     pub fn destination_port(&self) -> u16 {
         self.destination_port.get()
     }
+    pub fn source_port(&self) -> u16 {
+        self.source_port.get()
+    }
+
+    pub fn create_udp_packet(
+        destination_ip: Ipv4Addr,
+        destination_port: u16,
+        destination_mac: MacAddress,
+        source_port: u16,
+        data: &[u8],
+    ) -> Vec<u8> {
+        let mut udp_header = Self {
+            source_port: BigEndian::from_little_endian(source_port),
+            destination_port: BigEndian::from_little_endian(destination_port),
+            length: BigEndian::from_little_endian(
+                u16::try_from(Self::UDP_HEADER_SIZE + data.len())
+                    .expect("Size must not exceed u16"),
+            ),
+            checksum: BigEndian::from_little_endian(0),
+        };
+
+        let mut ip_header = IpV4Header {
+            version_and_ihl: BigEndian::from_little_endian(4 << 4 | 5), // ip version v4 and header length 5 * 4byte
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(
+                u16::try_from(IpV4Header::HEADER_SIZE + Self::UDP_HEADER_SIZE + data.len())
+                    .expect("Size must not exceed u16"),
+            ),
+            identification: BigEndian::from_little_endian(0),
+            flags_and_offset: BigEndian::from_big_endian(0), // DF Bits set (don't fragment)
+            ttl: BigEndian::from_little_endian(128),
+            upper_protocol: BigEndian::from_little_endian(Self::UDP_PROTOCOL_TYPE),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: super::IP_ADDR,
+            destination_ip,
+        };
+
+        udp_header.checksum =
+            BigEndian::from_little_endian(Self::compute_checksum(data, &udp_header, &ip_header));
+
+        ip_header.header_checksum = BigEndian::from_little_endian(ip_header.calculate_checksum());
+
+        let ethernet_header = EthernetHeader::new(
+            destination_mac,
+            super::current_mac_address(),
+            crate::net::ethernet::EtherTypes::IPv4,
+        );
+
+        let data = [
+            ethernet_header.as_slice(),
+            ip_header.as_slice(),
+            udp_header.as_slice(),
+            data,
+        ]
+        .concat();
+
+        debug!("Sending UDP packet with size {}", data.len());
+
+        data
+    }
 
     pub fn process<'a>(
         data: &'a [u8],
@@ -44,7 +108,7 @@ impl UdpHeader {
 
         let (udp_header, rest) = data.split_as::<UdpHeader>();
 
-        info!(
+        debug!(
             "Received udp packet; Header tells {:#x} length and we got {:#x} rest of data",
             udp_header.length.get(),
             rest.len()
@@ -64,7 +128,7 @@ impl UdpHeader {
             "we test impl for checksum not zero"
         );
 
-        info!("Got checksum: {:#x}", udp_header.checksum.get());
+        debug!("Got checksum: {:#x}", udp_header.checksum.get());
 
         let computed_checksum = Self::compute_checksum(rest, udp_header, ip_header);
 
@@ -114,9 +178,7 @@ impl UdpHeader {
             sum = (sum & 0xffff) + (sum >> 16);
         }
 
-        let checksum = !(sum as u16);
-
-        checksum
+        !(sum as u16)
     }
 }
 
@@ -131,7 +193,7 @@ mod tests {
 
     #[test_case]
     fn checksum_calculation() {
-        let mut ip_header = IpV4Header {
+        let ip_header = IpV4Header {
             version_and_ihl: BigEndian::from_little_endian(0),
             tos: BigEndian::from_little_endian(0),
             total_packet_length: BigEndian::from_little_endian(0),
@@ -144,7 +206,7 @@ mod tests {
             destination_ip: Ipv4Addr::new(10, 0, 2, 15),
         };
 
-        let mut udp_header = UdpHeader {
+        let udp_header = UdpHeader {
             source_port: BigEndian::from_little_endian(33015),
             destination_port: BigEndian::from_little_endian(1234),
             length: BigEndian::from_little_endian(21),

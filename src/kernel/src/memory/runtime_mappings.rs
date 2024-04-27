@@ -19,5 +19,5 @@ pub fn initialize_runtime_mappings(mappings: &[RuntimeMapping]) {
 }
 
 pub fn get_runtime_mappings() -> &'static [RuntimeMapping] {
-    &*RUNTIME_MAPPINGS
+    &RUNTIME_MAPPINGS
 }

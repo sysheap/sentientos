@@ -20,4 +20,21 @@ macro_rules! include_bytes_align_as {
     }};
 }
 
+// Copied from https://stackoverflow.com/questions/51344951/how-do-you-unwrap-a-result-on-ok-or-return-from-the-function-on-err
+macro_rules! unwrap_or_return {
+    ($e:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return,
+        }
+    };
+    ($e:expr, $r:expr) => {
+        match $e {
+            Some(x) => x,
+            None => return $r,
+        }
+    };
+}
+
 pub(crate) use include_bytes_align_as;
+pub(crate) use unwrap_or_return;
