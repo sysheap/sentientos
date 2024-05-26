@@ -33,9 +33,13 @@ We use '!' to invert 'r' (read-only) and 'i' (initialized). We don't want
 our memory to be read-only, and we're stating that it is NOT initialized
 at the beginning.
 
-The ORIGIN is the memory address 0x8000_0000. If we look at the virt
+The ORIGIN is the memory address 0x8020_0000. If we look at the virt
 spec or the specification for the RISC-V HiFive Unleashed, this is the
 starting memory address for our code.
+
+NOTE FROM hieronymusma:
+The reason why we start from 0x8020_0000 instead of 0x8000_000 is because we use openSBI.
+openBSI jumps to 0x8020_0000 after setting up the hardware.
 
 Side note: There might be other boot ROMs at different addresses, but
 their job is to get to this point.
@@ -91,7 +95,7 @@ SECTIONS
   /*
     The first part of our RAM layout will be the text section.
 	Since our CPU instructions are here, and our memory starts at
-	0x8000_0000, we need our entry point to line up here.
+	0x8020_0000, we need our entry point to line up here.
   */
   .text : {
 	  /* 
