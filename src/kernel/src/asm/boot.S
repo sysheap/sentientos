@@ -20,7 +20,7 @@ _start:
 	# memory relative to GP instead of as an absolute address.
 .option push
 .option norelax
-	la		gp, _global_pointer
+	la		gp, __global_pointer$
 .option pop
 
 	# Disable interrupts.

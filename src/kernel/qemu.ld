@@ -159,12 +159,6 @@ SECTIONS
 	*/
   } >ram AT>ram :text
    /*
-     The global pointer allows the linker to position global variables and constants into
-	 independent positions relative to the gp (global pointer) register. The globals start
-	 after the text sections and are only relevant to the rodata, data, and bss sections.
-   */
-   PROVIDE(_global_pointer = .);
-   /*
      Most compilers create a rodata (read only data) section for global constants. However,
 	 we're going to place ours in the text section. We can actually put this in :data, but
 	 since the .text section is read-only, we can place it there.
@@ -194,6 +188,12 @@ SECTIONS
 	*/
     . = ALIGN(4096);
     PROVIDE(_data_start = .);
+   /*
+     The global pointer allows the linker to position global variables and constants into
+	 independent positions relative to the gp (global pointer) register. The globals start
+	 after the text sections and are only relevant to the rodata, data, and bss sections.
+   */
+   PROVIDE(__global_pointer$ = . + 0x800);
 	/*
 	   sdata and data are essentially the same thing. However, compilers usually use the
 	   sdata sections for shorter, quicker loading sections. So, usually critical data
