@@ -27,7 +27,7 @@ pub struct SbiRet {
 impl SbiRet {
     unsafe fn new(error: i64, value: i64) -> Self {
         Self {
-            error: core::mem::transmute(error),
+            error: core::mem::transmute::<i64, SbiError>(error),
             value,
         }
     }

@@ -8,8 +8,6 @@
 #![feature(custom_test_frameworks)]
 #![feature(const_mut_refs)]
 #![feature(option_take_if)]
-#![feature(non_null_convenience)]
-#![feature(pointer_is_aligned)]
 #![feature(exposed_provenance)]
 #![feature(lazy_cell)]
 #![feature(let_chains)]

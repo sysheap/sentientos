@@ -1,4 +1,4 @@
-use core::{cell::LazyCell, fmt::Debug, ptr::null_mut, u8};
+use core::{cell::LazyCell, fmt::Debug, ptr::null_mut};
 
 use alloc::boxed::Box;
 use common::mutex::Mutex;

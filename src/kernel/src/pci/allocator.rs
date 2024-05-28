@@ -40,6 +40,7 @@ impl PCIAllocator {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct PCIAllocatedSpace {
     pub pci_address: usize,
