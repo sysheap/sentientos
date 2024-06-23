@@ -47,6 +47,18 @@ impl<'a> ConsumableBuffer<'a> {
         Some(T::from_u8_buffer(result))
     }
 
+    pub fn consume_unsized_type<T: FromU8BufferUnsized>(&mut self) -> Option<T> {
+        let result = T::from_u8_buffer(self.buffer);
+        if let Some(result) = result {
+            let size = result.size_in_bytes();
+            if self.position + size > self.buffer.len() {
+                return None;
+            }
+            self.position += size;
+        }
+        result
+    }
+
     pub fn consume_alignment(&mut self, alignment: usize) -> Option<()> {
         let aligned_value = align_up(self.position, alignment);
         let diff = aligned_value - self.position;
@@ -92,4 +104,9 @@ impl<'a> ConsumableBuffer<'a> {
 
 pub trait FromU8Buffer: Copy {
     fn from_u8_buffer(buffer: &[u8]) -> Self;
+}
+
+pub trait FromU8BufferUnsized: Copy {
+    fn from_u8_buffer(buffer: &[u8]) -> Option<Self>;
+    fn size_in_bytes(&self) -> usize;
 }

@@ -1,5 +1,6 @@
 use crate::{print, println};
 
+mod leb128;
 mod mutex;
 
 pub mod qemu_exit;
