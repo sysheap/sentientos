@@ -1,5 +1,3 @@
-use core::slice;
-
 use crate::util::align_up;
 
 #[derive(Debug)]
@@ -48,7 +46,7 @@ impl<'a> ConsumableBuffer<'a> {
     }
 
     pub fn consume_unsized_type<T: FromU8BufferUnsized>(&mut self) -> Option<T> {
-        let result = T::from_u8_buffer(self.buffer);
+        let result = T::from_u8_buffer(self.rest());
         if let Some(result) = result {
             let size = result.size_in_bytes();
             if self.position + size > self.buffer.len() {
@@ -77,9 +75,8 @@ impl<'a> ConsumableBuffer<'a> {
             return None;
         }
 
-        let string = unsafe {
-            core::str::from_utf8(slice::from_raw_parts(&self.buffer[self.position], length)).ok()?
-        };
+        let string =
+            core::str::from_utf8(&self.buffer[self.position..self.position + length]).ok()?;
 
         // Consume null byte
         length += 1;
@@ -99,6 +96,14 @@ impl<'a> ConsumableBuffer<'a> {
         } else {
             self.buffer.len() - self.position
         }
+    }
+
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    pub fn rest(&self) -> &[u8] {
+        &self.buffer[self.position..]
     }
 }
 

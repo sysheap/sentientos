@@ -1,5 +1,7 @@
 use crate::{info, klibc::sizes::MiB};
 
+mod eh_frame_parser;
+
 pub fn dump_current_state() {
     let allocated_size_heap = crate::memory::heap::allocated_size();
     info!(
