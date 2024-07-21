@@ -6,9 +6,7 @@ use crate::println;
 pub fn panic(info: &PanicInfo) -> ! {
     println!("");
     println!("USERSPACE Panic Occured!");
-    if let Some(message) = info.message() {
-        println!("Message: {}", message);
-    }
+    println!("Message: {}", info.message());
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
