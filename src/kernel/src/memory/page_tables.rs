@@ -1,4 +1,4 @@
-use core::{cell::LazyCell, fmt::Debug, ptr::null_mut};
+use core::{cell::LazyCell, fmt::Debug, ops::Deref, ptr::null_mut};
 
 use alloc::boxed::Box;
 use common::mutex::Mutex;
@@ -20,15 +20,41 @@ use crate::{
 
 use super::{page::Page, runtime_mappings::get_runtime_mappings};
 
-pub static KERNEL_PAGE_TABLES: Mutex<LazyCell<&'static RootPageTableHolder>> =
-    Mutex::new(LazyCell::new(|| {
-        let page_tables = Box::new(RootPageTableHolder::new_with_kernel_mapping());
-        Box::leak(page_tables)
-    }));
+pub static KERNEL_PAGE_TABLES: LazyStaticKernelPageTables = LazyStaticKernelPageTables::new();
+
+pub struct LazyStaticKernelPageTables {
+    inner: Mutex<LazyCell<&'static RootPageTableHolder>>,
+}
+
+impl LazyStaticKernelPageTables {
+    const fn new() -> Self {
+        Self {
+            inner: Mutex::new(LazyCell::new(|| {
+                let page_tables = Box::new(RootPageTableHolder::new_with_kernel_mapping());
+                Box::leak(page_tables)
+            })),
+        }
+    }
+}
+
+impl Deref for LazyStaticKernelPageTables {
+    type Target = RootPageTableHolder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner.lock()
+    }
+}
+
+// SAFETY: Inner type is wrapped within a mutex. So we can make this sync.
+// Somehow it didn't worked to make this Send only. I guess some problems by using LazyCell.
+unsafe impl Sync for LazyStaticKernelPageTables {}
 
 pub struct RootPageTableHolder {
     root_table: *mut PageTable,
 }
+
+// SAFETY: PageTables can be send to another thread
+unsafe impl Send for RootPageTableHolder {}
 
 impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

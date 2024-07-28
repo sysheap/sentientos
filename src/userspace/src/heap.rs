@@ -175,6 +175,8 @@ struct Heap<Allocator: PageAllocator> {
     allocator: PhantomData<Allocator>,
 }
 
+unsafe impl<Allocator: PageAllocator> Send for Heap<Allocator> {}
+
 impl<Allocator: PageAllocator> Heap<Allocator> {
     const fn new() -> Self {
         Self {

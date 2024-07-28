@@ -20,6 +20,9 @@ pub(super) struct MetadataPageAllocator<'a> {
     pages: Range<*mut Page>,
 }
 
+// SAFETY: The metadata page allocator can be accessed from any thread
+unsafe impl<'a> Send for MetadataPageAllocator<'a> {}
+
 impl<'a> Debug for MetadataPageAllocator<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PageAllocator")

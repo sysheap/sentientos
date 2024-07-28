@@ -73,7 +73,7 @@ impl KernelSyscalls for SyscallHandler {
 
     fn sys_mmap_pages(number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
         let current_process = get_current_process_expect();
-        let mut current_process = current_process.borrow_mut();
+        let mut current_process = current_process.lock();
         current_process.mmap_pages(number_of_pages.validate())
     }
 
@@ -84,7 +84,7 @@ impl KernelSyscalls for SyscallHandler {
             Some(socket) => socket,
         };
         let current_process = get_current_process_expect();
-        let mut current_process = current_process.borrow_mut();
+        let mut current_process = current_process.lock();
         Ok(current_process.put_new_udp_socket(socket))
     }
 
@@ -97,7 +97,7 @@ impl KernelSyscalls for SyscallHandler {
         let pa = buffer.validate(length);
 
         let current_process = get_current_process_expect();
-        let mut current_process = current_process.borrow_mut();
+        let mut current_process = current_process.lock();
 
         let socket = unwrap_or_return!(
             current_process.get_shared_udp_socket(descriptor.validate()),
@@ -144,7 +144,7 @@ impl KernelSyscalls for SyscallHandler {
         let length = length.validate();
         let pa = buffer.validate(length);
         let current_process = get_current_process_expect();
-        let mut current_process = current_process.borrow_mut();
+        let mut current_process = current_process.lock();
 
         let mut socket = unwrap_or_return!(
             current_process.get_shared_udp_socket(descriptor.validate()),

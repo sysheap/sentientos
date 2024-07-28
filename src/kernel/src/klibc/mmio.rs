@@ -9,6 +9,9 @@ pub struct MMIO<T: Sized> {
     address: *mut T,
 }
 
+// SAFETY: MMIO can be accessed from ANY thread
+unsafe impl<T: Sized> Send for MMIO<T> {}
+
 impl<T> MMIO<T> {
     pub const unsafe fn new(address: usize) -> Self {
         Self {

@@ -48,8 +48,8 @@ impl<T> Mutex<T> {
     }
 }
 
-unsafe impl<T> Sync for Mutex<T> {}
-unsafe impl<T> Send for Mutex<T> {}
+unsafe impl<T: Send> Sync for Mutex<T> {}
+unsafe impl<T: Send> Send for Mutex<T> {}
 
 pub struct MutexGuard<'a, T> {
     mutex: &'a Mutex<T>,
@@ -72,5 +72,11 @@ impl<'a, T> Deref for MutexGuard<'a, T> {
 impl<'a, T> DerefMut for MutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
+    }
+}
+
+impl<'a, T: Debug> Debug for MutexGuard<'a, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "{:?}", self.mutex)
     }
 }

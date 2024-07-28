@@ -24,6 +24,9 @@ struct DeconstructedVec {
     capacity: usize,
 }
 
+// SAFETY: A deconstructed Vec<u8> can be send to other threads just like Vec<u8>
+unsafe impl Send for DeconstructedVec {}
+
 impl DeconstructedVec {
     fn from_vec(vec: Vec<u8>) -> Self {
         let (ptr, length, capacity) = vec.into_raw_parts();

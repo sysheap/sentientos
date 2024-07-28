@@ -27,7 +27,7 @@ extern "C" fn supervisor_mode_trap(
 ) {
     let old_tables = read_satp();
     debug!("Activate KERNEL_PAGE_TABLES");
-    activate_page_table(&KERNEL_PAGE_TABLES.lock());
+    activate_page_table(&KERNEL_PAGE_TABLES);
     debug!(
         "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})\nTrap Frame: {:?}",
         sepc,
@@ -64,7 +64,7 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
         _ => {
             let current_process = get_current_process();
             if let Some(current_process) = current_process {
-                let current_process = current_process.borrow();
+                let current_process = current_process.lock();
                 panic!(
                     "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
                     cause.get_reason(),

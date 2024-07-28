@@ -124,7 +124,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     memory::initialize_runtime_mappings(&runtime_mapping);
 
-    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES.lock());
+    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES);
 
     interrupts::set_sscratch_to_kernel_trap_frame();
 

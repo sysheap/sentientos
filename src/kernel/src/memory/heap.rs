@@ -237,6 +237,9 @@ struct MutexHeap<Allocator: PageAllocator> {
     inner: Mutex<Heap<Allocator>>,
 }
 
+// SAFETY: Heap can be send between threads
+unsafe impl<Allocator: PageAllocator> Send for Heap<Allocator> {}
+
 impl<Allocator: PageAllocator> MutexHeap<Allocator> {
     const fn new() -> Self {
         Self {

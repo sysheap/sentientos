@@ -37,7 +37,7 @@ simple_type!(UDPDescriptor);
 impl<'a> FailibleSliceValidator<'a, u8> for UserspaceArgument<&'a u8> {
     fn validate(self, len: usize) -> Result<&'a u8, ()> {
         let current_process = get_current_process_expect();
-        let current_process = current_process.borrow();
+        let current_process = current_process.lock();
         let page_table = current_process.get_page_table();
 
         let addr = self.get() as *const u8;
@@ -59,7 +59,7 @@ impl<'a> FailibleSliceValidator<'a, u8> for UserspaceArgument<&'a u8> {
 impl<'a> FailibleMutableSliceValidator<'a, u8> for UserspaceArgument<&'a mut u8> {
     fn validate(self, len: usize) -> Result<&'a mut u8, ()> {
         let current_process = get_current_process_expect();
-        let current_process = current_process.borrow();
+        let current_process = current_process.lock();
         let page_table = current_process.get_page_table();
 
         let addr = self.get() as *mut u8;
