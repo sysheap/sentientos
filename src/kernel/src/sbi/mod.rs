@@ -1,5 +1,4 @@
 pub mod extensions;
 mod sbi_call;
 
-use sbi_call::sbi_call;
-use sbi_call::sbi_call_1;
+use sbi_call::{sbi_call, sbi_call_1};

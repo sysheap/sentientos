@@ -1,8 +1,4 @@
-use std::env;
-use std::error::Error;
-use std::io::Write;
-use std::path::Path;
-use std::process::Command;
+use std::{env, error::Error, io::Write, path::Path, process::Command};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");

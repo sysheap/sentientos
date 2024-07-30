@@ -1,5 +1,4 @@
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, vec::Vec};
 use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
     fmt::{Debug, Display},

@@ -1,7 +1,6 @@
 #![cfg_attr(miri, allow(unused_imports))]
 use crate::{println, test::qemu_exit};
-use core::panic::PanicInfo;
-use core::sync::atomic::AtomicU8;
+use core::{panic::PanicInfo, sync::atomic::AtomicU8};
 
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 

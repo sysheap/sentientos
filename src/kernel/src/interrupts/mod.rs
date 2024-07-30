@@ -1,5 +1,4 @@
-use core::arch::asm;
-use core::ptr::addr_of;
+use core::{arch::asm, ptr::addr_of};
 
 use common::syscalls::trap_frame::TrapFrame;
 

@@ -1,6 +1,4 @@
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
+use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
 use crate::{cpu, debug, klibc::MMIO};
 

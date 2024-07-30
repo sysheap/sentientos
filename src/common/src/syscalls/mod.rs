@@ -1,6 +1,4 @@
-use crate::ecall;
-use crate::net::UDPDescriptor;
-use crate::syscalls;
+use crate::{ecall, net::UDPDescriptor, syscalls};
 
 use self::syscall_argument::{SyscallArgument, SyscallReturnArgument};
 
@@ -10,8 +8,7 @@ mod syscall_argument;
 pub mod trap_frame;
 pub mod userspace_argument;
 
-use self::ecall::*;
-use self::userspace_argument::UserspaceArgument;
+use self::{ecall::*, userspace_argument::UserspaceArgument};
 
 #[derive(Debug)]
 #[repr(usize)]

@@ -1,7 +1,5 @@
-use crate::{debug, pci};
-use crate::{info, klibc::MMIO};
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
+use crate::{debug, info, klibc::MMIO, pci};
+use alloc::{collections::BTreeMap, vec::Vec};
 
 mod allocator;
 mod devic_tree_parser;
@@ -13,9 +11,7 @@ use lookup::lookup;
 pub use devic_tree_parser::parse;
 
 use self::allocator::{PCIAllocatedSpace, PCIAllocator};
-pub use self::devic_tree_parser::PCIBitField;
-pub use self::devic_tree_parser::PCIInformation;
-pub use self::devic_tree_parser::PCIRange;
+pub use self::devic_tree_parser::{PCIBitField, PCIInformation, PCIRange};
 
 pub static PCI_ALLOCATOR_64_BIT: Mutex<PCIAllocator> = Mutex::new(PCIAllocator::new());
 
