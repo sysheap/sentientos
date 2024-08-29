@@ -18,7 +18,9 @@ use crate::{
     processes::timer,
 };
 
-use super::{page::Page, runtime_mappings::get_runtime_mappings};
+use super::{
+    linker_information::LinkerInformation, page::Page, runtime_mappings::get_runtime_mappings,
+};
 
 pub static KERNEL_PAGE_TABLES: LazyStaticKernelPageTables = LazyStaticKernelPageTables::new();
 
@@ -89,61 +91,6 @@ impl Drop for RootPageTableHolder {
     }
 }
 
-#[derive(Default)]
-struct LinkerInformation {
-    text_start: usize,
-    text_end: usize,
-    rodata_start: usize,
-    rodata_end: usize,
-    data_start: usize,
-    data_end: usize,
-    heap_start: usize,
-    heap_size: usize,
-}
-
-impl LinkerInformation {
-    unsafe fn new() -> Self {
-        extern "C" {
-            static mut TEXT_START: usize;
-            static mut TEXT_END: usize;
-            static mut RODATA_START: usize;
-            static mut RODATA_END: usize;
-            static mut DATA_START: usize;
-            static mut DATA_END: usize;
-
-            static mut HEAP_START: usize;
-            static mut HEAP_SIZE: usize;
-        }
-
-        if cfg!(miri) {
-            Self::default()
-        } else {
-            Self {
-                text_start: TEXT_START,
-                text_end: TEXT_END,
-                rodata_start: RODATA_START,
-                rodata_end: RODATA_END,
-                data_start: DATA_START,
-                data_end: DATA_END,
-                heap_start: HEAP_START,
-                heap_size: HEAP_SIZE,
-            }
-        }
-    }
-
-    fn text_size(&self) -> usize {
-        self.text_end - self.text_start
-    }
-
-    fn rodata_size(&self) -> usize {
-        self.rodata_end - self.rodata_start
-    }
-
-    fn data_size(&self) -> usize {
-        self.data_end - self.data_start
-    }
-}
-
 impl RootPageTableHolder {
     fn empty() -> Self {
         let root_table = Box::leak(Box::new(PageTable::zero()));
@@ -177,7 +124,7 @@ impl RootPageTableHolder {
     pub fn new_with_kernel_mapping() -> Self {
         let mut root_page_table_holder = RootPageTableHolder::empty();
 
-        let linker_information = unsafe { LinkerInformation::new() };
+        let linker_information = LinkerInformation::new();
 
         root_page_table_holder.map_identity_kernel(
             linker_information.text_start,

@@ -13,6 +13,7 @@ use self::{
 };
 
 pub mod heap;
+pub mod linker_information;
 pub mod page;
 mod page_allocator;
 pub mod page_tables;
