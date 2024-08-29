@@ -23,3 +23,9 @@ HEAP_START: .dword _heap_start
 
 .global HEAP_SIZE
 HEAP_SIZE: .dword _heap_size
+
+.global EH_FRAME_START
+EH_FRAME_START: .dword _eh_frame_start
+
+.global EH_FRAME_SIZE
+EH_FRAME_SIZE: .dword _eh_frame_size

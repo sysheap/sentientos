@@ -34,6 +34,9 @@ SECTIONS
 	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.* .srodata .srodata.*)
+    PROVIDE(_eh_frame_start = .);
+    *(.eh_frame)
+    PROVIDE(_eh_frame_end = .);
 	. = ALIGN(4096);
     PROVIDE(_rodata_end = .);
   } >ram AT>ram :text
@@ -62,4 +65,5 @@ SECTIONS
 
   PROVIDE(_heap_start = _stack_end);
   PROVIDE(_heap_size = _memory_end - _heap_start);
+  PROVIDE(_eh_frame_size = _eh_frame_end - _eh_frame_start);
 }
