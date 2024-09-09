@@ -30,44 +30,23 @@ impl<'a> EhFrameParser<'a> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedCIE<'a> {
-    version: u8,
-    augmentation_string: &'a str,
-    address_size: u8,
-    code_alignment_factor: u64,
-    data_alignment_factor: i64,
-    augmentation_data: Option<&'a [u8]>,
-    return_address_register: u64,
-    initial_instructions: Vec<Instruction>,
+    pub version: u8,
+    pub augmentation_string: &'a str,
+    pub address_size: u8,
+    pub code_alignment_factor: u64,
+    pub data_alignment_factor: i64,
+    pub augmentation_data: Option<&'a [u8]>,
+    pub return_address_register: u64,
+    pub initial_instructions: Vec<Instruction>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedFDE<'a> {
-    cie: Arc<ParsedCIE<'a>>,
-    pc_begin: u64,
-    address_range: u32,
-    augmentation_data: Option<&'a [u8]>,
-    instructions: Vec<Instruction>,
-}
-
-#[derive(Debug)]
-pub enum EhFrameEntry<'a> {
-    Cie(Arc<ParsedCIE<'a>>),
-    Fde(ParsedFDE<'a>),
-}
-
-impl<'a> EhFrameEntry<'a> {
-    fn get_cie(self) -> Arc<ParsedCIE<'a>> {
-        match self {
-            Self::Cie(cie) => cie,
-            _ => panic!("EhFrameEntry is not a cie"),
-        }
-    }
-    fn get_fde(self) -> ParsedFDE<'a> {
-        match self {
-            Self::Fde(fde) => fde,
-            _ => panic!("EhFrameEntry is not a fde"),
-        }
-    }
+    pub cie: Arc<ParsedCIE<'a>>,
+    pub pc_begin: u64,
+    pub address_range: u32,
+    pub augmentation_data: Option<&'a [u8]>,
+    pub instructions: Vec<Instruction>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -83,7 +62,7 @@ pub struct EhFrameIterator<'a> {
 }
 
 impl<'a> Iterator for EhFrameIterator<'a> {
-    type Item = EhFrameEntry<'a>;
+    type Item = ParsedFDE<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let offset_of_cie = self.data.position();
@@ -98,19 +77,19 @@ impl<'a> Iterator for EhFrameIterator<'a> {
         length -= 4;
 
         if cie_offset_or_none == 0 {
-            self.parse_cie(length, offset_of_cie).map(EhFrameEntry::Cie)
+            self.parse_cie(length, offset_of_cie)?;
+            self.next()
         } else {
             self.parse_fde(cie_offset_or_none, length)
-                .map(EhFrameEntry::Fde)
         }
     }
 }
 
 impl<'a> EhFrameIterator<'a> {
-    fn parse_cie(&mut self, length: usize, offset_of_cie: usize) -> Option<Arc<ParsedCIE<'a>>> {
+    fn parse_cie(&mut self, length: usize, offset_of_cie: usize) -> Option<()> {
         let begin_position = self.data.position();
         let version = self.data.consume_sized_type::<u8>()?;
-        assert!(version == 1);
+        assert_eq!(version, 1);
         let augmentation_string = self.data.consume_str()?;
 
         assert_eq!(augmentation_string, "zR");
@@ -151,14 +130,14 @@ impl<'a> EhFrameIterator<'a> {
 
         let arced_cie = Arc::new(parsed_cie);
 
-        let already_exist = self.parsed_cie.insert(offset_of_cie, arced_cie.clone());
+        let already_exist = self.parsed_cie.insert(offset_of_cie, arced_cie);
 
         assert!(
             already_exist.is_none(),
             "There should be only one CIE at each offset value."
         );
 
-        Some(arced_cie)
+        Some(())
     }
 
     fn parse_fde(&mut self, cie_offset: usize, length: usize) -> Option<ParsedFDE<'a>> {
@@ -323,7 +302,7 @@ mod consts {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Instruction {
+pub enum Instruction {
     AdvanceLoc { delta: u32 },
     Offset { register: u16, offset: u64 },
     Restore { register: u16 },
@@ -369,14 +348,12 @@ mod tests {
         let mut entries = parser.iter(eh_frame.sh_addr);
 
         while let Some(control_entry) = control_entries.next().unwrap() {
-            let entry = entries.next().unwrap();
             match control_entry {
                 gimli::CieOrFde::Cie(control_cie) => {
-                    let cie = entry.get_cie();
-                    assert_eq!(control_cie, *cie);
                     control_cies.insert(control_cie.offset(), control_cie);
                 }
                 gimli::CieOrFde::Fde(control_fde) => {
+                    let parsed_fde = entries.next().unwrap();
                     let control_fde = control_fde
                         .parse(|_, _, _| {
                             control_cies
@@ -386,13 +363,10 @@ mod tests {
                         })
                         .unwrap();
 
-                    let fde = entry.get_fde();
-
-                    assert_eq!(control_fde, fde);
+                    assert_eq!(control_fde, parsed_fde);
 
                     let insts = control_fde.instructions(&control_eh_frame, &base_addresses);
-
-                    assert_same_instructions(&fde, insts);
+                    assert_same_instructions(&parsed_fde, insts);
                 }
             }
         }
@@ -422,12 +396,12 @@ mod tests {
                     register: register_,
                     offset,
                 } => matches!(
-                    self,
-                    CallFrameInstruction::Offset {
-                        register,
-                        factored_offset
-                    }
-                    if register.0 == *register_ && offset == factored_offset
+                self,
+                CallFrameInstruction::Offset {
+                    register,
+                    factored_offset
+                }
+                if register.0 == *register_ && offset == factored_offset
                 ),
                 Instruction::Restore {
                     register: register_,

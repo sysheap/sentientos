@@ -34,6 +34,7 @@ SECTIONS
 	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.* .srodata .srodata.*)
+	. = ALIGN(64);
     PROVIDE(_eh_frame_start = .);
     *(.eh_frame)
     PROVIDE(_eh_frame_end = .);

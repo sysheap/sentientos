@@ -7,10 +7,9 @@
 #![feature(let_chains)]
 #![feature(vec_into_raw_parts)]
 #![feature(assert_matches)]
+#![feature(map_try_insert)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
-
-use alloc::vec::Vec;
 
 use crate::{
     interrupts::plic,
@@ -19,6 +18,8 @@ use crate::{
     pci::enumerate_devices,
     processes::{scheduler, timer},
 };
+use alloc::vec::Vec;
+use debug::backtrace;
 
 mod asm;
 mod assert;
@@ -76,6 +77,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         );
         memory::init_page_allocator(HEAP_START, HEAP_SIZE);
     }
+
+    backtrace::init();
 
     assert!(
         dtb.get_reserved_areas().is_empty(),
@@ -144,5 +147,27 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     net::assign_network_device(network_device);
 
+    fn1();
+
     timer::set_timer(0);
+}
+
+#[inline(never)]
+fn fn1() {
+    fn2();
+}
+
+#[inline(never)]
+fn fn2() {
+    fn3();
+}
+
+#[inline(never)]
+fn fn3() {
+    fn4();
+}
+
+#[inline(never)]
+fn fn4() {
+    crate::debug::backtrace::print();
 }

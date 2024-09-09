@@ -1,5 +1,6 @@
 use crate::{info, klibc::sizes::MiB};
 
+pub mod backtrace;
 mod eh_frame_parser;
 
 pub fn dump_current_state() {
