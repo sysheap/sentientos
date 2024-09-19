@@ -1,8 +1,11 @@
+use core::arch::asm;
+
 use alloc::collections::BTreeMap;
 use common::mutex::Mutex;
 
 use crate::{
-    debug, debug::eh_frame_parser::EhFrameParser, memory::linker_information::LinkerInformation,
+    debug, debug::eh_frame_parser::EhFrameParser, info,
+    memory::linker_information::LinkerInformation,
 };
 
 use super::eh_frame_parser;
@@ -52,7 +55,80 @@ impl<'a> Backtrace<'a> {
     }
 
     fn print(&self) {
+        let regs = CallerSavedRegs::here();
+        let ra = regs.ra as u64;
+        let fde = self
+            .unwinwd_instructions
+            .range(..=ra)
+            .next_back()
+            .expect("Must exist");
+        info!("ra={:#x} {:#x?}", ra, fde);
         todo!()
+    }
+}
+
+#[derive(Default, Debug)]
+struct CallerSavedRegs {
+    ra: usize,
+    t0: usize,
+    t1: usize,
+    t2: usize,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
+    t3: usize,
+    t4: usize,
+    t5: usize,
+    t6: usize,
+}
+
+impl CallerSavedRegs {
+    fn here() -> Self {
+        let mut self_ = Self::default();
+
+        unsafe {
+            asm!(
+                "mv {}, ra",
+                "mv {}, t0",
+                "mv {}, t1",
+                "mv {}, t2",
+                "mv {}, a0",
+                "mv {}, a1",
+                "mv {}, a2",
+                "mv {}, a3",
+                "mv {}, a4",
+                "mv {}, a5",
+                "mv {}, a6",
+                "mv {}, a7",
+                "mv {}, t3",
+                "mv {}, t4",
+                "mv {}, t5",
+                "mv {}, t6",
+                out(reg) self_.ra,
+                out(reg) self_.t0,
+                out(reg) self_.t1,
+                out(reg) self_.t2,
+                out(reg) self_.a0,
+                out(reg) self_.a1,
+                out(reg) self_.a2,
+                out(reg) self_.a3,
+                out(reg) self_.a4,
+                out(reg) self_.a5,
+                out(reg) self_.a6,
+                out(reg) self_.a7,
+                out(reg) self_.t3,
+                out(reg) self_.t4,
+                out(reg) self_.t5,
+                out(reg) self_.t6,
+            );
+        }
+
+        self_
     }
 }
 

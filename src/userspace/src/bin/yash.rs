@@ -53,7 +53,7 @@ fn parse_command_and_execute(mut command: String) {
     command = command.trim().to_string();
     match command.as_str() {
         "" => {}
-        "exit" => {
+        "exit" | "q" => {
             println!("Exiting...");
             sys_exit(0);
         }
