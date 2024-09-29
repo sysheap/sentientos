@@ -34,12 +34,17 @@ SECTIONS
 	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
     *(.rodata .rodata.* .srodata .srodata.*)
-	. = ALIGN(64);
-    PROVIDE(_eh_frame_start = .);
+	. = ALIGN(4096);
+    PROVIDE(_rodata_end = .);
+  } >ram AT>ram :text
+
+  .eh_frame : {
+	. = ALIGN(4096);
+    PROVIDE(_eh_frame_section_start = .);
     *(.eh_frame)
     PROVIDE(_eh_frame_end = .);
 	. = ALIGN(4096);
-    PROVIDE(_rodata_end = .);
+    PROVIDE(_eh_frame_section_end = .);
   } >ram AT>ram :text
 
   .data : {
@@ -66,5 +71,5 @@ SECTIONS
 
   PROVIDE(_heap_start = _stack_end);
   PROVIDE(_heap_size = _memory_end - _heap_start);
-  PROVIDE(_eh_frame_size = _eh_frame_end - _eh_frame_start);
+  PROVIDE(_eh_frame_size = _eh_frame_end - _eh_frame_section_start);
 }

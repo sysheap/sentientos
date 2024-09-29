@@ -8,7 +8,8 @@ pub struct LinkerInformation {
     pub data_end: usize,
     pub heap_start: usize,
     pub heap_size: usize,
-    pub eh_frame_start: usize,
+    pub eh_frame_section_start: usize,
+    pub eh_frame_section_end: usize,
     pub eh_frame_size: usize,
 }
 
@@ -25,12 +26,25 @@ impl LinkerInformation {
             static mut HEAP_START: usize;
             static mut HEAP_SIZE: usize;
 
-            static mut EH_FRAME_START: usize;
+            static mut EH_FRAME_SECTION_START: usize;
+            static mut EH_FRAME_SECTION_END: usize;
             static mut EH_FRAME_SIZE: usize;
         }
 
         if cfg!(miri) {
-            Self::default()
+            Self {
+                text_start: 0xffffffffffff1000,
+                text_end: 0xffffffffffff2000,
+                rodata_start: 0xffffffffffff2000,
+                rodata_end: 0xffffffffffff3000,
+                data_start: 0xffffffffffff3000,
+                data_end: 0xffffffffffff4000,
+                heap_start: 0xffffffffffff4000,
+                heap_size: 0x1000,
+                eh_frame_section_start: 0xffffffffffff5000,
+                eh_frame_section_end: 0xffffffffffff6000,
+                eh_frame_size: 0,
+            }
         } else {
             // SAFETY: We only read information from the linker built into the binary
             // this is always safe
@@ -44,7 +58,8 @@ impl LinkerInformation {
                     data_end: DATA_END,
                     heap_start: HEAP_START,
                     heap_size: HEAP_SIZE,
-                    eh_frame_start: EH_FRAME_START,
+                    eh_frame_section_start: EH_FRAME_SECTION_START,
+                    eh_frame_section_end: EH_FRAME_SECTION_END,
                     eh_frame_size: EH_FRAME_SIZE,
                 }
             }
@@ -61,5 +76,9 @@ impl LinkerInformation {
 
     pub fn data_size(&self) -> usize {
         self.data_end - self.data_start
+    }
+
+    pub fn eh_frame_section_size(&self) -> usize {
+        self.eh_frame_section_end - self.eh_frame_section_start
     }
 }

@@ -2,6 +2,7 @@ use crate::{info, klibc::sizes::MiB};
 
 pub mod backtrace;
 mod eh_frame_parser;
+mod unwinder;
 
 pub fn dump_current_state() {
     let allocated_size_heap = crate::memory::heap::allocated_size();

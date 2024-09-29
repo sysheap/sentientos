@@ -1,6 +1,11 @@
-use core::{cell::LazyCell, fmt::Debug, ops::Deref, ptr::null_mut};
+use core::{
+    cell::LazyCell,
+    fmt::Debug,
+    ops::{Deref, Range},
+    ptr::null_mut,
+};
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 use common::mutex::Mutex;
 
 use crate::{
@@ -51,8 +56,26 @@ impl Deref for LazyStaticKernelPageTables {
 // Somehow it didn't worked to make this Send only. I guess some problems by using LazyCell.
 unsafe impl Sync for LazyStaticKernelPageTables {}
 
+/// Keeps track of already mapped virtual address ranges
+/// We use that to prevent of overlapping mapping
+struct MappingEntry {
+    range: core::ops::Range<usize>,
+    name: &'static str,
+}
+
+impl MappingEntry {
+    fn new(range: Range<usize>, name: &'static str) -> Self {
+        Self { range, name }
+    }
+
+    fn contains(&self, range: Range<usize>) -> bool {
+        self.range.start <= range.end && range.start <= self.range.end
+    }
+}
+
 pub struct RootPageTableHolder {
     root_table: *mut PageTable,
+    already_mapped: Vec<MappingEntry>,
 }
 
 // SAFETY: PageTables can be send to another thread
@@ -94,7 +117,10 @@ impl Drop for RootPageTableHolder {
 impl RootPageTableHolder {
     fn empty() -> Self {
         let root_table = Box::leak(Box::new(PageTable::zero()));
-        Self { root_table }
+        Self {
+            root_table,
+            already_mapped: Vec::new(),
+        }
     }
 
     fn table(&self) -> &PageTable {
@@ -138,6 +164,13 @@ impl RootPageTableHolder {
             linker_information.rodata_size(),
             XWRMode::ReadOnly,
             "RODATA",
+        );
+
+        root_page_table_holder.map_identity_kernel(
+            linker_information.eh_frame_section_start,
+            linker_information.eh_frame_section_size(),
+            XWRMode::ReadOnly,
+            "EH_FRAME",
         );
 
         root_page_table_holder.map_identity_kernel(
@@ -193,7 +226,7 @@ impl RootPageTableHolder {
         physical_address_start: usize,
         size: usize,
         privileges: XWRMode,
-        name: &str,
+        name: &'static str,
     ) {
         self.map(
             virtual_address_start,
@@ -237,22 +270,44 @@ impl RootPageTableHolder {
         size: usize,
         privileges: XWRMode,
         is_user_mode_accessible: bool,
-        name: &str,
+        name: &'static str,
     ) {
+        assert_eq!(virtual_address_start % PAGE_SIZE, 0);
+        assert_eq!(physical_address_start % PAGE_SIZE, 0);
+        assert_eq!(size % PAGE_SIZE, 0);
+        assert_ne!(size, 0);
+        assert_ne!(
+            virtual_address_start, 0,
+            "It is dangerous to map the null pointer."
+        );
+
+        let virtual_end = virtual_address_start - PAGE_SIZE + size;
+        let physical_end = physical_address_start - PAGE_SIZE + size;
+
         debug!(
             "Map \t{:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
             virtual_address_start,
-            virtual_address_start - PAGE_SIZE + size,
+            virtual_end,
             physical_address_start,
-            physical_address_start - PAGE_SIZE + size,
+            physical_end,
             size,
             privileges,
             name
         );
 
-        assert_eq!(virtual_address_start % PAGE_SIZE, 0);
-        assert_eq!(physical_address_start % PAGE_SIZE, 0);
-        assert_eq!(size % PAGE_SIZE, 0);
+        // Check if we have an overlapping mapping
+        let already_mapped = self
+            .already_mapped
+            .iter()
+            .find(|m| m.contains(virtual_address_start..virtual_end));
+
+        if let Some(mapping) = already_mapped {
+            panic!("Cannot map {}. Overlaps with {}", name, mapping.name);
+        }
+
+        // Add mapping
+        self.already_mapped
+            .push(MappingEntry::new(virtual_address_start..virtual_end, name));
 
         let root_page_table = self.table_mut();
 
@@ -365,7 +420,7 @@ impl RootPageTableHolder {
         virtual_address_start: usize,
         size: usize,
         privileges: XWRMode,
-        name: &str,
+        name: &'static str,
     ) {
         self.map_identity(virtual_address_start, size, privileges, false, name);
     }
@@ -376,7 +431,7 @@ impl RootPageTableHolder {
         size: usize,
         privileges: XWRMode,
         is_user_mode_accessible: bool,
-        name: &str,
+        name: &'static str,
     ) {
         self.map(
             virtual_address_start,

@@ -313,15 +313,23 @@ pub enum Instruction {
 
 #[cfg(test)]
 mod tests {
+
+    use crate::{
+        debug,
+        debugging::{
+            eh_frame_parser::EhFrameParser,
+            unwinder::{Row, Unwinder},
+        },
+    };
+
+    use super::{Instruction, ParsedCIE, ParsedFDE};
+
     use alloc::collections::BTreeMap;
-
-    use super::{EhFrameParser, Instruction, ParsedCIE, ParsedFDE};
-
     use elf::ElfBytes;
     use gimli::{
         constants, BaseAddresses, CallFrameInstruction, CallFrameInstructionIter,
         CommonInformationEntry, EhFrame, EndianSlice, FrameDescriptionEntry, LittleEndian,
-        ReaderOffset, UnwindSection,
+        ReaderOffset, StoreOnHeap, UnwindContext, UnwindSection, UnwindTableRow,
     };
 
     const KERNEL_ELF_TEST_BINARY: &[u8] = include_bytes!("../test/test_data/elf/kernel");
@@ -367,6 +375,23 @@ mod tests {
 
                     let insts = control_fde.instructions(&control_eh_frame, &base_addresses);
                     assert_same_instructions(&parsed_fde, insts);
+
+                    // Evaluate the rows and check if they also match
+                    let unwinder = Unwinder::new(&parsed_fde);
+                    let mut parsed_rows = unwinder.rows().iter();
+
+                    let mut ctx: UnwindContext<usize, StoreOnHeap> = UnwindContext::new_in();
+                    let mut control_table = control_fde
+                        .rows(&control_eh_frame, &base_addresses, &mut ctx)
+                        .unwrap();
+
+                    let mut counter = 0;
+                    while let Some(control_row) = control_table.next_row().unwrap() {
+                        let parsed_row = parsed_rows.next().unwrap();
+                        assert_eq!(parsed_row, control_row);
+                        counter += 1;
+                        debug!("{counter} rows ok");
+                    }
                 }
             }
         }
@@ -465,6 +490,31 @@ mod tests {
                 && self.data_alignment_factor() == *data_alignment_factor
                 && self.return_address_register().0 as u64 == *return_address_register
                 && augmentation_ok
+        }
+    }
+
+    impl PartialEq<UnwindTableRow<usize>> for Row {
+        fn eq(&self, other: &UnwindTableRow<usize>) -> bool {
+            let (cfa_register, cfa_offset) = match other.cfa() {
+                gimli::CfaRule::RegisterAndOffset { register, offset } => (register, offset),
+                gimli::CfaRule::Expression(_) => panic!("Expressions are not supported."),
+            };
+
+            let metadata = self.start_address == other.start_address()
+                && self.end_address == other.end_address()
+                && self.cfa_register == cfa_register.0 as u64
+                && self.cfa_offset == *cfa_offset;
+
+            if !metadata {
+                return false;
+            }
+
+            for (reg, rule) in other.registers() {
+                if self.register_rules[reg.0 as usize] != *rule {
+                    return false;
+                }
+            }
+            true
         }
     }
 }

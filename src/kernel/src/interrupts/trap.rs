@@ -116,7 +116,7 @@ fn handle_external_interrupt() {
     let input = uart::read().expect("There should be input from the uart.");
 
     match input {
-        4 => crate::debug::dump_current_state(),
+        4 => crate::debugging::dump_current_state(),
         _ => STDIN_BUFFER.lock().push(input),
     }
 

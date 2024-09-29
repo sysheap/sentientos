@@ -11,7 +11,7 @@ fn panic(info: &PanicInfo) -> ! {
 
     crate::cpu::disable_gloabl_interrupts();
     println!("");
-    crate::debug::dump_current_state();
+    crate::debugging::dump_current_state();
     println!("KERNEL Panic Occured!");
     println!("Message: {}", info.message());
     if let Some(location) = info.location() {

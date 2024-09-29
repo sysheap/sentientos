@@ -48,6 +48,9 @@ pub fn _print(args: fmt::Arguments) {
     {
         use crate::io::uart;
         use core::fmt::Write;
-        uart::QEMU_UART.lock().write_fmt(args).unwrap();
+        // uart::QEMU_UART.lock().write_fmt(args).unwrap();
+        unsafe {
+            uart::QEMU_UART.write_fmt(args).unwrap();
+        }
     }
 }

@@ -1,12 +1,13 @@
 use core::fmt::Write;
 
-use common::mutex::Mutex;
-
 use crate::klibc::MMIO;
 
 pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 
-pub static QEMU_UART: Mutex<Uart> = Mutex::new(unsafe { Uart::new(UART_BASE_ADDRESS) });
+pub static mut QEMU_UART: Uart = unsafe { Uart::new(UART_BASE_ADDRESS) };
+
+unsafe impl Sync for Uart {}
+unsafe impl Send for Uart {}
 
 pub struct Uart {
     transmitter: MMIO<u8>,
@@ -100,5 +101,5 @@ impl Write for Uart {
 }
 
 pub fn read() -> Option<u8> {
-    QEMU_UART.lock().read()
+    unsafe { QEMU_UART.read() }
 }
