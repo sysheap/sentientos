@@ -24,4 +24,14 @@ mod tests {
             assert_eq!(*mutex.get_data().get(), 42);
         }
     }
+
+    #[test_case]
+    fn check_disarm() {
+        let mutex = Mutex::new(42);
+        let _lock = mutex.lock();
+        unsafe {
+            mutex.disarm();
+        }
+        let _lock2 = mutex.lock();
+    }
 }

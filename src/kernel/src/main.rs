@@ -8,6 +8,7 @@
 #![feature(vec_into_raw_parts)]
 #![feature(assert_matches)]
 #![feature(map_try_insert)]
+#![feature(naked_functions)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -52,9 +53,7 @@ extern "C" {
 
 #[no_mangle]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
-    unsafe {
-        QEMU_UART.init();
-    }
+    QEMU_UART.lock().init();
 
     info!("Hello World from YaROS!\n");
     info!("Hart ID: {}", hart_id);
@@ -149,27 +148,5 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     net::assign_network_device(network_device);
 
-    fn1();
-
     timer::set_timer(0);
-}
-
-#[inline(never)]
-fn fn1() {
-    fn2();
-}
-
-#[inline(never)]
-fn fn2() {
-    fn3();
-}
-
-#[inline(never)]
-fn fn3() {
-    fn4();
-}
-
-#[inline(never)]
-fn fn4() {
-    crate::debugging::backtrace::print();
 }

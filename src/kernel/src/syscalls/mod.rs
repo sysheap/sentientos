@@ -26,6 +26,9 @@ use self::validator::{FailibleMutableSliceValidator, FailibleSliceValidator};
 struct SyscallHandler;
 
 impl KernelSyscalls for SyscallHandler {
+    fn sys_panic() {
+        panic!("Userspace triggered kernel panic");
+    }
     fn sys_write_char(c: UserspaceArgument<char>) {
         print!("{}", c.validate());
     }

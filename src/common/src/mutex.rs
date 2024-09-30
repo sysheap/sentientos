@@ -8,6 +8,10 @@ use core::{
 pub struct Mutex<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
+    // We can manually disarm the mutex to not check for locks
+    // in the future. This is highly unsafe and only useful to
+    // unlock the uart mutex in case of a panic.
+    disarmed: AtomicBool,
 }
 
 impl<T: Debug> Debug for Mutex<T> {
@@ -21,12 +25,15 @@ impl<T> Mutex<T> {
         Self {
             locked: AtomicBool::new(false),
             data: UnsafeCell::new(data),
+            disarmed: AtomicBool::new(false),
         }
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        #[allow(clippy::never_loop)]
-        while self
+        if self.disarmed.load(Ordering::SeqCst) {
+            return MutexGuard { mutex: self };
+        }
+        if self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
@@ -45,6 +52,13 @@ impl<T> Mutex<T> {
     #[doc(hidden)]
     pub fn get_data(&self) -> &UnsafeCell<T> {
         &self.data
+    }
+
+    /// # Safety
+    /// This is actual never save and should only be used
+    /// in very space places (like stdout protection)
+    pub unsafe fn disarm(&self) {
+        self.disarmed.store(true, Ordering::SeqCst);
     }
 }
 

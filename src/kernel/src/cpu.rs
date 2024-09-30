@@ -55,3 +55,9 @@ pub fn disable_gloabl_interrupts() {
         );
     }
 }
+
+pub fn wait_for_interrupt() {
+    unsafe {
+        asm!("wfi");
+    }
+}

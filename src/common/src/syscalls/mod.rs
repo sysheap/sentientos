@@ -43,4 +43,5 @@ syscalls!(
     sys_open_udp_socket(port: u16) -> Result<UDPDescriptor, SysSocketError>;
     sys_write_back_udp_socket(descriptor: UDPDescriptor, buffer: &u8, length: usize) -> Result<usize, SysSocketError>;
     sys_read_udp_socket(descriptor: UDPDescriptor, buffer: &mut u8, length: usize) -> Result<usize, SysSocketError>;
+    sys_panic() -> ();
 );

@@ -1,9 +1,6 @@
-use core::{arch::asm, array::IntoIter};
-
-use alloc::collections::BTreeMap;
-use common::mutex::Mutex;
-
+use super::eh_frame_parser;
 use crate::{
+    assert::static_assert_size,
     debug,
     debugging::{
         eh_frame_parser::EhFrameParser,
@@ -12,31 +9,42 @@ use crate::{
     info,
     memory::linker_information::LinkerInformation,
 };
+use alloc::vec::Vec;
+use common::mutex::Mutex;
+// Needed for the native backtrace impl for debugging purposes
+// use core::ffi::c_void;
+// use unwinding::abi::{
+//     UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP, with_context,
+// };
 
-use super::eh_frame_parser;
+#[allow(dead_code)]
+#[derive(Debug)]
+enum BacktraceNextError {
+    RaIsZero,
+    CouldNotGetFde(usize),
+}
 
 /// We keep the already parsed information in a BTreeMap
 /// even though we might not even need to produce a backtrace
 /// But we want to avoid heap allocation while backtracing
 /// in case of memory corruption.
 struct Backtrace<'a> {
-    unwinwd_instructions: BTreeMap<u64, eh_frame_parser::ParsedFDE<'a>>,
+    fdes: Vec<eh_frame_parser::ParsedFDE<'a>>,
 }
 
 static BACKTRACE: Mutex<Backtrace> = Mutex::new(Backtrace::new());
 
 impl<'a> Backtrace<'a> {
     const fn new() -> Self {
-        Self {
-            unwinwd_instructions: BTreeMap::new(),
-        }
+        Self { fdes: Vec::new() }
+    }
+
+    fn find(&self, pc: usize) -> Option<&eh_frame_parser::ParsedFDE<'a>> {
+        self.fdes.iter().find(|&fde| fde.contains(pc))
     }
 
     fn init(&mut self) {
-        assert!(
-            self.unwinwd_instructions.is_empty(),
-            "Init can only be called once."
-        );
+        assert!(self.fdes.is_empty(), "Init can only be called once.");
 
         let linker_information = LinkerInformation::new();
         let eh_frame_start = linker_information.eh_frame_section_start as *const u8;
@@ -50,45 +58,79 @@ impl<'a> Backtrace<'a> {
         let eh_frame = unsafe { core::slice::from_raw_parts(eh_frame_start, eh_frame_size) };
 
         let eh_frame_parser = EhFrameParser::new(eh_frame);
-        let eh_frames = eh_frame_parser.iter(linker_information.eh_frame_section_start as u64);
+        let eh_frames = eh_frame_parser.iter(linker_information.eh_frame_section_start);
 
         for frame in eh_frames {
-            self.unwinwd_instructions
-                .try_insert(frame.pc_begin, frame)
-                .expect("There should not be an FDE in here with that address.");
+            self.fdes.push(frame);
         }
     }
 
-    fn print(&self) {
-        let mut regs = CallerSavedRegs::here();
-        let pc = regs.pc.unwrap() as u64;
-        let (_, fde) = self
-            .unwinwd_instructions
-            .range(..=pc)
-            .next_back()
-            .expect("Must exist");
-        info!("pc={:#x} {:#x?}", pc, fde);
+    fn next(&self, regs: &mut CallerSavedRegs) -> Result<usize, BacktraceNextError> {
+        let ra = regs.ra();
+
+        if ra == 0 {
+            return Err(BacktraceNextError::RaIsZero);
+        }
+
+        // RA points to the next instruction. Move it back one byte such
+        // that it points into the previous instruction.
+        // This case must be handled different as soon as we have
+        // signal trampolines.
+        let fde = self
+            .find(ra - 1)
+            .ok_or(BacktraceNextError::CouldNotGetFde(ra))?;
+
         let unwinder = Unwinder::new(fde);
-        let row = unwinder.find_row_for_address(pc);
 
-        let cfa = ((regs[row.cfa_register].unwrap() as i64) + row.cfa_offset) as u64;
+        let row = unwinder.find_row_for_address(ra);
 
-        for reg_index in CallerSavedRegs::index_iter() {
-            match row.register_rules[reg_index] {
-                RegisterRule::Undef => {
-                    regs[reg_index as u64] = None;
+        let cfa = regs[row.cfa_register as usize].wrapping_add(row.cfa_offset as usize);
+
+        let mut new_regs = regs.clone();
+        new_regs.set_sp(cfa);
+        new_regs.set_ra(0);
+
+        for (reg_index, rule) in row.register_rules.iter().enumerate() {
+            let value = match rule {
+                RegisterRule::None => {
+                    continue;
                 }
                 RegisterRule::Offset(offset) => {
-                    let ptr = (cfa as i64 + offset) as u64 as *const usize;
-                    let value = unsafe { ptr.read() };
-                    regs[reg_index as u64] = Some(value);
+                    let ptr = (cfa.wrapping_add(*offset as usize)) as *const usize;
+                    unsafe { ptr.read() }
                 }
-            }
+            };
+            new_regs[reg_index] = value;
         }
 
-        todo!()
+        *regs = new_regs;
+
+        Ok(ra)
     }
 }
+
+// We leave that here for debugging purposes
+// I'm not entirely sure if my own backtrace implementation
+// is fault free. But we will see that in the future.
+// After multiple months of implementing this I'm done and want to move forward
+// to something else.
+// fn print_native() {
+//     #[derive(Default)]
+//     struct CallbackData {
+//         counter: usize,
+//     }
+
+//     extern "C" fn callback(unwind_ctx: &UnwindContext<'_>, arg: *mut c_void) -> UnwindReasonCode {
+//         let data = unsafe { &mut *(arg as *mut CallbackData) };
+//         data.counter += 1;
+//         info!("{}: {:#x}", data.counter, _Unwind_GetIP(unwind_ctx));
+//         UnwindReasonCode::NO_REASON
+//     }
+
+//     let mut data = CallbackData::default();
+
+//     _Unwind_Backtrace(callback, &mut data as *mut _ as _);
+// }
 
 /// You ask where I got the registers from? This is a good question.
 /// I just looked what registers were mentioned in the eh_frame and added those.
@@ -96,29 +138,55 @@ impl<'a> Backtrace<'a> {
 /// I tried to generate the following code via a macro. However this is not possible,
 /// because they won't allow to concatenate x$num_reg as a identifier and I need the
 /// literal number to access it via an index.
-#[derive(Default, Debug)]
+#[derive(Debug, Clone, Default)]
 struct CallerSavedRegs {
-    pc: Option<usize>,
-    x1: Option<usize>,
-    x2: Option<usize>,
-    x8: Option<usize>,
-    x9: Option<usize>,
-    x18: Option<usize>,
-    x19: Option<usize>,
-    x20: Option<usize>,
-    x21: Option<usize>,
-    x22: Option<usize>,
-    x23: Option<usize>,
-    x24: Option<usize>,
-    x25: Option<usize>,
-    x26: Option<usize>,
-    x27: Option<usize>,
+    x1: usize,
+    x2: usize,
+    x8: usize,
+    x9: usize,
+    x18: usize,
+    x19: usize,
+    x20: usize,
+    x21: usize,
+    x22: usize,
+    x23: usize,
+    x24: usize,
+    x25: usize,
+    x26: usize,
+    x27: usize,
 }
 
-impl core::ops::Index<u64> for CallerSavedRegs {
-    type Output = Option<usize>;
+impl core::fmt::Display for CallerSavedRegs {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        macro_rules! print_reg {
+            ($reg:ident) => {
+                writeln!(f, "{}: {:#x}", stringify!($reg), self.$reg)?
+            };
+        }
 
-    fn index(&self, index: u64) -> &Self::Output {
+        print_reg!(x1);
+        print_reg!(x2);
+        print_reg!(x8);
+        print_reg!(x9);
+        print_reg!(x18);
+        print_reg!(x19);
+        print_reg!(x20);
+        print_reg!(x21);
+        print_reg!(x22);
+        print_reg!(x23);
+        print_reg!(x24);
+        print_reg!(x25);
+        print_reg!(x26);
+        print_reg!(x27);
+
+        Ok(())
+    }
+}
+
+impl core::ops::Index<usize> for CallerSavedRegs {
+    type Output = usize;
+
+    fn index(&self, index: usize) -> &Self::Output {
         match index {
             1 => &self.x1,
             2 => &self.x2,
@@ -139,8 +207,8 @@ impl core::ops::Index<u64> for CallerSavedRegs {
     }
 }
 
-impl core::ops::IndexMut<u64> for CallerSavedRegs {
-    fn index_mut(&mut self, index: u64) -> &mut Self::Output {
+impl core::ops::IndexMut<usize> for CallerSavedRegs {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         match index {
             1 => &mut self.x1,
             2 => &mut self.x2,
@@ -161,82 +229,66 @@ impl core::ops::IndexMut<u64> for CallerSavedRegs {
     }
 }
 
+// This value is referenced in the assembly of extern "C-unwind" fn dispatch
+static_assert_size!(CallerSavedRegs, 0x70);
+
 impl CallerSavedRegs {
-    fn index_iter() -> IntoIter<usize, 14> {
-        [1, 2, 8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27].into_iter()
+    fn ra(&self) -> usize {
+        self.x1
     }
 
-    fn here() -> Self {
-        let mut pc;
-        let mut x1;
-        let mut x2;
-        let mut x8;
-        let mut x9;
-        let mut x18;
-        let mut x19;
-        let mut x20;
-        let mut x21;
-        let mut x22;
-        let mut x23;
-        let mut x24;
-        let mut x25;
-        let mut x26;
-        let mut x27;
+    fn set_ra(&mut self, value: usize) {
+        self.x1 = value;
+    }
 
-        unsafe {
-            asm!(
-                "auipc {}, 0", // Load current pc with offset 0
-                "mv {}, x1",
-                "mv {}, x2",
-                "mv {}, x8",
-                "mv {}, x9",
-                "mv {}, x18",
-                "mv {}, x19",
-                "mv {}, x20",
-                "mv {}, x21",
-                "mv {}, x22",
-                "mv {}, x23",
-                "mv {}, x24",
-                "mv {}, x25",
-                "mv {}, x26",
-                "mv {}, x27",
-                out(reg) pc,
-                out(reg) x1,
-                out(reg) x2,
-                out(reg) x8,
-                out(reg) x9,
-                out(reg) x18,
-                out(reg) x19,
-                out(reg) x20,
-                out(reg) x21,
-                out(reg) x22,
-                out(reg) x23,
-                out(reg) x24,
-                out(reg) x25,
-                out(reg) x26,
-                out(reg) x27,
-            );
-        }
-        // We want to have the ip value before the execution of the assembly block.
-        // Therefore substract the instruction size.
-        // pc -= 4;
+    fn set_sp(&mut self, value: usize) {
+        self.x2 = value;
+    }
 
-        Self {
-            pc: Some(pc),
-            x1: Some(x1),
-            x2: Some(x2),
-            x8: Some(x8),
-            x9: Some(x9),
-            x18: Some(x18),
-            x19: Some(x19),
-            x20: Some(x20),
-            x21: Some(x21),
-            x22: Some(x22),
-            x23: Some(x23),
-            x24: Some(x24),
-            x25: Some(x25),
-            x26: Some(x26),
-            x27: Some(x27),
+    fn with_context<T>(f: extern "C" fn(&mut Self, &mut T), data: &mut T) {
+        let mut regs = Self::default();
+
+        dispatch(&mut regs, data, f);
+
+        #[naked]
+        extern "C-unwind" fn dispatch<T>(
+            regs: &mut CallerSavedRegs,
+            data: &mut T,
+            f: extern "C" fn(&mut CallerSavedRegs, &mut T),
+        ) {
+            unsafe {
+                core::arch::naked_asm!(
+                    "
+                     # regs is in a0
+                     # data in a1
+                     # f to call in a2
+                     sd x1, 0x00(a0)   
+                     sd x2, 0x08(a0)
+                     sd x8, 0x10(a0)
+                     sd x9, 0x18(a0)
+                     sd x18, 0x20(a0)
+                     sd x19, 0x28(a0)
+                     sd x20, 0x30(a0)
+                     sd x21, 0x38(a0)
+                     sd x22, 0x40(a0)
+                     sd x23, 0x48(a0)
+                     sd x24, 0x50(a0)
+                     sd x25, 0x58(a0)
+                     sd x26, 0x60(a0)
+                     sd x27, 0x68(a0)
+                     # Save return address on stack
+                     # It is important to change the stack
+                     # pointer after the previous instructions
+                     # Otherwise the wrong sp is saved (x2 == sp)
+                     addi sp, sp, -0x08
+                     sd ra, 0x00(sp)
+                     jalr a2
+                     ld ra, 0x00(sp)
+                     addi sp, sp, 0x08
+                     ret
+                    "
+                )
+            }
         }
     }
 }
@@ -246,5 +298,89 @@ pub fn init() {
 }
 
 pub fn print() {
-    BACKTRACE.lock().print();
+    CallerSavedRegs::with_context(unwind, &mut ());
+
+    extern "C" fn unwind(regs: &mut CallerSavedRegs, _data: &mut ()) {
+        let lock = BACKTRACE.lock();
+        let mut counter = 0u64;
+        loop {
+            match lock.next(regs) {
+                Ok(address) => {
+                    info!("{counter}: {address:#x}");
+                    counter += 1;
+                }
+                Err(BacktraceNextError::RaIsZero) => {
+                    info!("{counter}: 0x0");
+                    break;
+                }
+                Err(BacktraceNextError::CouldNotGetFde(address)) => {
+                    // We don't have any backtracing info from here
+                    // but anyways it is the end of our call stack
+                    info!("{counter}: {address:#x}");
+                    break;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(miri))]
+#[cfg(test)]
+mod tests {
+    use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CallerSavedRegs};
+    use alloc::collections::VecDeque;
+    use core::ffi::c_void;
+    use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
+
+    #[test_case]
+    fn backtrace() {
+        #[derive(Default)]
+        struct CallbackData {
+            addresses: VecDeque<usize>,
+        }
+
+        extern "C" fn callback(
+            unwind_ctx: &UnwindContext<'_>,
+            arg: *mut c_void,
+        ) -> UnwindReasonCode {
+            let data = unsafe { &mut *(arg as *mut CallbackData) };
+            data.addresses.push_back(_Unwind_GetIP(unwind_ctx));
+            UnwindReasonCode::NO_REASON
+        }
+
+        let mut data = CallbackData::default();
+
+        _Unwind_Backtrace(callback, &mut data as *mut _ as _);
+        CallerSavedRegs::with_context(unwind, &mut data);
+
+        extern "C" fn unwind(regs: &mut CallerSavedRegs, data: &mut CallbackData) {
+            let mut backtrace = Backtrace::new();
+            backtrace.init();
+
+            let mut own_addr = VecDeque::new();
+
+            loop {
+                match backtrace.next(regs) {
+                    Ok(address) => {
+                        own_addr.push_back(address);
+                    }
+                    Err(BacktraceNextError::RaIsZero) => {
+                        own_addr.push_back(0);
+                        break;
+                    }
+                    Err(BacktraceNextError::CouldNotGetFde(address)) => {
+                        own_addr.push_back(address as usize);
+                        break;
+                    }
+                }
+            }
+
+            // Skip some items because they are inside the unwind functions itself
+            data.addresses.pop_front();
+            data.addresses.pop_front();
+            own_addr.pop_front();
+
+            assert_eq!(own_addr, data.addresses);
+        }
+    }
 }

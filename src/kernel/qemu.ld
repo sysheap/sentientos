@@ -25,7 +25,9 @@ SECTIONS
   .text : {
 
     PROVIDE(_text_start = .);
+    PROVIDE(__executable_start = .);
     *(.text.init) *(.text .text.*)
+    PROVIDE(__etext = .);
 	. = ALIGN(4096);
     PROVIDE(_text_end = .);
   } >ram AT>ram :text
@@ -41,7 +43,8 @@ SECTIONS
   .eh_frame : {
 	. = ALIGN(4096);
     PROVIDE(_eh_frame_section_start = .);
-    *(.eh_frame)
+    PROVIDE(__eh_frame = .);
+    KEEP (*(.eh_frame)) *(.eh_frame.*)
     PROVIDE(_eh_frame_end = .);
 	. = ALIGN(4096);
     PROVIDE(_eh_frame_section_end = .);

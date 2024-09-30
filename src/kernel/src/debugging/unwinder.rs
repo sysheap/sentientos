@@ -27,7 +27,7 @@ impl<'a> Unwinder<'a> {
         }
 
         let mut last_row = self_.last_row();
-        last_row.end_address = fde.pc_begin + fde.address_range as u64;
+        last_row.end_address = fde.pc_begin + fde.address_range as usize;
         self_.update_last_row(&last_row);
 
         debug!("{} rows", self_.rows.len());
@@ -35,13 +35,14 @@ impl<'a> Unwinder<'a> {
         self_
     }
 
-    pub fn find_row_for_address(&self, address: u64) -> &Row {
+    pub fn find_row_for_address(&self, address: usize) -> &Row {
         self.rows
             .iter()
-            .find(|row| row.start_address == address)
+            .find(|row| address >= row.start_address && address <= row.end_address)
             .expect("There must be an unwind rule.")
     }
 
+    #[cfg(test)]
     pub fn rows(&self) -> &[Row] {
         &self.rows
     }
@@ -68,7 +69,7 @@ impl<'a> Unwinder<'a> {
             match instruction {
                 Instruction::AdvanceLoc { delta } => {
                     debug!("AdvanceLoc(delta={})", *delta);
-                    current_address += *delta as u64;
+                    current_address += *delta as usize;
                     current_row.end_address = current_address;
                     self.update_last_row(&current_row);
                     current_row.start_address = current_address;
@@ -107,8 +108,8 @@ impl<'a> Unwinder<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Row {
-    pub start_address: u64,
-    pub end_address: u64,
+    pub start_address: usize,
+    pub end_address: usize,
     pub cfa_register: u64,
     pub cfa_offset: i64,
     pub register_rules: [RegisterRule; 32], // Not sure how many registers are defined; we will check that later
@@ -117,14 +118,14 @@ pub struct Row {
 impl core::fmt::Display for Row {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "Row[")?;
-        writeln!(f, "address: {:}", self.start_address)?;
+        writeln!(f, "address: {:#x}", self.start_address)?;
         writeln!(f, "cfa register: {:?}", self.cfa_register)?;
         writeln!(f, "cfa offset: {:?}", self.cfa_offset)?;
         writeln!(f, "register rules:")?;
         for (index, rule) in self
             .register_rules
             .iter()
-            .filter(|&&r| r != RegisterRule::Undef)
+            .filter(|&&r| r != RegisterRule::None)
             .enumerate()
         {
             writeln!(f, "\t{} {:?}", index, rule)?;
@@ -135,20 +136,20 @@ impl core::fmt::Display for Row {
 }
 
 impl Row {
-    fn new(address: u64) -> Self {
+    fn new(address: usize) -> Self {
         Self {
             start_address: address,
             end_address: 0,
             cfa_register: 0,
             cfa_offset: 0,
-            register_rules: [RegisterRule::Undef; 32],
+            register_rules: [RegisterRule::None; 32],
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterRule {
-    Undef,
+    None,
     Offset(i64),
 }
 
@@ -156,10 +157,10 @@ pub enum RegisterRule {
 impl PartialEq<gimli::RegisterRule<usize>> for RegisterRule {
     fn eq(&self, other: &gimli::RegisterRule<usize>) -> bool {
         match self {
-            RegisterRule::Undef => matches!(other, gimli::RegisterRule::Undefined),
             RegisterRule::Offset(offset) => {
                 matches!(other, gimli::RegisterRule::Offset(control_offset) if offset == control_offset)
             }
+            _ => panic!("Register rule not implemented."),
         }
     }
 }

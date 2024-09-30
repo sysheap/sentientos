@@ -19,7 +19,7 @@ impl<'a> EhFrameParser<'a> {
         Self { data }
     }
 
-    pub fn iter(&self, base_address: u64) -> EhFrameIterator<'a> {
+    pub fn iter(&self, base_address: usize) -> EhFrameIterator<'a> {
         EhFrameIterator {
             data: ConsumableBuffer::new(self.data),
             parsed_cie: BTreeMap::new(),
@@ -43,10 +43,25 @@ pub struct ParsedCIE<'a> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParsedFDE<'a> {
     pub cie: Arc<ParsedCIE<'a>>,
-    pub pc_begin: u64,
+    pub pc_begin: usize,
     pub address_range: u32,
     pub augmentation_data: Option<&'a [u8]>,
     pub instructions: Vec<Instruction>,
+}
+
+impl ParsedFDE<'_> {
+    pub fn contains(&self, address: usize) -> bool {
+        self.pc_begin <= address && address < self.end_address()
+    }
+
+    fn end_address(&self) -> usize {
+        let mask = Self::ones_sized(self.cie.address_size);
+        self.pc_begin.wrapping_add(self.address_range as usize) & mask
+    }
+
+    fn ones_sized(size: u8) -> usize {
+        !0 >> (64 - size * 8)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -56,7 +71,7 @@ pub enum Bitness {
 }
 
 pub struct EhFrameIterator<'a> {
-    base_address: u64,
+    base_address: usize,
     data: ConsumableBuffer<'a>,
     parsed_cie: BTreeMap<usize, Arc<ParsedCIE<'a>>>,
 }
@@ -92,6 +107,9 @@ impl<'a> EhFrameIterator<'a> {
         assert_eq!(version, 1);
         let augmentation_string = self.data.consume_str()?;
 
+        // In case we have a signal trampoline this will change
+        // and contains an S
+        // See gimli parser for more details
         assert_eq!(augmentation_string, "zR");
 
         let _eh_data = if augmentation_string.contains("eh") {
@@ -159,7 +177,7 @@ impl<'a> EhFrameIterator<'a> {
             let augmentation_byte = cie.augmentation_data?[0];
             self.parse_pc_begin(augmentation_byte)?
         } else {
-            self.data.consume_sized_type::<u32>()? as u64
+            self.data.consume_sized_type::<u32>()? as usize
         };
 
         let address_range = self.data.consume_sized_type::<u32>()?;
@@ -186,7 +204,7 @@ impl<'a> EhFrameIterator<'a> {
         })
     }
 
-    fn parse_pc_begin(&mut self, augmentation_byte: u8) -> Option<u64> {
+    fn parse_pc_begin(&mut self, augmentation_byte: u8) -> Option<usize> {
         #[allow(non_upper_case_globals)]
         const DW_EH_PE_sdata4: u8 = 0x0b;
         #[allow(non_upper_case_globals)]
@@ -196,9 +214,9 @@ impl<'a> EhFrameIterator<'a> {
             DW_EH_PE_pcrel | DW_EH_PE_sdata4,
             "Implement more parsing variants for pc begin"
         );
-        let current_offset = self.base_address + (self.data.position() as u64);
+        let current_offset = self.base_address + self.data.position();
         let offset = self.data.consume_sized_type::<i32>()?;
-        current_offset.checked_add_signed(offset as i64)
+        current_offset.checked_add_signed(offset as isize)
     }
 
     fn parse_length_and_bitness(&mut self) -> Option<(usize, Bitness)> {
@@ -313,7 +331,7 @@ pub enum Instruction {
 
 #[cfg(test)]
 mod tests {
-
+    use super::{Instruction, ParsedCIE, ParsedFDE};
     use crate::{
         debug,
         debugging::{
@@ -321,10 +339,6 @@ mod tests {
             unwinder::{Row, Unwinder},
         },
     };
-
-    use super::{Instruction, ParsedCIE, ParsedFDE};
-
-    use alloc::collections::BTreeMap;
     use elf::ElfBytes;
     use gimli::{
         constants, BaseAddresses, CallFrameInstruction, CallFrameInstructionIter,
@@ -350,26 +364,15 @@ mod tests {
         let control_eh_frame = EhFrame::new(eh_frame_data, gimli::LittleEndian);
         let mut control_entries = control_eh_frame.entries(&base_addresses);
 
-        let mut control_cies = BTreeMap::new();
-
         let parser = EhFrameParser::new(eh_frame_data);
-        let mut entries = parser.iter(eh_frame.sh_addr);
+        let mut entries = parser.iter(eh_frame.sh_addr as usize);
 
         while let Some(control_entry) = control_entries.next().unwrap() {
             match control_entry {
-                gimli::CieOrFde::Cie(control_cie) => {
-                    control_cies.insert(control_cie.offset(), control_cie);
-                }
+                gimli::CieOrFde::Cie(_) => {}
                 gimli::CieOrFde::Fde(control_fde) => {
                     let parsed_fde = entries.next().unwrap();
-                    let control_fde = control_fde
-                        .parse(|_, _, _| {
-                            control_cies
-                                .get(&control_fde.cie_offset().0)
-                                .cloned()
-                                .ok_or(gimli::Error::Io)
-                        })
-                        .unwrap();
+                    let control_fde = control_fde.parse(EhFrame::cie_from_offset).unwrap();
 
                     assert_eq!(control_fde, parsed_fde);
 
@@ -457,7 +460,7 @@ mod tests {
                 instructions: _,
             } = other;
             *self.cie() == **cie
-                && self.initial_address() == *pc_begin
+                && self.initial_address() as usize == *pc_begin
                 && self.len() == *address_range as u64
         }
     }
@@ -500,8 +503,8 @@ mod tests {
                 gimli::CfaRule::Expression(_) => panic!("Expressions are not supported."),
             };
 
-            let metadata = self.start_address == other.start_address()
-                && self.end_address == other.end_address()
+            let metadata = self.start_address == other.start_address() as usize
+                && self.end_address == other.end_address() as usize
                 && self.cfa_register == cfa_register.0 as u64
                 && self.cfa_offset == *cfa_offset;
 
