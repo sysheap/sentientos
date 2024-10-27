@@ -33,7 +33,7 @@ SECTIONS
   .rodata : {
 	. = ALIGN(4096);
     PROVIDE(_rodata_start = .);
-    *(.rodata .rodata.*)
+    *(.rodata .rodata.* .srodata .srodata.*)
 	. = ALIGN(4096);
     PROVIDE(_rodata_end = .);
   } >ram AT>ram :text
