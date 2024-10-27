@@ -1,5 +1,5 @@
 use alloc::{collections::BTreeMap, vec::Vec};
-use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
+use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer, mutex::Mutex};
 use core::{
     fmt::{Debug, Display},
     mem::size_of,
@@ -9,7 +9,7 @@ use core::{
 use crate::debug;
 
 // Use u64 for alignment purposes
-static mut PARSED_DEVICE_TREE: [u64; 8 * 1024] = [0; 8 * 1024];
+static PARSED_DEVICE_TREE: Mutex<[u64; 8 * 1024]> = Mutex::new([0; 8 * 1024]);
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
@@ -319,13 +319,14 @@ pub fn parse_and_copy(device_tree_pointer: *const ()) -> &'static Header {
     let size = header.totalsize.get() as usize;
 
     // SAFETY: We are the only thread that is running so accessing the static is safe
+    let mut parsed_device_tree_lock = PARSED_DEVICE_TREE.lock();
+    assert!(size <= parsed_device_tree_lock.len());
     unsafe {
-        assert!(size <= PARSED_DEVICE_TREE.len());
         core::ptr::copy_nonoverlapping(
             device_tree_pointer as *const u8,
-            PARSED_DEVICE_TREE.as_mut_ptr() as *mut u8,
+            parsed_device_tree_lock.as_mut_ptr() as *mut u8,
             size,
         );
-        &*(PARSED_DEVICE_TREE.as_ptr() as *const Header)
+        &*(parsed_device_tree_lock.as_ptr() as *const Header)
     }
 }
