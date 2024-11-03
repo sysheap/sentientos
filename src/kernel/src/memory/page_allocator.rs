@@ -21,9 +21,9 @@ pub(super) struct MetadataPageAllocator<'a> {
 }
 
 // SAFETY: The metadata page allocator can be accessed from any thread
-unsafe impl<'a> Send for MetadataPageAllocator<'a> {}
+unsafe impl Send for MetadataPageAllocator<'_> {}
 
-impl<'a> Debug for MetadataPageAllocator<'a> {
+impl Debug for MetadataPageAllocator<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PageAllocator")
             .field("metadata", &self.metadata.as_ptr())

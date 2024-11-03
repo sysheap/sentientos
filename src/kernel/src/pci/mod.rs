@@ -92,7 +92,7 @@ impl PciCapability {
     }
 }
 
-impl<'a> Iterator for PciCapabilityIter<'a> {
+impl Iterator for PciCapabilityIter<'_> {
     type Item = MMIO<PciCapability>;
 
     fn next(&mut self) -> Option<Self::Item> {

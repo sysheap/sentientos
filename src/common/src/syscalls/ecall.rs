@@ -1,10 +1,10 @@
 use core::arch::asm;
 
-/// The registers regarding syscalls are filled in the following way:
-/// a0: syscall number / return value
-/// a1: arg1
-/// a2: arg2
-/// ... and so on
+// The registers regarding syscalls are filled in the following way:
+// a0: syscall number / return value
+// a1: arg1
+// a2: arg2
+// ... and so on
 
 pub fn ecall_0(nr: usize) -> (usize, usize) {
     let ret1: usize;
