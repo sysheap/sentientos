@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "src/common",
-    "src/kernel",
-    "src/userspace",
+    "common",
+    "kernel",
+    "userspace",
 ]
-default-members = ["src/kernel"]
+default-members = ["kernel"]
 resolver = "2"
 
 [workspace.package]
