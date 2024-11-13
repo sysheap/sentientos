@@ -18,11 +18,14 @@ Implemented
 - Userspace processes
 - Scheduler
 - Systemcalls
+- Networkstack (udp)
 
 TODO
 
 - VirtIO / Filesystem
-- Networkstack
+- TCP
+- SMP
+- Async Runtime in Kernel
 - GUI
 - See [todo](./todo.md)
 
