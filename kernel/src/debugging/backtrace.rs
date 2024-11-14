@@ -7,10 +7,10 @@ use crate::{
         unwinder::{RegisterRule, Unwinder},
     },
     info,
+    klibc::runtime_initialized::RuntimeInitializedData,
     memory::linker_information::LinkerInformation,
 };
 use alloc::vec::Vec;
-use common::mutex::Mutex;
 // Needed for the native backtrace impl for debugging purposes
 // use core::ffi::c_void;
 // use unwinding::abi::{
@@ -32,11 +32,13 @@ struct Backtrace<'a> {
     fdes: Vec<eh_frame_parser::ParsedFDE<'a>>,
 }
 
-static BACKTRACE: Mutex<Backtrace> = Mutex::new(Backtrace::new());
+static BACKTRACE: RuntimeInitializedData<Backtrace> = RuntimeInitializedData::new();
 
 impl<'a> Backtrace<'a> {
-    const fn new() -> Self {
-        Self { fdes: Vec::new() }
+    fn new() -> Self {
+        let mut self_ = Self { fdes: Vec::new() };
+        self_.init();
+        self_
     }
 
     fn find(&self, pc: usize) -> Option<&eh_frame_parser::ParsedFDE<'a>> {
@@ -294,17 +296,16 @@ impl CallerSavedRegs {
 }
 
 pub fn init() {
-    BACKTRACE.lock().init();
+    BACKTRACE.initialize(Backtrace::new());
 }
 
 pub fn print() {
     CallerSavedRegs::with_context(unwind, &mut ());
 
     extern "C" fn unwind(regs: &mut CallerSavedRegs, _data: &mut ()) {
-        let lock = BACKTRACE.lock();
         let mut counter = 0u64;
         loop {
-            match lock.next(regs) {
+            match BACKTRACE.next(regs) {
                 Ok(address) => {
                     info!("{counter}: {address:#x}");
                     counter += 1;
@@ -354,9 +355,7 @@ mod tests {
         CallerSavedRegs::with_context(unwind, &mut data);
 
         extern "C" fn unwind(regs: &mut CallerSavedRegs, data: &mut CallbackData) {
-            let mut backtrace = Backtrace::new();
-            backtrace.init();
-
+            let backtrace = Backtrace::new();
             let mut own_addr = VecDeque::new();
 
             loop {
