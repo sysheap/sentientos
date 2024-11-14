@@ -1,5 +1,6 @@
 use crate::{print, println};
 
+mod array_vec;
 mod leb128;
 mod mutex;
 

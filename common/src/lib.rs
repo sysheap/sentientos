@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+pub mod array_vec;
 pub mod big_endian;
 pub mod consumable_buffer;
 pub mod leb128;
