@@ -1,11 +1,11 @@
 use crate::debug;
 
 use super::eh_frame_parser::{Instruction, ParsedFDE};
-use alloc::vec::Vec;
+use common::array_vec::ArrayVec;
 
 pub struct Unwinder<'a> {
     fde: &'a ParsedFDE<'a>,
-    rows: Vec<Row>,
+    rows: ArrayVec<Row, 128>, // 128 should be enough I guess - otherwise we can increase it
 }
 
 impl<'a> Unwinder<'a> {
@@ -14,8 +14,13 @@ impl<'a> Unwinder<'a> {
         let fde_instructions = &fde.instructions;
         let mut self_ = Self {
             fde,
-            rows: vec![Row::new(fde.pc_begin)],
+            rows: ArrayVec::default(),
         };
+
+        self_
+            .rows
+            .push(Row::new(fde.pc_begin))
+            .expect("No space left in the ArrayVec");
 
         debug!("Evaluate cde instructions");
         self_.evaluate_instructions(cde_instructions);
@@ -74,7 +79,9 @@ impl<'a> Unwinder<'a> {
                     self.update_last_row(&current_row);
                     current_row.start_address = current_address;
                     current_row.end_address = 0;
-                    self.rows.push(current_row.clone());
+                    self.rows
+                        .push(current_row.clone())
+                        .expect("Not enough space in the array vec.");
                     debug!("pushing new row with address {current_address}");
                 }
                 Instruction::Offset { register, offset } => {

@@ -24,7 +24,7 @@ enum BacktraceNextError {
     CouldNotGetFde(usize),
 }
 
-/// We keep the already parsed information in a BTreeMap
+/// We keep the already parsed information in a Vec
 /// even though we might not even need to produce a backtrace
 /// But we want to avoid heap allocation while backtracing
 /// in case of memory corruption.
