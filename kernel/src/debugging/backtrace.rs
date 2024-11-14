@@ -247,22 +247,46 @@ impl CallerSavedRegs {
         self.x2 = value;
     }
 
-    fn with_context<T>(f: extern "C" fn(&mut Self, &mut T), data: &mut T) {
-        let mut regs = Self::default();
+    fn with_context<F: FnMut(&mut CallerSavedRegs)>(f: F) {
+        // Inspired by the unwinder crate
+        // https://github.com/nbdd0121/unwinding/
 
-        dispatch(&mut regs, data, f);
+        // We cannot call a closure directly from assembly
+        // because we're missing some compiler magic.
+        // Convert the closure to a fn pointer by having a
+        // intermediate function closure_to_fn_pointer.
+
+        // Not the prettiest code but very cool and also
+        // very convenient for the caller side.
+
+        #[repr(C)]
+        struct ClosureWrapper<F: FnMut(&mut CallerSavedRegs)>(F);
+
+        let mut closure = ClosureWrapper(f);
+
+        dispatch(
+            &mut CallerSavedRegs::default(),
+            &mut closure,
+            closure_to_fn_pointer,
+        );
+
+        extern "C" fn closure_to_fn_pointer<F: FnMut(&mut CallerSavedRegs)>(
+            regs: &mut CallerSavedRegs,
+            f_data: &mut ClosureWrapper<F>,
+        ) {
+            (f_data.0)(regs);
+        }
 
         #[naked]
-        extern "C-unwind" fn dispatch<T>(
+        extern "C-unwind" fn dispatch<F: FnMut(&mut CallerSavedRegs)>(
             regs: &mut CallerSavedRegs,
-            data: &mut T,
-            f: extern "C" fn(&mut CallerSavedRegs, &mut T),
+            f_data: &mut ClosureWrapper<F>,
+            f: extern "C" fn(&mut CallerSavedRegs, &mut ClosureWrapper<F>),
         ) {
             unsafe {
                 core::arch::naked_asm!(
                     "
                      # regs is in a0
-                     # data in a1
                      # f to call in a2
                      sd x1, 0x00(a0)   
                      sd x2, 0x08(a0)
@@ -300,9 +324,7 @@ pub fn init() {
 }
 
 pub fn print() {
-    CallerSavedRegs::with_context(unwind, &mut ());
-
-    extern "C" fn unwind(regs: &mut CallerSavedRegs, _data: &mut ()) {
+    CallerSavedRegs::with_context(|regs| {
         let mut counter = 0u64;
         loop {
             match BACKTRACE.next(regs) {
@@ -322,7 +344,7 @@ pub fn print() {
                 }
             }
         }
-    }
+    });
 }
 
 #[cfg(not(miri))]
@@ -352,9 +374,7 @@ mod tests {
         let mut data = CallbackData::default();
 
         _Unwind_Backtrace(callback, &mut data as *mut _ as _);
-        CallerSavedRegs::with_context(unwind, &mut data);
-
-        extern "C" fn unwind(regs: &mut CallerSavedRegs, data: &mut CallbackData) {
+        CallerSavedRegs::with_context(|regs| {
             let backtrace = Backtrace::new();
             let mut own_addr = VecDeque::new();
 
@@ -380,6 +400,6 @@ mod tests {
             own_addr.pop_front();
 
             assert_eq!(own_addr, data.addresses);
-        }
+        });
     }
 }
