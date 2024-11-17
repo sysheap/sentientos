@@ -15,3 +15,7 @@ jobs:
         run: sudo apt update && sudo apt install qemu-system-riscv64
       - name: Run tests
         run: just test
+      - name: Install miri
+        run: rustup component add miri
+      - name: Run miri
+        run: just miri
