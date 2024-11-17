@@ -3,6 +3,7 @@ use common::util::align_down_ptr;
 use crate::{debug, klibc::util::minimum_amount_of_pages, memory::PAGE_SIZE};
 use core::{
     fmt::Debug,
+    mem::MaybeUninit,
     ops::Range,
     ptr::{null_mut, NonNull},
 };
@@ -42,17 +43,21 @@ impl<'a> MetadataPageAllocator<'a> {
         }
     }
 
-    pub(super) fn init(&mut self, memory: &'a mut [u8], reserved_areas: &[Range<*const u8>]) {
+    pub(super) fn init(
+        &mut self,
+        memory: &'a mut [MaybeUninit<u8>],
+        reserved_areas: &[Range<*const u8>],
+    ) {
         let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
         let (metadata, heap) = memory.split_at_mut(number_of_heap_pages);
 
-        let (begin, metadata, end) = unsafe { metadata.align_to_mut::<PageStatus>() };
+        let (begin, metadata, end) = unsafe { metadata.align_to_mut::<MaybeUninit<PageStatus>>() };
         assert!(begin.is_empty());
         assert!(end.is_empty());
 
-        let (_begin, heap, _end) = unsafe { heap.align_to_mut::<Page>() };
+        let (_begin, heap, _end) = unsafe { heap.align_to_mut::<MaybeUninit<Page>>() };
         assert!(metadata.len() <= heap.len());
         assert!(heap[0].as_ptr() as usize % PAGE_SIZE == 0);
 
@@ -60,15 +65,33 @@ impl<'a> MetadataPageAllocator<'a> {
         let size_heap = core::mem::size_of_val(heap);
         assert!(size_metadata + size_heap <= heap_size);
 
-        metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
+        metadata.iter_mut().for_each(|x| {
+            x.write(PageStatus::Free);
+        });
 
-        self.metadata = metadata;
-        self.pages = heap.as_mut_ptr_range();
+        // SAFTEY: We initialized all the data in the previous statement
+        self.metadata = unsafe {
+            core::mem::transmute::<&mut [MaybeUninit<PageStatus>], &mut [PageStatus]>(metadata)
+        };
 
         // Set reserved areas to used
         for area in reserved_areas {
-            self.mark_pointer_range_as_used(area);
+            Self::mark_pointer_range_as_used(
+                area,
+                heap.as_mut_ptr_range().start as *mut Page,
+                heap.as_mut_ptr_range().end as *mut Page,
+                self.metadata,
+            );
         }
+
+        for (index, status) in self.metadata.iter().enumerate() {
+            if *status == PageStatus::Free {
+                heap[index].write(Page::zero());
+            }
+        }
+
+        let heap = unsafe { core::mem::transmute::<&mut [MaybeUninit<Page>], &mut [Page]>(heap) };
+        self.pages = heap.as_mut_ptr_range();
 
         debug!("Page allocator initalized");
         debug!("Metadata start:\t\t{:p}", self.metadata);
@@ -94,6 +117,14 @@ impl<'a> MetadataPageAllocator<'a> {
     fn page_pointer_to_page_idx(&self, page: NonNull<Page>) -> usize {
         let heap_start = self.pages.start;
         let heap_end = self.pages.end;
+        Self::page_pointer_to_page_idx_manual(page, heap_start, heap_end)
+    }
+
+    fn page_pointer_to_page_idx_manual(
+        page: NonNull<Page>,
+        heap_start: *mut Page,
+        heap_end: *mut Page,
+    ) -> usize {
         let page_ptr = page.as_ptr();
         assert!(page_ptr >= heap_start);
         assert!(page_ptr < heap_end);
@@ -117,7 +148,15 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 
     fn is_range_free(&self, start_idx: usize, number_of_pages: usize) -> bool {
-        (start_idx..start_idx + number_of_pages).all(|idx| self.metadata[idx] == PageStatus::Free)
+        Self::is_range_free_manual(start_idx, number_of_pages, self.metadata)
+    }
+
+    fn is_range_free_manual(
+        start_idx: usize,
+        number_of_pages: usize,
+        metadata: &[PageStatus],
+    ) -> bool {
+        (start_idx..start_idx + number_of_pages).all(|idx| metadata[idx] == PageStatus::Free)
     }
 
     fn is_range_used(&self, start_idx: usize, number_of_pages: usize) -> bool {
@@ -127,6 +166,16 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 
     fn mark_range_as_used(&mut self, start_idx: usize, number_of_pages: usize) {
+        Self::mark_range_as_used_manual(start_idx, number_of_pages, self.metadata);
+    }
+
+    fn mark_range_as_used_manual(
+        start_idx: usize,
+        number_of_pages: usize,
+        metadata: &mut [PageStatus],
+    ) {
+        // It is clearer to express this the current way it is
+        #[allow(clippy::needless_range_loop)]
         for idx in start_idx..start_idx + number_of_pages {
             let status = if idx == start_idx + number_of_pages - 1 {
                 PageStatus::Last
@@ -134,7 +183,7 @@ impl<'a> MetadataPageAllocator<'a> {
                 PageStatus::Used
             };
 
-            self.metadata[idx] = status;
+            metadata[idx] = status;
         }
     }
 
@@ -159,13 +208,38 @@ impl<'a> MetadataPageAllocator<'a> {
         (start_idx, number_of_pages)
     }
 
-    fn mark_pointer_range_as_used<T>(&mut self, range: &Range<*const T>) {
-        let (start_idx, number_of_pages) = self.range_to_start_aligned_and_number_of_pages(range);
+    fn range_to_start_aligned_and_number_of_pages_manual<T>(
+        range: &Range<*const T>,
+        heap_start: *mut Page,
+        heap_end: *mut Page,
+    ) -> (usize, usize) {
+        let start_aligned = align_down_ptr(range.start, PAGE_SIZE);
+        // We don't use the offset_from pointer functions because this requires
+        // that both pointers point to the same allocation which is not the case
+        let new_length = range.end as usize - start_aligned as usize;
+        let number_of_pages = minimum_amount_of_pages(new_length);
+        let start_idx = Self::page_pointer_to_page_idx_manual(
+            NonNull::new(start_aligned as *mut Page)
+                .expect("start_aligned is not allowed to be NULL"),
+            heap_start,
+            heap_end,
+        );
+        (start_idx, number_of_pages)
+    }
+
+    fn mark_pointer_range_as_used<T>(
+        range: &Range<*const T>,
+        heap_start: *mut Page,
+        heap_end: *mut Page,
+        metadata: &mut [PageStatus],
+    ) {
+        let (start_idx, number_of_pages) =
+            Self::range_to_start_aligned_and_number_of_pages_manual(range, heap_start, heap_end);
         assert!(
-            self.is_range_free(start_idx, number_of_pages),
+            Self::is_range_free_manual(start_idx, number_of_pages, metadata),
             "Reserved are should be free. Otherwise with have problems with overlapping LAST bits"
         );
-        self.mark_range_as_used(start_idx, number_of_pages);
+        Self::mark_range_as_used_manual(start_idx, number_of_pages, metadata);
     }
 
     pub fn dealloc(&mut self, page: NonNull<Page>) -> usize {
@@ -190,18 +264,17 @@ pub trait PageAllocator {
 
 #[cfg(test)]
 mod tests {
+    use super::{MetadataPageAllocator, Page, PAGE_SIZE};
+    use crate::memory::page_allocator::PageStatus;
+    use common::mutex::Mutex;
     use core::{
+        mem::MaybeUninit,
         ops::Range,
         ptr::{addr_of_mut, NonNull},
     };
 
-    use common::mutex::Mutex;
-
-    use crate::memory::page_allocator::PageStatus;
-
-    use super::{MetadataPageAllocator, Page, PAGE_SIZE};
-
-    static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
+    static mut PAGE_ALLOC_MEMORY: [MaybeUninit<u8>; PAGE_SIZE * 8] =
+        [const { MaybeUninit::uninit() }; PAGE_SIZE * 8];
     static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
     fn init_allocator() {

@@ -274,25 +274,24 @@ pub fn allocated_size() -> usize {
 
 #[cfg(test)]
 mod test {
-    use core::{
-        alloc::GlobalAlloc,
-        ops::Range,
-        ptr::{addr_of_mut, NonNull},
-    };
-
-    use common::mutex::Mutex;
-
+    use super::{FreeBlock, MutexHeap, PAGE_SIZE};
     use crate::memory::{
         page::Page,
         page_allocator::{MetadataPageAllocator, PageAllocator},
     };
-
-    use super::{FreeBlock, MutexHeap, PAGE_SIZE};
+    use common::mutex::Mutex;
+    use core::{
+        alloc::GlobalAlloc,
+        mem::MaybeUninit,
+        ops::Range,
+        ptr::{addr_of_mut, NonNull},
+    };
 
     const HEAP_PAGES: usize = 8;
     const HEAP_SIZE: usize = (HEAP_PAGES - 1) * PAGE_SIZE;
 
-    static mut PAGE_ALLOC_MEMORY: [u8; PAGE_SIZE * HEAP_PAGES] = [0; PAGE_SIZE * HEAP_PAGES];
+    static mut PAGE_ALLOC_MEMORY: [MaybeUninit<u8>; PAGE_SIZE * HEAP_PAGES] =
+        [const { MaybeUninit::uninit() }; PAGE_SIZE * HEAP_PAGES];
     static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
     struct TestAllocator;

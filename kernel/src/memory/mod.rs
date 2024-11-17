@@ -1,9 +1,4 @@
-use core::{
-    mem::{transmute, MaybeUninit},
-    ops::Range,
-    ptr::NonNull,
-    slice::from_raw_parts_mut,
-};
+use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
 
 use common::mutex::Mutex;
 
@@ -43,17 +38,7 @@ pub fn init_page_allocator(
     reserved_areas: &[Range<*const u8>],
 ) {
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
-    // Iterate over all elements which are not inside the reserved areas
-    for elem in memory
-        .iter_mut()
-        .filter(|m| !reserved_areas.iter().any(|r| r.contains(&m.as_ptr())))
-    {
-        elem.write(0);
-    }
-    let initialized_memory = unsafe { transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(memory) };
-    PAGE_ALLOCATOR
-        .lock()
-        .init(initialized_memory, reserved_areas);
+    PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
 }
 
 pub fn used_heap_pages() -> usize {

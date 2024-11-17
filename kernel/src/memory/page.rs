@@ -34,7 +34,7 @@ impl core::fmt::Debug for Page {
 }
 
 impl Page {
-    fn zero() -> Self {
+    pub(super) fn zero() -> Self {
         Self([0; PAGE_SIZE])
     }
 }
