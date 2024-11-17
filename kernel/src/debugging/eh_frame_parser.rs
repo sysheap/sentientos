@@ -343,6 +343,9 @@ mod tests {
 
     const KERNEL_ELF_TEST_BINARY: &[u8] = include_bytes!("../test/test_data/elf/kernel");
 
+    // This test takes forever on miri because we need to run a debug build for miri
+    // Exclude it here because we don't do any unsafe things anyways
+    #[cfg(not(miri))]
     #[test_case]
     fn parser_works() {
         let file =
