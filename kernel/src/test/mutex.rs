@@ -4,6 +4,8 @@ mod tests {
 
     use common::mutex::Mutex;
 
+    use crate::debug;
+
     #[test_case]
     fn check_lock_and_unlock() {
         let mutex = Mutex::new(42);
@@ -33,5 +35,13 @@ mod tests {
             mutex.disarm();
         }
         let _lock2 = mutex.lock();
+    }
+
+    #[test_case]
+    fn print_doesnt_deadlock() {
+        let mutex = Mutex::new(42);
+        debug!("{mutex:?}");
+        let mutex_guard = mutex.lock();
+        debug!("{mutex_guard:?}");
     }
 }

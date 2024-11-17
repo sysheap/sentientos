@@ -5,6 +5,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+#[derive(Debug)]
 pub struct Mutex<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
@@ -12,12 +13,6 @@ pub struct Mutex<T> {
     // in the future. This is highly unsafe and only useful to
     // unlock the uart mutex in case of a panic.
     disarmed: AtomicBool,
-}
-
-impl<T: Debug> Debug for Mutex<T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.lock().fmt(f)
-    }
 }
 
 impl<T> Mutex<T> {
@@ -79,18 +74,21 @@ impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
         unsafe { &*self.mutex.data.get() }
     }
 }
 
 impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
 impl<T: Debug> Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "{:?}", self.mutex)
+        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
+        unsafe { writeln!(f, "MutexGuard {{\n{:?}\n}}", *self.mutex.data.get()) }
     }
 }
