@@ -9,6 +9,7 @@
 #![feature(assert_matches)]
 #![feature(map_try_insert)]
 #![feature(naked_functions)]
+#![feature(new_range_api)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -21,6 +22,7 @@ use crate::{
 };
 use alloc::vec::Vec;
 use debugging::backtrace;
+use device_tree::get_devicetree_range;
 
 mod asm;
 mod assert;
@@ -66,7 +68,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "Supported SBI Versions >= 0.2"
     );
 
-    let dtb = device_tree::parse_and_copy(device_tree_pointer);
+    let device_tree_range = get_devicetree_range(device_tree_pointer);
 
     unsafe {
         info!("Initializing page allocator");
@@ -76,8 +78,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
             HEAP_START + HEAP_SIZE,
             HEAP_SIZE
         );
-        memory::init_page_allocator(HEAP_START, HEAP_SIZE);
+        memory::init_page_allocator(HEAP_START, HEAP_SIZE, &[device_tree_range]);
     }
+
+    let dtb = device_tree::parse_and_get_ref(device_tree_pointer);
 
     backtrace::init();
 

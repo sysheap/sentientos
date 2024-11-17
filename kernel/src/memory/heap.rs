@@ -310,7 +310,7 @@ mod test {
         unsafe {
             PAGE_ALLOC
                 .lock()
-                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
+                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY), &[]);
         }
     }
 

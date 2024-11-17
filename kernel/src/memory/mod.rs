@@ -37,13 +37,23 @@ impl PageAllocator for StaticPageAllocator {
     }
 }
 
-pub fn init_page_allocator(heap_start: usize, heap_size: usize) {
+pub fn init_page_allocator(
+    heap_start: usize,
+    heap_size: usize,
+    reserved_areas: &[Range<*const u8>],
+) {
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
-    for elem in memory.iter_mut() {
+    // Iterate over all elements which are not inside the reserved areas
+    for elem in memory
+        .iter_mut()
+        .filter(|m| !reserved_areas.iter().any(|r| r.contains(&m.as_ptr())))
+    {
         elem.write(0);
     }
     let initialized_memory = unsafe { transmute::<&mut [MaybeUninit<u8>], &mut [u8]>(memory) };
-    PAGE_ALLOCATOR.lock().init(initialized_memory);
+    PAGE_ALLOCATOR
+        .lock()
+        .init(initialized_memory, reserved_areas);
 }
 
 pub fn used_heap_pages() -> usize {
@@ -52,4 +62,8 @@ pub fn used_heap_pages() -> usize {
 
 pub fn total_heap_pages() -> usize {
     PAGE_ALLOCATOR.lock().total_heap_pages()
+}
+
+pub fn is_area_reserved<T>(range: &Range<*const T>) -> bool {
+    PAGE_ALLOCATOR.lock().is_area_reserved(range)
 }

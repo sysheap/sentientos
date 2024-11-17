@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![feature(ptr_mask)]
 
 pub mod array_vec;
 pub mod big_endian;

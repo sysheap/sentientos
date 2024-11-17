@@ -1,4 +1,6 @@
-use crate::{debug, memory::PAGE_SIZE};
+use common::util::align_down_ptr;
+
+use crate::{debug, klibc::util::minimum_amount_of_pages, memory::PAGE_SIZE};
 use core::{
     fmt::Debug,
     ops::Range,
@@ -40,7 +42,7 @@ impl<'a> MetadataPageAllocator<'a> {
         }
     }
 
-    pub(super) fn init(&mut self, memory: &'a mut [u8]) {
+    pub(super) fn init(&mut self, memory: &'a mut [u8], reserved_areas: &[Range<*const u8>]) {
         let heap_size = memory.len();
         let number_of_heap_pages = heap_size / (PAGE_SIZE + 1); // We need one byte per page as metadata
 
@@ -61,8 +63,12 @@ impl<'a> MetadataPageAllocator<'a> {
         metadata.iter_mut().for_each(|x| *x = PageStatus::Free);
 
         self.metadata = metadata;
-
         self.pages = heap.as_mut_ptr_range();
+
+        // Set reserved areas to used
+        for area in reserved_areas {
+            self.mark_pointer_range_as_used(area);
+        }
 
         debug!("Page allocator initalized");
         debug!("Metadata start:\t\t{:p}", self.metadata);
@@ -110,13 +116,19 @@ impl<'a> MetadataPageAllocator<'a> {
             })
     }
 
-    fn is_range_free(&self, start_idx: usize, length: usize) -> bool {
-        (start_idx..start_idx + length).all(|idx| self.metadata[idx] == PageStatus::Free)
+    fn is_range_free(&self, start_idx: usize, number_of_pages: usize) -> bool {
+        (start_idx..start_idx + number_of_pages).all(|idx| self.metadata[idx] == PageStatus::Free)
     }
 
-    fn mark_range_as_used(&mut self, start_idx: usize, length: usize) {
-        for idx in start_idx..start_idx + length {
-            let status = if idx == start_idx + length - 1 {
+    fn is_range_used(&self, start_idx: usize, number_of_pages: usize) -> bool {
+        (start_idx..start_idx + number_of_pages).all(|idx| {
+            self.metadata[idx] == PageStatus::Used || self.metadata[idx] == PageStatus::Last
+        })
+    }
+
+    fn mark_range_as_used(&mut self, start_idx: usize, number_of_pages: usize) {
+        for idx in start_idx..start_idx + number_of_pages {
+            let status = if idx == start_idx + number_of_pages - 1 {
                 PageStatus::Last
             } else {
                 PageStatus::Used
@@ -124,6 +136,36 @@ impl<'a> MetadataPageAllocator<'a> {
 
             self.metadata[idx] = status;
         }
+    }
+
+    pub fn is_area_reserved<T>(&self, range: &Range<*const T>) -> bool {
+        let (start_idx, number_of_pages) = self.range_to_start_aligned_and_number_of_pages(range);
+        self.is_range_used(start_idx, number_of_pages)
+    }
+
+    fn range_to_start_aligned_and_number_of_pages<T>(
+        &self,
+        range: &Range<*const T>,
+    ) -> (usize, usize) {
+        let start_aligned = align_down_ptr(range.start, PAGE_SIZE);
+        // We don't use the offset_from pointer functions because this requires
+        // that both pointers point to the same allocation which is not the case
+        let new_length = range.end as usize - start_aligned as usize;
+        let number_of_pages = minimum_amount_of_pages(new_length);
+        let start_idx = self.page_pointer_to_page_idx(
+            NonNull::new(start_aligned as *mut Page)
+                .expect("start_aligned is not allowed to be NULL"),
+        );
+        (start_idx, number_of_pages)
+    }
+
+    fn mark_pointer_range_as_used<T>(&mut self, range: &Range<*const T>) {
+        let (start_idx, number_of_pages) = self.range_to_start_aligned_and_number_of_pages(range);
+        assert!(
+            self.is_range_free(start_idx, number_of_pages),
+            "Reserved are should be free. Otherwise with have problems with overlapping LAST bits"
+        );
+        self.mark_range_as_used(start_idx, number_of_pages);
     }
 
     pub fn dealloc(&mut self, page: NonNull<Page>) -> usize {
@@ -166,7 +208,7 @@ mod tests {
         unsafe {
             PAGE_ALLOC
                 .lock()
-                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY));
+                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY), &[]);
         }
     }
 

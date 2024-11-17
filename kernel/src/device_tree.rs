@@ -1,15 +1,12 @@
+use crate::{debug, memory::is_area_reserved};
 use alloc::{collections::BTreeMap, vec::Vec};
-use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer, mutex::Mutex};
+use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
     fmt::{Debug, Display},
     mem::size_of,
+    ops::Range,
     slice,
 };
-
-use crate::debug;
-
-// Use u64 for alignment purposes
-static PARSED_DEVICE_TREE: Mutex<[u64; 8 * 1024]> = Mutex::new([0; 8 * 1024]);
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
@@ -306,7 +303,7 @@ impl<'a> Node<'a> {
     }
 }
 
-pub fn parse_and_copy(device_tree_pointer: *const ()) -> &'static Header {
+pub fn get_devicetree_range(device_tree_pointer: *const ()) -> Range<*const u8> {
     let header = unsafe { &*(device_tree_pointer as *const Header) };
 
     assert_eq!(header.magic.get(), FDT_MAGIC, "Device tree magic missmatch");
@@ -317,16 +314,26 @@ pub fn parse_and_copy(device_tree_pointer: *const ()) -> &'static Header {
     );
 
     let size = header.totalsize.get() as usize;
+    let device_tree_pointer = device_tree_pointer as *const u8;
 
-    // SAFETY: We are the only thread that is running so accessing the static is safe
-    let mut parsed_device_tree_lock = PARSED_DEVICE_TREE.lock();
-    assert!(size <= parsed_device_tree_lock.len());
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            device_tree_pointer as *const u8,
-            parsed_device_tree_lock.as_mut_ptr() as *mut u8,
-            size,
-        );
-        &*(parsed_device_tree_lock.as_ptr() as *const Header)
-    }
+    device_tree_pointer..device_tree_pointer.wrapping_byte_add(size)
+}
+
+pub fn parse_and_get_ref(device_tree_pointer: *const ()) -> &'static Header {
+    let header = unsafe { &*(device_tree_pointer as *const Header) };
+
+    assert_eq!(header.magic.get(), FDT_MAGIC, "Device tree magic missmatch");
+    assert_eq!(
+        header.version.get(),
+        FDT_VERSION,
+        "Device tree version mismatch"
+    );
+
+    let range = get_devicetree_range(device_tree_pointer);
+    assert!(
+        is_area_reserved(&range),
+        "Device Tree must be marked as reserved in page allocator"
+    );
+
+    header
 }
