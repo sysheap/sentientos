@@ -55,12 +55,7 @@ impl ParsedFDE<'_> {
     }
 
     fn end_address(&self) -> usize {
-        let mask = Self::ones_sized(self.cie.address_size);
-        self.pc_begin.wrapping_add(self.address_range as usize) & mask
-    }
-
-    fn ones_sized(size: u8) -> usize {
-        !0 >> (64 - size * 8)
+        self.pc_begin.wrapping_add(self.address_range as usize)
     }
 }
 
