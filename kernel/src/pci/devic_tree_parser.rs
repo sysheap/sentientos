@@ -91,21 +91,17 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
         ranges: Vec::new(),
     };
 
-    let NodeRefWithParentCellInfo {
-        node,
-        parent_adress_cell,
-        parent_size_cell,
-    } = dt_root_node.find_node("pci")?;
+    let node = dt_root_node.find_node("pci")?;
 
     let mut reg_property = node.get_property("reg")?;
 
-    pci_information.pci_host_bridge_address = match parent_adress_cell? {
+    pci_information.pci_host_bridge_address = match node.parent_address_cells? {
         1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
         2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
         _ => panic!("pci address cannot be larger than 64 bit"),
     };
 
-    pci_information.pci_host_bridge_length = match parent_size_cell? {
+    pci_information.pci_host_bridge_length = match node.parent_size_cells? {
         1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
         2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
         _ => panic!("pci size cannot be larger than 64 bit"),
@@ -114,7 +110,7 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
     let mut ranges_property = node.get_property("ranges")?;
 
     while !ranges_property.empty() {
-        assert!(node.adress_cell? == 3, "pci addresses must be described by 3 u32 values: the bitfield and then the acutal address");
+        assert_eq!(node.address_cells, Some(3), "pci addresses must be described by 3 u32 values: the bitfield and then the acutal address");
         let pci_bitfield = ranges_property
             .consume_sized_type::<BigEndian<u32>>()?
             .get();
@@ -122,7 +118,7 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
             .consume_sized_type::<BigEndian<u64>>()?
             .get() as usize;
 
-        let parent_address = match parent_adress_cell? {
+        let parent_address = match node.parent_address_cells? {
             1 => ranges_property
                 .consume_sized_type::<BigEndian<u32>>()?
                 .get() as usize,
@@ -132,7 +128,7 @@ pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
             _ => panic!("pci address cannot be larger than 64 bit"),
         };
 
-        let size = match node.size_cell? {
+        let size = match node.size_cells? {
             1 => ranges_property
                 .consume_sized_type::<BigEndian<u32>>()?
                 .get() as usize,

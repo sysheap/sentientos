@@ -2,6 +2,8 @@
 #![cfg_attr(not(miri), no_main)]
 #![cfg_attr(miri, allow(dead_code))]
 #![cfg_attr(miri, allow(unused_imports))]
+#![cfg_attr(test, allow(dead_code))]
+#![cfg_attr(test, allow(unused_imports))]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(let_chains)]
@@ -10,6 +12,7 @@
 #![feature(map_try_insert)]
 #![feature(naked_functions)]
 #![feature(new_range_api)]
+#![feature(ptr_metadata)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
@@ -81,7 +84,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         memory::init_page_allocator(HEAP_START, HEAP_SIZE, &[device_tree_range]);
     }
 
-    let dtb = device_tree::parse_and_get_ref(device_tree_pointer);
+    let dtb = device_tree::DeviceTree::new(device_tree_pointer);
 
     backtrace::init();
 
@@ -93,13 +96,9 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     #[cfg(test)]
     test_main();
 
-    let parsed_structure_block = dtb
-        .get_structure_block()
-        .parse()
-        .expect("DTB must be parsable");
+    let root_node = dtb.root_node();
 
-    let pci_information =
-        pci::parse(&parsed_structure_block).expect("pci information must be parsable");
+    let pci_information = pci::parse(&root_node).expect("pci information must be parsable");
     info!("{:#x?}", pci_information);
 
     {

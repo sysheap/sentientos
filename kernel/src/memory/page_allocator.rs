@@ -159,12 +159,6 @@ impl<'a> MetadataPageAllocator<'a> {
         (start_idx..start_idx + number_of_pages).all(|idx| metadata[idx] == PageStatus::Free)
     }
 
-    fn is_range_used(&self, start_idx: usize, number_of_pages: usize) -> bool {
-        (start_idx..start_idx + number_of_pages).all(|idx| {
-            self.metadata[idx] == PageStatus::Used || self.metadata[idx] == PageStatus::Last
-        })
-    }
-
     fn mark_range_as_used(&mut self, start_idx: usize, number_of_pages: usize) {
         Self::mark_range_as_used_manual(start_idx, number_of_pages, self.metadata);
     }
@@ -185,27 +179,6 @@ impl<'a> MetadataPageAllocator<'a> {
 
             metadata[idx] = status;
         }
-    }
-
-    pub fn is_area_reserved<T>(&self, range: &Range<*const T>) -> bool {
-        let (start_idx, number_of_pages) = self.range_to_start_aligned_and_number_of_pages(range);
-        self.is_range_used(start_idx, number_of_pages)
-    }
-
-    fn range_to_start_aligned_and_number_of_pages<T>(
-        &self,
-        range: &Range<*const T>,
-    ) -> (usize, usize) {
-        let start_aligned = align_down_ptr(range.start, PAGE_SIZE);
-        // We don't use the offset_from pointer functions because this requires
-        // that both pointers point to the same allocation which is not the case
-        let new_length = range.end as usize - start_aligned as usize;
-        let number_of_pages = minimum_amount_of_pages(new_length);
-        let start_idx = self.page_pointer_to_page_idx(
-            NonNull::new(start_aligned as *mut Page)
-                .expect("start_aligned is not allowed to be NULL"),
-        );
-        (start_idx, number_of_pages)
     }
 
     fn range_to_start_aligned_and_number_of_pages_manual<T>(

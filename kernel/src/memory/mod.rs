@@ -1,11 +1,9 @@
-use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
-
-use common::mutex::Mutex;
-
 use self::{
     page::Page,
     page_allocator::{MetadataPageAllocator, PageAllocator},
 };
+use common::mutex::Mutex;
+use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
 
 pub mod heap;
 pub mod linker_information;
@@ -47,8 +45,4 @@ pub fn used_heap_pages() -> usize {
 
 pub fn total_heap_pages() -> usize {
     PAGE_ALLOCATOR.lock().total_heap_pages()
-}
-
-pub fn is_area_reserved<T>(range: &Range<*const T>) -> bool {
-    PAGE_ALLOCATOR.lock().is_area_reserved(range)
 }

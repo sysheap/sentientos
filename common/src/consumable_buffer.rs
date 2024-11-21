@@ -1,6 +1,6 @@
 use crate::util::align_up;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumableBuffer<'a> {
     buffer: &'a [u8],
     position: usize,
@@ -12,6 +12,10 @@ impl<'a> ConsumableBuffer<'a> {
             buffer,
             position: 0,
         }
+    }
+
+    pub fn buffer(&self) -> &'a [u8] {
+        self.buffer
     }
 
     pub fn reset(&mut self) {
