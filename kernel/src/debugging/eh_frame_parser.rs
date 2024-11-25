@@ -84,6 +84,11 @@ impl<'a> Iterator for EhFrameIterator<'a> {
         );
 
         let cie_offset_or_none = self.data.consume_sized_type::<u32>()? as usize;
+
+        if length == 0 {
+            return None;
+        }
+
         length -= 4;
 
         if cie_offset_or_none == 0 {

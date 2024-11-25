@@ -63,7 +63,7 @@ supervisor_trap_vector:
 	save_regs
 
 	# Load kernel stack frame
-	la sp, _stack_end
+	la sp, __kernel_stack_end
 
 	csrr a0, scause
 	csrr a1, stval

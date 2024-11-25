@@ -24,8 +24,17 @@ use crate::{
 };
 
 use super::{
-    linker_information::LinkerInformation, page::Page, runtime_mappings::get_runtime_mappings,
+    heap_size, linker_information::LinkerInformation, page::Page,
+    runtime_mappings::get_runtime_mappings,
 };
+
+#[derive(Clone)]
+pub struct MappingDescription {
+    pub virtual_address_start: usize,
+    pub size: usize,
+    pub privileges: XWRMode,
+    pub name: &'static str,
+}
 
 pub static KERNEL_PAGE_TABLES: LazyStaticKernelPageTables = LazyStaticKernelPageTables::new();
 
@@ -150,39 +159,18 @@ impl RootPageTableHolder {
     pub fn new_with_kernel_mapping() -> Self {
         let mut root_page_table_holder = RootPageTableHolder::empty();
 
-        let linker_information = LinkerInformation::new();
+        for mapping in LinkerInformation::all_mappings() {
+            root_page_table_holder.map_identity_kernel(
+                mapping.virtual_address_start,
+                mapping.size,
+                mapping.privileges,
+                mapping.name,
+            );
+        }
 
         root_page_table_holder.map_identity_kernel(
-            linker_information.text_start,
-            linker_information.text_size(),
-            XWRMode::ReadExecute,
-            "TEXT",
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            linker_information.rodata_start,
-            linker_information.rodata_size(),
-            XWRMode::ReadOnly,
-            "RODATA",
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            linker_information.eh_frame_section_start,
-            linker_information.eh_frame_section_size(),
-            XWRMode::ReadOnly,
-            "EH_FRAME",
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            linker_information.data_start,
-            linker_information.data_size(),
-            XWRMode::ReadWrite,
-            "DATA",
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            linker_information.heap_start,
-            linker_information.heap_size,
+            LinkerInformation::heap_start(),
+            heap_size(),
             XWRMode::ReadWrite,
             "HEAP",
         );

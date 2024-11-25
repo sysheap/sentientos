@@ -8,71 +8,71 @@ OUTPUT_ARCH( "riscv" )
 
 ENTRY( _start )
 
-MEMORY
-{
-  ram  (wxa) : ORIGIN = 0x80200000, LENGTH = 126M
-}
+MEMORY_START = 0x80200000;
 
-PHDRS
-{
-  text PT_LOAD;
-  data PT_LOAD;
-  bss PT_LOAD;
-}
 
 SECTIONS
 {
-  .text : {
+  . = MEMORY_START;
 
-    PROVIDE(_text_start = .);
+  .text : {
+    PROVIDE(__text_start = .);
     PROVIDE(__executable_start = .);
     *(.text.init) *(.text .text.*)
     PROVIDE(__etext = .);
 	. = ALIGN(4096);
-    PROVIDE(_text_end = .);
-  } >ram AT>ram :text
+    PROVIDE(__text_end = .);
+  }
 
   .rodata : {
 	. = ALIGN(4096);
-    PROVIDE(_rodata_start = .);
+    PROVIDE(__rodata_start = .);
     *(.rodata .rodata.* .srodata .srodata.*)
 	. = ALIGN(4096);
-    PROVIDE(_rodata_end = .);
-  } >ram AT>ram :text
+    PROVIDE(__rodata_end = .);
+  }
 
   .eh_frame : {
 	. = ALIGN(4096);
-    PROVIDE(_eh_frame_section_start = .);
+    /* PROVIDE(__eh_frame_section_start = .); */
     PROVIDE(__eh_frame = .);
+    PROVIDE(__eh_frame_start = .);
     KEEP (*(.eh_frame)) *(.eh_frame.*)
-    PROVIDE(_eh_frame_end = .);
+    /* PROVIDE(__eh_frame_end = .); */
 	. = ALIGN(4096);
-    PROVIDE(_eh_frame_section_end = .);
-  } >ram AT>ram :text
+    PROVIDE(__eh_frame_end = .);
+  }
 
   .data : {
     . = ALIGN(4096);
-    PROVIDE(_data_start = .);
+    PROVIDE(__data_start = .);
    PROVIDE(__global_pointer$ = . + 0x800);
     *(.sdata .sdata.*) *(.data .data.*)
 	. = ALIGN(4096);
-    PROVIDE(_data_end = .);
-  } >ram AT>ram :data
+    PROVIDE(__data_end = .);
+  }
 
-  .bss : {
+  .bss (NOLOAD) : {
 	. = ALIGN(4096);
-    PROVIDE(_bss_start = .);
+    PROVIDE(__bss_start = .);
     *(.sbss .sbss.*) *(.bss .bss.*)
 	. = ALIGN(4096);
-    PROVIDE(_bss_end = .);
-  } >ram AT>ram :bss
+    PROVIDE(__bss_end = .);
+  }
 
-  PROVIDE(_memory_start = ORIGIN(ram));
-  PROVIDE(_stack_start = _bss_end);
-  PROVIDE(_stack_end = _stack_start + 0x80000);
-  PROVIDE(_memory_end = ORIGIN(ram) + LENGTH(ram));
+  .kernel_stack (NOLOAD) : {
+    . = ALIGN(4096);
+    PROVIDE(__kernel_stack_start = .);
+    . = . + 512K;
+    . = ALIGN(4096);
+    PROVIDE(__kernel_stack_end = .);
+  }
 
-  PROVIDE(_heap_start = _stack_end);
-  PROVIDE(_heap_size = _memory_end - _heap_start);
-  PROVIDE(_eh_frame_size = _eh_frame_end - _eh_frame_section_start);
+  .heap (NOLOAD) : {
+    . = ALIGN(4096);
+    PROVIDE(__heap_start = .);
+    # The end of the heap will be calcualted at runtime
+  }
+
+  /* PROVIDE(_eh_frame_size = _eh_frame_end - _eh_frame_section_start); */
 }

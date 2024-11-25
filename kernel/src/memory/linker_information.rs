@@ -1,84 +1,63 @@
-#[derive(Default)]
-pub struct LinkerInformation {
-    pub text_start: usize,
-    pub text_end: usize,
-    pub rodata_start: usize,
-    pub rodata_end: usize,
-    pub data_start: usize,
-    pub data_end: usize,
-    pub heap_start: usize,
-    pub heap_size: usize,
-    pub eh_frame_section_start: usize,
-    pub eh_frame_section_end: usize,
-    pub eh_frame_size: usize,
+macro_rules! getter_address {
+    ($name:ident) => {
+        pub fn $name() -> usize {
+            extern "C" {
+                static ${concat(__, $name)}: usize;
+            }
+            core::ptr::addr_of!(${concat(__, $name)}) as usize
+        }
+    };
 }
 
-impl LinkerInformation {
-    pub fn new() -> Self {
-        extern "C" {
-            static mut TEXT_START: usize;
-            static mut TEXT_END: usize;
-            static mut RODATA_START: usize;
-            static mut RODATA_END: usize;
-            static mut DATA_START: usize;
-            static mut DATA_END: usize;
-
-            static mut HEAP_START: usize;
-            static mut HEAP_SIZE: usize;
-
-            static mut EH_FRAME_SECTION_START: usize;
-            static mut EH_FRAME_SECTION_END: usize;
-            static mut EH_FRAME_SIZE: usize;
+macro_rules! getter {
+    ($name:ident) => {
+        getter_address!(${concat($name, _start)});
+        getter_address!(${concat($name, _end)});
+        pub fn ${concat($name, _size)}() -> usize {
+            Self::${concat($name, _end)}() - Self::${concat($name, _start)}()
         }
+    };
+}
 
-        if cfg!(miri) {
-            Self {
-                text_start: 0xffffffffffff1000,
-                text_end: 0xffffffffffff2000,
-                rodata_start: 0xffffffffffff2000,
-                rodata_end: 0xffffffffffff3000,
-                data_start: 0xffffffffffff3000,
-                data_end: 0xffffffffffff4000,
-                heap_start: 0xffffffffffff4000,
-                heap_size: 0x1000,
-                eh_frame_section_start: 0xffffffffffff5000,
-                eh_frame_section_end: 0xffffffffffff6000,
-                eh_frame_size: 0,
-            }
-        } else {
-            // SAFETY: We only read information from the linker built into the binary
-            // this is always safe
-            unsafe {
-                Self {
-                    text_start: TEXT_START,
-                    text_end: TEXT_END,
-                    rodata_start: RODATA_START,
-                    rodata_end: RODATA_END,
-                    data_start: DATA_START,
-                    data_end: DATA_END,
-                    heap_start: HEAP_START,
-                    heap_size: HEAP_SIZE,
-                    eh_frame_section_start: EH_FRAME_SECTION_START,
-                    eh_frame_section_end: EH_FRAME_SECTION_END,
-                    eh_frame_size: EH_FRAME_SIZE,
-                }
+// Idea taken by https://veykril.github.io/tlborm/decl-macros/building-blocks/counting.html
+macro_rules! count_idents {
+    () => { 0 };
+    ($first:ident $($rest:ident)*) => {1 + count_idents!($($rest)*)};
+}
+
+macro_rules! sections {
+    ($(.$name:ident, $xwr:expr;)*) => {
+        use $crate::memory::page_tables::MappingDescription;
+        use $crate::memory::page_tables::XWRMode;
+
+        pub struct LinkerInformation;
+
+        impl LinkerInformation {
+            $(getter!($name);)*
+
+            // The heaps end address will be calcualted at runtime
+            // Therefore, it is handled as a special case
+            getter_address!(heap_start);
+
+            pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
+                [
+                    $(MappingDescription {
+                      virtual_address_start: LinkerInformation::${concat($name, _start)}(),
+                      size: LinkerInformation::${concat($name, _size)}(),
+                      privileges: $xwr,
+                      name: stringify!($name)
+                    },)*
+                ]
             }
         }
-    }
+    };
+}
 
-    pub fn text_size(&self) -> usize {
-        self.text_end - self.text_start
-    }
-
-    pub fn rodata_size(&self) -> usize {
-        self.rodata_end - self.rodata_start
-    }
-
-    pub fn data_size(&self) -> usize {
-        self.data_end - self.data_start
-    }
-
-    pub fn eh_frame_section_size(&self) -> usize {
-        self.eh_frame_section_end - self.eh_frame_section_start
-    }
+sections! {
+    .text, XWRMode::ReadExecute;
+    .rodata, XWRMode::ReadOnly;
+    .eh_frame, XWRMode::ReadOnly;
+    .data, XWRMode::ReadWrite;
+    .bss, XWRMode::ReadWrite;
+    .kernel_stack, XWRMode::ReadWrite;
 }

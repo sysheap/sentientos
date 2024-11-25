@@ -13,19 +13,21 @@
 #![feature(naked_functions)]
 #![feature(new_range_api)]
 #![feature(ptr_metadata)]
+#![feature(macro_metavar_expr_concat)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 use crate::{
     interrupts::plic,
     io::uart::QEMU_UART,
-    memory::{page_tables, RuntimeMapping},
+    memory::page_tables,
     pci::enumerate_devices,
     processes::{scheduler, timer},
 };
 use alloc::vec::Vec;
 use debugging::backtrace;
 use device_tree::get_devicetree_range;
+use memory::page_tables::MappingDescription;
 
 mod asm;
 mod assert;
@@ -51,11 +53,6 @@ mod test;
 #[macro_use]
 extern crate alloc;
 
-extern "C" {
-    static HEAP_START: usize;
-    static HEAP_SIZE: usize;
-}
-
 #[no_mangle]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     QEMU_UART.lock().init();
@@ -74,16 +71,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     device_tree::init(device_tree_pointer);
     let device_tree_range = get_devicetree_range();
 
-    unsafe {
-        info!("Initializing page allocator");
-        info!(
-            "Heap Start: {:#x}-{:#x} (size: {:#x})",
-            HEAP_START,
-            HEAP_START + HEAP_SIZE,
-            HEAP_SIZE
-        );
-        memory::init_page_allocator(HEAP_START, &[device_tree_range]);
-    }
+    memory::init_page_allocator(&[device_tree_range]);
 
     backtrace::init();
 
@@ -103,7 +91,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     let mut runtime_mapping = Vec::new();
 
-    runtime_mapping.push(RuntimeMapping {
+    runtime_mapping.push(MappingDescription {
         virtual_address_start: pci_information.pci_host_bridge_address,
         size: pci_information.pci_host_bridge_length,
         privileges: page_tables::XWRMode::ReadWrite,
@@ -111,7 +99,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     });
 
     for range in &pci_information.ranges {
-        runtime_mapping.push(RuntimeMapping {
+        runtime_mapping.push(MappingDescription {
             virtual_address_start: range.cpu_address,
             size: range.size,
             privileges: page_tables::XWRMode::ReadWrite,

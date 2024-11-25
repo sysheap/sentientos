@@ -1,4 +1,4 @@
-use crate::{device_tree, HEAP_SIZE};
+use crate::{device_tree, info};
 
 use self::{
     page::Page,
@@ -6,6 +6,7 @@ use self::{
 };
 use common::mutex::Mutex;
 use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
+use linker_information::LinkerInformation;
 
 pub mod heap;
 pub mod linker_information;
@@ -16,7 +17,7 @@ mod runtime_mappings;
 
 pub use page::PAGE_SIZE;
 
-pub use runtime_mappings::{initialize_runtime_mappings, RuntimeMapping};
+pub use runtime_mappings::initialize_runtime_mappings;
 
 static PAGE_ALLOCATOR: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
@@ -32,7 +33,7 @@ impl PageAllocator for StaticPageAllocator {
     }
 }
 
-pub fn init_page_allocator(heap_start: usize, reserved_areas: &[Range<*const u8>]) {
+pub fn heap_size() -> usize {
     let memory_node = device_tree::THE
         .root_node()
         .find_node("memory")
@@ -43,7 +44,20 @@ pub fn init_page_allocator(heap_start: usize, reserved_areas: &[Range<*const u8>
         .expect("Memory node must have a reg property");
 
     let ram_end_address = reg.address + reg.size;
-    let heap_size = ram_end_address - heap_start;
+    ram_end_address - LinkerInformation::heap_start()
+}
+
+pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
+    let heap_start = LinkerInformation::heap_start();
+    let heap_size = heap_size();
+
+    info!("Initializing page allocator");
+    info!(
+        "Heap Start: {:#x}-{:#x} (size: {:#x})",
+        heap_start,
+        heap_start + heap_size,
+        heap_size
+    );
 
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
     PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
