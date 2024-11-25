@@ -258,6 +258,28 @@ impl<'a> Node<'a> {
         }
         None
     }
+
+    pub fn parse_reg_property(&self) -> Option<Reg> {
+        let mut reg_property = self.get_property("reg")?;
+        let address = match self.parent_address_cells? {
+            1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
+            2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
+            _ => panic!("address cannot be larger than 64 bit"),
+        };
+
+        let size = match self.parent_size_cells? {
+            1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
+            2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
+            _ => panic!("size cannot be larger than 64 bit"),
+        };
+
+        Some(Reg { address, size })
+    }
+}
+
+pub struct Reg {
+    pub address: usize,
+    pub size: usize,
 }
 
 impl<'a> IntoIterator for &Node<'a> {

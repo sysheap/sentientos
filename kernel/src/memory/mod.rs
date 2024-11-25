@@ -1,3 +1,5 @@
+use crate::{device_tree, HEAP_SIZE};
+
 use self::{
     page::Page,
     page_allocator::{MetadataPageAllocator, PageAllocator},
@@ -30,11 +32,19 @@ impl PageAllocator for StaticPageAllocator {
     }
 }
 
-pub fn init_page_allocator(
-    heap_start: usize,
-    heap_size: usize,
-    reserved_areas: &[Range<*const u8>],
-) {
+pub fn init_page_allocator(heap_start: usize, reserved_areas: &[Range<*const u8>]) {
+    let memory_node = device_tree::THE
+        .root_node()
+        .find_node("memory")
+        .expect("There must be a memory node");
+
+    let reg = memory_node
+        .parse_reg_property()
+        .expect("Memory node must have a reg property");
+
+    let ram_end_address = reg.address + reg.size;
+    let heap_size = ram_end_address - heap_start;
+
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
     PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
 }

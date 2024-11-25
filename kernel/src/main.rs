@@ -82,7 +82,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
             HEAP_START + HEAP_SIZE,
             HEAP_SIZE
         );
-        memory::init_page_allocator(HEAP_START, HEAP_SIZE, &[device_tree_range]);
+        memory::init_page_allocator(HEAP_START, &[device_tree_range]);
     }
 
     backtrace::init();

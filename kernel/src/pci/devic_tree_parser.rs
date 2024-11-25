@@ -95,19 +95,10 @@ pub fn parse() -> Option<PCIInformation> {
 
     let node = dt_root_node.find_node("pci")?;
 
-    let mut reg_property = node.get_property("reg")?;
+    let reg_property = node.parse_reg_property()?;
 
-    pci_information.pci_host_bridge_address = match node.parent_address_cells? {
-        1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
-        2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
-        _ => panic!("pci address cannot be larger than 64 bit"),
-    };
-
-    pci_information.pci_host_bridge_length = match node.parent_size_cells? {
-        1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
-        2 => reg_property.consume_sized_type::<BigEndian<u64>>()?.get() as usize,
-        _ => panic!("pci size cannot be larger than 64 bit"),
-    };
+    pci_information.pci_host_bridge_address = reg_property.address;
+    pci_information.pci_host_bridge_length = reg_property.size;
 
     let mut ranges_property = node.get_property("ranges")?;
 
