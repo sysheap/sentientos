@@ -71,7 +71,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "Supported SBI Versions >= 0.2"
     );
 
-    let device_tree_range = get_devicetree_range(device_tree_pointer);
+    device_tree::init(device_tree_pointer);
+    let device_tree_range = get_devicetree_range();
 
     unsafe {
         info!("Initializing page allocator");
@@ -84,21 +85,12 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         memory::init_page_allocator(HEAP_START, HEAP_SIZE, &[device_tree_range]);
     }
 
-    let dtb = device_tree::DeviceTree::new(device_tree_pointer);
-
     backtrace::init();
-
-    assert!(
-        dtb.get_reserved_areas().is_empty(),
-        "There should be no reserved memory regions"
-    );
 
     #[cfg(test)]
     test_main();
 
-    let root_node = dtb.root_node();
-
-    let pci_information = pci::parse(&root_node).expect("pci information must be parsable");
+    let pci_information = pci::parse().expect("pci information must be parsable");
     info!("{:#x?}", pci_information);
 
     {

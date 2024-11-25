@@ -1,4 +1,6 @@
-use crate::{assert::static_assert_size, debug};
+use crate::{
+    assert::static_assert_size, debug, klibc::runtime_initialized::RuntimeInitializedData,
+};
 use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
     fmt::{Debug, Display},
@@ -9,6 +11,8 @@ use core::{
 
 const FDT_MAGIC: u32 = 0xd00dfeed;
 const FDT_VERSION: u32 = 17;
+
+pub static THE: RuntimeInitializedData<&'static DeviceTree> = RuntimeInitializedData::new();
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq)]
@@ -41,7 +45,7 @@ pub struct DeviceTree {
 }
 
 impl DeviceTree {
-    pub fn new(device_tree_pointer: *const ()) -> &'static Self {
+    fn new(device_tree_pointer: *const ()) -> &'static Self {
         let magic = device_tree_pointer as *const BigEndian<u32>;
         assert!(magic.is_aligned(), "Device tree must be 4 byte aligned");
         assert!(!device_tree_pointer.is_null());
@@ -310,13 +314,20 @@ impl<'a> Iterator for Node<'a> {
     }
 }
 
-pub fn get_devicetree_range(device_tree_pointer: *const ()) -> Range<*const u8> {
-    let device_tree = DeviceTree::new(device_tree_pointer);
-
-    let size = device_tree.header().totalsize.get() as usize;
-    let device_tree_pointer = device_tree_pointer as *const u8;
+pub fn get_devicetree_range() -> Range<*const u8> {
+    let size = THE.header().totalsize.get() as usize;
+    let device_tree_pointer = *THE as *const DeviceTree as *const u8;
 
     device_tree_pointer..device_tree_pointer.wrapping_byte_add(size)
+}
+
+pub fn init(device_tree_pointer: *const ()) {
+    let device_tree = DeviceTree::new(device_tree_pointer);
+    assert!(
+        device_tree.get_reserved_areas().is_empty(),
+        "There should be no reserved memory regions"
+    );
+    THE.initialize(device_tree);
 }
 
 #[cfg(test)]

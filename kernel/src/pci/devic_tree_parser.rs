@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::device_tree::*;
+use crate::device_tree::{self};
 use alloc::vec::Vec;
 use common::big_endian::BigEndian;
 
@@ -84,12 +84,14 @@ pub struct PCIRange {
     pub size: usize,
 }
 
-pub fn parse<'a>(dt_root_node: &'a Node<'a>) -> Option<PCIInformation> {
+pub fn parse() -> Option<PCIInformation> {
     let mut pci_information = PCIInformation {
         pci_host_bridge_address: 0,
         pci_host_bridge_length: 0,
         ranges: Vec::new(),
     };
+
+    let dt_root_node = device_tree::THE.root_node();
 
     let node = dt_root_node.find_node("pci")?;
 
