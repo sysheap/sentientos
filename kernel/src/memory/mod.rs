@@ -59,10 +59,11 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
 
     info!("Initializing page allocator");
     info!(
-        "Heap Start: {:#x}-{:#x} (size: {:#x})",
+        "Heap Start: {:#x}-{:#x} (size: {:#x} -> {})",
         heap_start,
         heap_start + heap_size,
-        heap_size
+        heap_size,
+        common::util::PrintMemorySizeHumanFriendly(heap_size)
     );
 
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
