@@ -6,7 +6,7 @@ use core::{
 };
 
 use alloc::{boxed::Box, vec::Vec};
-use common::mutex::Mutex;
+use common::{mutex::Mutex, util::align_up};
 
 use crate::{
     assert::static_assert_size,
@@ -255,19 +255,19 @@ impl RootPageTableHolder {
         &mut self,
         virtual_address_start: usize,
         physical_address_start: usize,
-        size: usize,
+        mut size: usize,
         privileges: XWRMode,
         is_user_mode_accessible: bool,
         name: &'static str,
     ) {
         assert_eq!(virtual_address_start % PAGE_SIZE, 0);
         assert_eq!(physical_address_start % PAGE_SIZE, 0);
-        assert_eq!(size % PAGE_SIZE, 0);
-        assert_ne!(size, 0);
         assert_ne!(
             virtual_address_start, 0,
             "It is dangerous to map the null pointer."
         );
+
+        size = align_up(size, PAGE_SIZE);
 
         let virtual_end = virtual_address_start - PAGE_SIZE + size;
         let physical_end = physical_address_start - PAGE_SIZE + size;

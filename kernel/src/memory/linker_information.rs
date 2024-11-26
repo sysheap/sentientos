@@ -1,10 +1,18 @@
 macro_rules! getter_address {
     ($name:ident) => {
+        #[cfg(not(miri))]
         pub fn $name() -> usize {
             extern "C" {
                 static ${concat(__, $name)}: usize;
             }
             core::ptr::addr_of!(${concat(__, $name)}) as usize
+        }
+        #[cfg(miri)]
+        pub fn $name() -> usize {
+            // When running under Miri we don't have any sections
+            // Just choose any value which does not collide with any
+            // other mappings
+            common::util::align_down(u32::MAX as usize, $crate::memory::PAGE_SIZE)
         }
     };
 }
@@ -39,6 +47,7 @@ macro_rules! sections {
             // Therefore, it is handled as a special case
             getter_address!(heap_start);
 
+            #[cfg(not(miri))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
@@ -48,6 +57,11 @@ macro_rules! sections {
                       name: stringify!($name)
                     },)*
                 ]
+            }
+            #[cfg(miri)]
+            pub fn all_mappings() -> [MappingDescription; 0] {
+                // When running under Miri we don't have any sections
+                []
             }
         }
     };

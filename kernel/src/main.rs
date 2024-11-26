@@ -2,6 +2,7 @@
 #![cfg_attr(not(miri), no_main)]
 #![cfg_attr(miri, allow(dead_code))]
 #![cfg_attr(miri, allow(unused_imports))]
+#![cfg_attr(miri, allow(unused_macros))]
 #![cfg_attr(test, allow(dead_code))]
 #![cfg_attr(test, allow(unused_imports))]
 #![feature(nonzero_ops)]

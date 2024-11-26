@@ -33,6 +33,12 @@ impl PageAllocator for StaticPageAllocator {
     }
 }
 
+#[cfg(miri)]
+pub fn heap_size() -> usize {
+    crate::memory::PAGE_SIZE
+}
+
+#[cfg(not(miri))]
 pub fn heap_size() -> usize {
     let memory_node = device_tree::THE
         .root_node()
