@@ -15,6 +15,7 @@
 #![feature(new_range_api)]
 #![feature(ptr_metadata)]
 #![feature(macro_metavar_expr_concat)]
+#![feature(generic_arg_infer)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 

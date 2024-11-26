@@ -1,6 +1,6 @@
-use common::util::align_down_ptr;
-
+use super::page::Page;
 use crate::{debug, klibc::util::minimum_amount_of_pages, memory::PAGE_SIZE};
+use common::util::align_down_ptr;
 use core::{
     fmt::Debug,
     mem::MaybeUninit,
@@ -8,19 +8,24 @@ use core::{
     ptr::{null_mut, NonNull},
 };
 
-use super::page::Page;
-
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
 enum PageStatus {
+    FirstUse,
     Free,
     Used,
     Last,
 }
 
+impl PageStatus {
+    fn is_free(&self) -> bool {
+        matches!(self, Self::FirstUse | Self::Free)
+    }
+}
+
 pub(super) struct MetadataPageAllocator<'a> {
     metadata: &'a mut [PageStatus],
-    pages: Range<*mut Page>,
+    pages: Range<*mut MaybeUninit<Page>>,
 }
 
 // SAFETY: The metadata page allocator can be accessed from any thread
@@ -66,7 +71,7 @@ impl<'a> MetadataPageAllocator<'a> {
         assert!(size_metadata + size_heap <= heap_size);
 
         metadata.iter_mut().for_each(|x| {
-            x.write(PageStatus::Free);
+            x.write(PageStatus::FirstUse);
         });
 
         // SAFTEY: We initialized all the data in the previous statement
@@ -74,24 +79,12 @@ impl<'a> MetadataPageAllocator<'a> {
             core::mem::transmute::<&mut [MaybeUninit<PageStatus>], &mut [PageStatus]>(metadata)
         };
 
+        self.pages = heap.as_mut_ptr_range();
+
         // Set reserved areas to used
         for area in reserved_areas {
-            Self::mark_pointer_range_as_used(
-                area,
-                heap.as_mut_ptr_range().start as *mut Page,
-                heap.as_mut_ptr_range().end as *mut Page,
-                self.metadata,
-            );
+            self.mark_pointer_range_as_used_without_initialize(area);
         }
-
-        for (index, status) in self.metadata.iter().enumerate() {
-            if *status == PageStatus::Free {
-                heap[index].write(Page::zero());
-            }
-        }
-
-        let heap = unsafe { core::mem::transmute::<&mut [MaybeUninit<Page>], &mut [Page]>(heap) };
-        self.pages = heap.as_mut_ptr_range();
 
         debug!("Page allocator initalized");
         debug!("Metadata start:\t\t{:p}", self.metadata);
@@ -104,27 +97,16 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 
     pub fn used_heap_pages(&self) -> usize {
-        self.metadata
-            .iter()
-            .filter(|m| **m != PageStatus::Free)
-            .count()
+        self.metadata.iter().filter(|m| !m.is_free()).count()
     }
 
-    fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<Page> {
+    fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<MaybeUninit<Page>> {
         unsafe { NonNull::new(self.pages.start.add(page_index)).unwrap() }
     }
 
-    fn page_pointer_to_page_idx(&self, page: NonNull<Page>) -> usize {
+    fn page_pointer_to_page_idx(&self, page: NonNull<MaybeUninit<Page>>) -> usize {
         let heap_start = self.pages.start;
         let heap_end = self.pages.end;
-        Self::page_pointer_to_page_idx_manual(page, heap_start, heap_end)
-    }
-
-    fn page_pointer_to_page_idx_manual(
-        page: NonNull<Page>,
-        heap_start: *mut Page,
-        heap_end: *mut Page,
-    ) -> usize {
         let page_ptr = page.as_ptr();
         assert!(page_ptr >= heap_start);
         assert!(page_ptr < heap_end);
@@ -141,83 +123,74 @@ impl<'a> MetadataPageAllocator<'a> {
         (0..=(self.total_heap_pages() - number_of_pages_requested))
             .find(|&idx| self.is_range_free(idx, number_of_pages_requested))
             .map(|start_idx| {
-                self.mark_range_as_used(start_idx, number_of_pages_requested);
-                self.page_idx_to_pointer(start_idx)
-                    ..self.page_idx_to_pointer(start_idx + number_of_pages_requested)
+                self.mark_range_as_used(start_idx, number_of_pages_requested, true);
+                // NonNull<MaybeUninit<Page>> can be cast to NonNull<Page> because they are
+                // initialized in mark_range_as_used
+                self.page_idx_to_pointer(start_idx).cast()
+                    ..self
+                        .page_idx_to_pointer(start_idx + number_of_pages_requested)
+                        .cast()
             })
     }
 
     fn is_range_free(&self, start_idx: usize, number_of_pages: usize) -> bool {
-        Self::is_range_free_manual(start_idx, number_of_pages, self.metadata)
+        (start_idx..start_idx + number_of_pages).all(|idx| self.metadata[idx].is_free())
     }
 
-    fn is_range_free_manual(
+    fn mark_range_as_used(
+        &mut self,
         start_idx: usize,
         number_of_pages: usize,
-        metadata: &[PageStatus],
-    ) -> bool {
-        (start_idx..start_idx + number_of_pages).all(|idx| metadata[idx] == PageStatus::Free)
-    }
-
-    fn mark_range_as_used(&mut self, start_idx: usize, number_of_pages: usize) {
-        Self::mark_range_as_used_manual(start_idx, number_of_pages, self.metadata);
-    }
-
-    fn mark_range_as_used_manual(
-        start_idx: usize,
-        number_of_pages: usize,
-        metadata: &mut [PageStatus],
+        initialize_if_needed: bool,
     ) {
         // It is clearer to express this the current way it is
         #[allow(clippy::needless_range_loop)]
         for idx in start_idx..start_idx + number_of_pages {
+            // Initialize first used pages
+            if initialize_if_needed && self.metadata[idx] == PageStatus::FirstUse {
+                let page = self.page_idx_to_pointer(idx);
+                // SAFETY: We know that this is a valid pointer inside the heap
+                unsafe {
+                    page.write(MaybeUninit::zeroed());
+                }
+            }
             let status = if idx == start_idx + number_of_pages - 1 {
                 PageStatus::Last
             } else {
                 PageStatus::Used
             };
 
-            metadata[idx] = status;
+            self.metadata[idx] = status;
         }
     }
 
-    fn range_to_start_aligned_and_number_of_pages_manual<T>(
+    fn range_to_start_aligned_and_number_of_pages<T>(
+        &self,
         range: &Range<*const T>,
-        heap_start: *mut Page,
-        heap_end: *mut Page,
     ) -> (usize, usize) {
         let start_aligned = align_down_ptr(range.start, PAGE_SIZE);
         // We don't use the offset_from pointer functions because this requires
         // that both pointers point to the same allocation which is not the case
         let new_length = range.end as usize - start_aligned as usize;
         let number_of_pages = minimum_amount_of_pages(new_length);
-        let start_idx = Self::page_pointer_to_page_idx_manual(
-            NonNull::new(start_aligned as *mut Page)
-                .expect("start_aligned is not allowed to be NULL"),
-            heap_start,
-            heap_end,
+        let start_idx = self.page_pointer_to_page_idx(
+            NonNull::new(start_aligned as *mut _).expect("start_aligned is not allowed to be NULL"),
         );
         (start_idx, number_of_pages)
     }
 
-    fn mark_pointer_range_as_used<T>(
-        range: &Range<*const T>,
-        heap_start: *mut Page,
-        heap_end: *mut Page,
-        metadata: &mut [PageStatus],
-    ) {
-        let (start_idx, number_of_pages) =
-            Self::range_to_start_aligned_and_number_of_pages_manual(range, heap_start, heap_end);
+    fn mark_pointer_range_as_used_without_initialize<T>(&mut self, range: &Range<*const T>) {
+        let (start_idx, number_of_pages) = self.range_to_start_aligned_and_number_of_pages(range);
         assert!(
-            Self::is_range_free_manual(start_idx, number_of_pages, metadata),
-            "Reserved are should be free. Otherwise with have problems with overlapping LAST bits"
+            self.is_range_free(start_idx, number_of_pages),
+            "Reserved area should be free. Otherwise with have problems with overlapping LAST bits"
         );
-        Self::mark_range_as_used_manual(start_idx, number_of_pages, metadata);
+        self.mark_range_as_used(start_idx, number_of_pages, false);
     }
 
     pub fn dealloc(&mut self, page: NonNull<Page>) -> usize {
         let mut count = 0;
-        let mut idx = self.page_pointer_to_page_idx(page);
+        let mut idx = self.page_pointer_to_page_idx(page.cast());
 
         while self.metadata[idx] != PageStatus::Last {
             self.metadata[idx] = PageStatus::Free;
@@ -243,18 +216,25 @@ mod tests {
     use core::{
         mem::MaybeUninit,
         ops::Range,
-        ptr::{addr_of_mut, NonNull},
+        ptr::{addr_of, addr_of_mut, NonNull},
     };
 
+    const MEMORY_PATTERN: u8 = 0x42;
+
     static mut PAGE_ALLOC_MEMORY: [MaybeUninit<u8>; PAGE_SIZE * 8] =
-        [const { MaybeUninit::uninit() }; PAGE_SIZE * 8];
+        [const { MaybeUninit::uninit() }; _];
     static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
 
-    fn init_allocator() {
+    fn init_allocator(fill: bool, reserved_areas: &[Range<*const u8>]) {
         unsafe {
+            if fill {
+                // Miri will catch if there is a bug here. Let's take the easy way.
+                #[allow(static_mut_refs)]
+                PAGE_ALLOC_MEMORY.fill(MaybeUninit::new(MEMORY_PATTERN));
+            }
             PAGE_ALLOC
                 .lock()
-                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY), &[]);
+                .init(&mut *addr_of_mut!(PAGE_ALLOC_MEMORY), reserved_areas);
         }
     }
 
@@ -268,17 +248,17 @@ mod tests {
 
     #[test_case]
     fn clean_start() {
-        init_allocator();
+        init_allocator(false, &[]);
         assert!(PAGE_ALLOC
             .lock()
             .metadata
             .iter()
-            .all(|s| *s == PageStatus::Free));
+            .all(|s| *s == PageStatus::FirstUse));
     }
 
     #[test_case]
     fn exhaustion_allocation() {
-        init_allocator();
+        init_allocator(false, &[]);
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
         let _pages = alloc(number_of_pages).unwrap();
         assert!(alloc(1).is_none());
@@ -292,7 +272,7 @@ mod tests {
 
     #[test_case]
     fn beyond_capacity() {
-        init_allocator();
+        init_allocator(false, &[]);
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
         let pages = alloc(number_of_pages + 1);
         assert!(pages.is_none());
@@ -300,7 +280,7 @@ mod tests {
 
     #[test_case]
     fn all_single_allocations() {
-        init_allocator();
+        init_allocator(false, &[]);
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
         for _ in 0..number_of_pages {
             assert!(alloc(1).is_some());
@@ -310,12 +290,12 @@ mod tests {
 
     #[test_case]
     fn metadata_integrity() {
-        init_allocator();
+        init_allocator(false, &[]);
         let page1 = alloc(1).unwrap();
         assert_eq!(PAGE_ALLOC.lock().metadata[0], PageStatus::Last);
         assert!(PAGE_ALLOC.lock().metadata[1..]
             .iter()
-            .all(|s| *s == PageStatus::Free));
+            .all(|s| *s == PageStatus::FirstUse));
         let page2 = alloc(2).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..3],
@@ -323,7 +303,7 @@ mod tests {
         );
         assert!(PAGE_ALLOC.lock().metadata[3..]
             .iter()
-            .all(|s| *s == PageStatus::Free));
+            .all(|s| *s == PageStatus::FirstUse));
         let page3 = alloc(3).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
@@ -338,7 +318,7 @@ mod tests {
         );
         assert!(PAGE_ALLOC.lock().metadata[6..]
             .iter()
-            .all(|s| *s == PageStatus::Free),);
+            .all(|s| *s == PageStatus::FirstUse),);
         dealloc(page2);
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
@@ -375,5 +355,30 @@ mod tests {
                 PageStatus::Free
             ]
         );
+    }
+
+    #[test_case]
+    fn zero_overwrite() {
+        init_allocator(true, &[]);
+        let first_page = PAGE_ALLOC.lock().pages.start as *const u8;
+        unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
+        let page = PAGE_ALLOC.lock().alloc(1).unwrap().start;
+        unsafe {
+            assert_eq!(page.read(), Page::zero());
+        }
+    }
+
+    #[test_case]
+    fn reserved_pages() {
+        init_allocator(false, &[]);
+
+        let address = PAGE_ALLOC.lock().pages.start as *const u8;
+        init_allocator(true, &[address..address.wrapping_add(1)]);
+
+        let first_page = PAGE_ALLOC.lock().pages.start as *const u8;
+        unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
+
+        let _page = PAGE_ALLOC.lock().alloc(1).unwrap().start;
+        unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
     }
 }
