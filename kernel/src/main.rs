@@ -81,7 +81,6 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     test_main();
 
     let pci_information = pci::parse().expect("pci information must be parsable");
-    info!("{:#x?}", pci_information);
 
     {
         let pci_space_64_bit = pci_information
@@ -120,7 +119,6 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     scheduler::initialize();
 
     let mut pci_devices = enumerate_devices(&pci_information);
-    info!("Got {:#x?}", pci_devices);
 
     assert!(
         pci_devices.network_devices.len() == 1,
@@ -134,4 +132,6 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     net::assign_network_device(network_device);
 
     timer::set_timer(0);
+
+    info!("kernel_init done!");
 }

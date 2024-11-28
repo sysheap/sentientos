@@ -1,7 +1,6 @@
 use super::eh_frame_parser;
 use crate::{
     assert::static_assert_size,
-    debug,
     debugging::{
         eh_frame_parser::EhFrameParser,
         unwinder::{RegisterRule, Unwinder},
@@ -51,8 +50,8 @@ impl<'a> Backtrace<'a> {
         let eh_frame_start = LinkerInformation::eh_frame_start() as *const u8;
         let eh_frame_size = LinkerInformation::eh_frame_size();
 
-        debug!(
-            "eh frame at {:p} with size {:#x}",
+        info!(
+            "Initialize backtrace with eh_frame at {:p} and size {:#x}",
             eh_frame_start, eh_frame_size
         );
 
@@ -352,7 +351,7 @@ mod tests {
     use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CallerSavedRegs};
     use alloc::collections::VecDeque;
     use core::ffi::c_void;
-    use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
+    use unwinding::abi::{_Unwind_Backtrace, _Unwind_GetIP, UnwindContext, UnwindReasonCode};
 
     #[test_case]
     fn backtrace() {

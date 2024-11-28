@@ -19,6 +19,7 @@ pub fn initialize() {
     let elf = ElfFile::parse(INIT).expect("Cannot parse ELF file");
     let process = Process::from_elf(&elf, "init");
     add_process(process);
+    info!("Scheduler initialized and INIT process added to queue");
 }
 
 static CURRENT_PROCESS: Mutex<Option<Arc<Mutex<Process>>>> = Mutex::new(None);

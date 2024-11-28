@@ -11,7 +11,7 @@ use common::{mutex::Mutex, util::align_up};
 use crate::{
     assert::static_assert_size,
     cpu::{read_satp, write_satp_and_fence},
-    debug,
+    debug, info,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESSS,
     klibc::{
@@ -47,6 +47,7 @@ impl LazyStaticKernelPageTables {
         Self {
             inner: Mutex::new(LazyCell::new(|| {
                 let page_tables = Box::new(RootPageTableHolder::new_with_kernel_mapping());
+                info!("Initialized kernel page tables at {:p}", &*page_tables);
                 Box::leak(page_tables)
             })),
         }

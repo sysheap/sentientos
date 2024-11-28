@@ -1,5 +1,5 @@
 use crate::{
-    assert::static_assert_size, debug, klibc::runtime_initialized::RuntimeInitializedData,
+    assert::static_assert_size, debug, info, klibc::runtime_initialized::RuntimeInitializedData,
 };
 use common::{big_endian::BigEndian, consumable_buffer::ConsumableBuffer};
 use core::{
@@ -344,6 +344,7 @@ pub fn get_devicetree_range() -> Range<*const u8> {
 }
 
 pub fn init(device_tree_pointer: *const ()) {
+    info!("Initialize device tree at {device_tree_pointer:p}");
     let device_tree = DeviceTree::new(device_tree_pointer);
     assert!(
         device_tree.get_reserved_areas().is_empty(),
