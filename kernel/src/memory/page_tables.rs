@@ -433,7 +433,7 @@ impl RootPageTableHolder {
 
     pub fn is_userspace_address(&self, address: usize) -> bool {
         self.get_page_table_entry_for_address(address)
-            .map_or(false, |entry| entry.get_user_mode_accessible())
+            .is_some_and(|entry| entry.get_user_mode_accessible())
     }
 
     pub fn translate_userspace_address_to_physical_address<T>(
