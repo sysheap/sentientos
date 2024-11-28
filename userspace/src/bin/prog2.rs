@@ -5,7 +5,7 @@ use userspace::println;
 
 extern crate userspace;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     println!("Hello from Prog2");
 }

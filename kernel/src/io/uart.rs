@@ -18,9 +18,11 @@ pub struct Uart {
 
 impl Uart {
     const unsafe fn new(uart_base_address: usize) -> Self {
-        Self {
-            transmitter: MMIO::new(uart_base_address),
-            lcr: MMIO::new(uart_base_address + 5),
+        unsafe {
+            Self {
+                transmitter: MMIO::new(uart_base_address),
+                lcr: MMIO::new(uart_base_address + 5),
+            }
         }
     }
 

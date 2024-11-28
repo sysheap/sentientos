@@ -55,7 +55,7 @@ mod test;
 #[macro_use]
 extern crate alloc;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     QEMU_UART.lock().init();
 

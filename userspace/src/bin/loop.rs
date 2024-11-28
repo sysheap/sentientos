@@ -5,7 +5,7 @@ use userspace::{println, util::wait};
 
 extern crate userspace;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     println!("Hello from Loop");
     for i in 0..10 {

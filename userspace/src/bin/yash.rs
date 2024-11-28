@@ -10,7 +10,7 @@ extern crate userspace;
 
 const DELETE: u8 = 127;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     println!();
     println!("### YaSH - Yet another Shell ###");

@@ -11,7 +11,7 @@ extern crate userspace;
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     println!("Hello from the udp receiver");
     println!("Listening on {PORT}");

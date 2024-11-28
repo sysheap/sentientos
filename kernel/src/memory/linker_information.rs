@@ -2,7 +2,7 @@ macro_rules! getter_address {
     ($name:ident) => {
         #[cfg(not(miri))]
         pub fn $name() -> usize {
-            extern "C" {
+            unsafe extern "C" {
                 static ${concat(__, $name)}: usize;
             }
             core::ptr::addr_of!(${concat(__, $name)}) as usize

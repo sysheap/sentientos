@@ -23,7 +23,7 @@ pub fn initialize() {
 
 static CURRENT_PROCESS: Mutex<Option<Arc<Mutex<Process>>>> = Mutex::new(None);
 
-extern "C" {
+unsafe extern "C" {
     fn restore_user_context() -> !;
 }
 

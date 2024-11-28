@@ -17,7 +17,7 @@ use crate::{
 
 use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*, InterruptCause};
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn supervisor_mode_trap(
     cause: InterruptCause,
     stval: usize,

@@ -125,7 +125,7 @@ impl PCIDevice {
     }
 
     unsafe fn try_new(address: usize) -> Option<Self> {
-        let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address);
+        let pci_device: MMIO<GeneralDevicePciHeader> = unsafe { MMIO::new(address) };
         if pci_device.vendor_id == INVALID_VENDOR_ID {
             return None;
         }

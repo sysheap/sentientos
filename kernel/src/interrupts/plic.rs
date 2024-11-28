@@ -17,12 +17,14 @@ impl Plic {
     const unsafe fn new(plic_base: usize) -> Self {
         // These constants are set to interrupt context 1 which corresponds to Supervisor Mode on Hart 0
         // If we support multiple harts, we will need to change these constants to be configurable
-        Self {
-            priority_register_base: MMIO::new(plic_base),
-            // pending_register: MMIO::new(plic_base + 0x1000),
-            enable_register: MMIO::new(plic_base + 0x2080),
-            threshold_register: MMIO::new(plic_base + 0x20_1000),
-            claim_complete_register: MMIO::new(plic_base + 0x20_1004),
+        unsafe {
+            Self {
+                priority_register_base: MMIO::new(plic_base),
+                // pending_register: MMIO::new(plic_base + 0x1000),
+                enable_register: MMIO::new(plic_base + 0x2080),
+                threshold_register: MMIO::new(plic_base + 0x20_1000),
+                claim_complete_register: MMIO::new(plic_base + 0x20_1004),
+            }
         }
     }
     pub fn enable(&mut self, interrupt_id: u32) {

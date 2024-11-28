@@ -78,7 +78,7 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
         "--bins",
         "--target-dir",
         "../../target-userspace",
-        "--out-dir",
+        "--artifact-dir",
         compiled_userspace_path.to_str().unwrap(),
         "-Z",
         "unstable-options",
