@@ -1,6 +1,6 @@
 use core::{
     cell::LazyCell,
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Deref, Range},
     ptr::null_mut,
 };
@@ -47,7 +47,7 @@ impl LazyStaticKernelPageTables {
         Self {
             inner: Mutex::new(LazyCell::new(|| {
                 let page_tables = Box::new(RootPageTableHolder::new_with_kernel_mapping());
-                info!("Initialized kernel page tables at {:p}", &*page_tables);
+                info!("Initialized kernel {}", &*page_tables);
                 Box::leak(page_tables)
             })),
         }
@@ -69,17 +69,37 @@ unsafe impl Sync for LazyStaticKernelPageTables {}
 /// Keeps track of already mapped virtual address ranges
 /// We use that to prevent of overlapping mapping
 struct MappingEntry {
-    range: core::ops::Range<usize>,
+    virtual_range: core::ops::Range<usize>,
     name: &'static str,
+    privileges: XWRMode,
 }
 
 impl MappingEntry {
-    fn new(range: Range<usize>, name: &'static str) -> Self {
-        Self { range, name }
+    fn new(virtual_range: Range<usize>, name: &'static str, privileges: XWRMode) -> Self {
+        Self {
+            virtual_range,
+            name,
+            privileges,
+        }
     }
 
     fn contains(&self, range: Range<usize>) -> bool {
-        self.range.start <= range.end && range.start <= self.range.end
+        self.virtual_range.start <= range.end && range.start <= self.virtual_range.end
+    }
+}
+
+impl Display for MappingEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let shown_end = self.virtual_range.end + PAGE_SIZE;
+        write!(
+            f,
+            "{:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
+            self.virtual_range.start,
+            shown_end,
+            shown_end - self.virtual_range.start,
+            self.privileges,
+            self.name
+        )
     }
 }
 
@@ -95,6 +115,16 @@ impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let page_table = self.table();
         write!(f, "RootPageTableHolder({:p})", page_table)
+    }
+}
+
+impl Display for RootPageTableHolder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "Pagetables at {:p}", self.root_table)?;
+        for mapping in &self.already_mapped {
+            writeln!(f, "{}", mapping)?;
+        }
+        Ok(())
     }
 }
 
@@ -295,8 +325,11 @@ impl RootPageTableHolder {
         }
 
         // Add mapping
-        self.already_mapped
-            .push(MappingEntry::new(virtual_address_start..virtual_end, name));
+        self.already_mapped.push(MappingEntry::new(
+            virtual_address_start..virtual_end,
+            name,
+            privileges,
+        ));
 
         let root_page_table = self.table_mut();
 
