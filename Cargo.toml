@@ -8,7 +8,7 @@ default-members = ["kernel"]
 resolver = "3"
 
 [workspace.package]
-description = "Yet Another Risc/Rust Operating System"
+description = "Yet another Rust Operating System (YaROS)"
 authors = ["Maurice Hieronymus <yaros@ilovebinary.com>"]
 version = "0.1.0"
 
