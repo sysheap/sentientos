@@ -27,8 +27,8 @@ _start:
 	csrw sie, zero
 
 	# Clear bss segment
-	la t0, __bss_start
-	la t1, __bss_end
+	la t0, __start_bss
+	la t1, __stop_bss
 	bgeu t0, t1, bss_cleared
 
 bss_loop:
@@ -38,7 +38,7 @@ bss_loop:
 
 bss_cleared:
 
-	la sp, __kernel_stack_end
+	la sp, __stop_kernel_stack
 
 	# Load trap vector machine mode
 	la t0, supervisor_trap_vector

@@ -50,11 +50,11 @@ pub fn heap_size() -> usize {
         .expect("Memory node must have a reg property");
 
     let ram_end_address = reg.address + reg.size;
-    ram_end_address - LinkerInformation::heap_start()
+    ram_end_address - LinkerInformation::__start_heap()
 }
 
 pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
-    let heap_start = LinkerInformation::heap_start();
+    let heap_start = LinkerInformation::__start_heap();
     let heap_size = heap_size();
 
     info!("Initializing page allocator");

@@ -15,48 +15,35 @@ SECTIONS
 {
   . = MEMORY_START;
 
-  .text : ALIGN(4K) {
-    PROVIDE(__text_start = .);
+  text : ALIGN(4K) {
     PROVIDE(__executable_start = .);
     *(.text.init) *(.text .text.*)
     PROVIDE(__etext = .);
-    PROVIDE(__text_end = .);
   }
 
-  .rodata : ALIGN(4K) {
-    PROVIDE(__rodata_start = .);
+  rodata : ALIGN(4K) {
     *(.rodata .rodata.* .srodata .srodata.*)
-    PROVIDE(__rodata_end = .);
   }
 
-  .eh_frame : ALIGN(4K) {
+  eh_frame : ALIGN(4K) {
     PROVIDE(__eh_frame = .);
-    PROVIDE(__eh_frame_start = .);
     KEEP (*(.eh_frame)) *(.eh_frame.*)
-    PROVIDE(__eh_frame_end = .);
   }
 
-  .data : ALIGN(4K) {
-    PROVIDE(__data_start = .);
-   PROVIDE(__global_pointer$ = . + 0x800);
+  data : ALIGN(4K) {
+    PROVIDE(__global_pointer$ = . + 0x800);
     *(.sdata .sdata.*) *(.data .data.*)
-    PROVIDE(__data_end = .);
   }
 
-  .bss (NOLOAD) : ALIGN(4K) {
-    PROVIDE(__bss_start = .);
+  bss (NOLOAD) : ALIGN(4K) {
     *(.sbss .sbss.*) *(.bss .bss.*)
-    PROVIDE(__bss_end = .);
   }
 
-  .kernel_stack (NOLOAD) : ALIGN(4K) {
-    PROVIDE(__kernel_stack_start = .);
+  kernel_stack (NOLOAD) : ALIGN(4K) {
     . = . + 512K;
-    PROVIDE(__kernel_stack_end = .);
   }
 
-  .heap (NOLOAD) : ALIGN(4K) {
-    PROVIDE(__heap_start = .);
+  heap (NOLOAD) : ALIGN(4K) {
     # The end of the heap will be calcualted at runtime
   }
 }

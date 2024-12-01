@@ -3,9 +3,9 @@ macro_rules! getter_address {
         #[cfg(not(miri))]
         pub fn $name() -> usize {
             unsafe extern "C" {
-                static ${concat(__, $name)}: usize;
+                static $name: usize;
             }
-            core::ptr::addr_of!(${concat(__, $name)}) as usize
+            core::ptr::addr_of!($name) as usize
         }
         #[cfg(miri)]
         pub fn $name() -> usize {
@@ -19,10 +19,12 @@ macro_rules! getter_address {
 
 macro_rules! getter {
     ($name:ident) => {
-        getter_address!(${concat($name, _start)});
-        getter_address!(${concat($name, _end)});
+        // The linker generates magic variables which marks section start and end in the form
+        // __start_SECTION and __stop_SECTION
+        getter_address!(${concat(__start_, $name)});
+        getter_address!(${concat(__stop_, $name)});
         pub fn ${concat($name, _size)}() -> usize {
-            Self::${concat($name, _end)}() - Self::${concat($name, _start)}()
+            Self::${concat(__stop_, $name)}() - Self::${concat(__start_, $name)}()
         }
     };
 }
@@ -34,7 +36,7 @@ macro_rules! count_idents {
 }
 
 macro_rules! sections {
-    ($(.$name:ident, $xwr:expr;)*) => {
+    ($($name:ident, $xwr:expr;)*) => {
         use $crate::memory::page_tables::MappingDescription;
         use $crate::memory::page_tables::XWRMode;
 
@@ -45,13 +47,13 @@ macro_rules! sections {
 
             // The heaps end address will be calcualted at runtime
             // Therefore, it is handled as a special case
-            getter_address!(heap_start);
+            getter_address!(__start_heap);
 
             #[cfg(not(miri))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
-                      virtual_address_start: LinkerInformation::${concat($name, _start)}(),
+                      virtual_address_start: LinkerInformation::${concat(__start_, $name)}(),
                       size: LinkerInformation::${concat($name, _size)}(),
                       privileges: $xwr,
                       name: stringify!($name)
@@ -68,10 +70,10 @@ macro_rules! sections {
 }
 
 sections! {
-    .text, XWRMode::ReadExecute;
-    .rodata, XWRMode::ReadOnly;
-    .eh_frame, XWRMode::ReadOnly;
-    .data, XWRMode::ReadWrite;
-    .bss, XWRMode::ReadWrite;
-    .kernel_stack, XWRMode::ReadWrite;
+    text, XWRMode::ReadExecute;
+    rodata, XWRMode::ReadOnly;
+    eh_frame, XWRMode::ReadOnly;
+    data, XWRMode::ReadWrite;
+    bss, XWRMode::ReadWrite;
+    kernel_stack, XWRMode::ReadWrite;
 }

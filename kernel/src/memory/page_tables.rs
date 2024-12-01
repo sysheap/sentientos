@@ -200,7 +200,7 @@ impl RootPageTableHolder {
         }
 
         root_page_table_holder.map_identity_kernel(
-            LinkerInformation::heap_start(),
+            LinkerInformation::__start_heap(),
             heap_size(),
             XWRMode::ReadWrite,
             "HEAP",

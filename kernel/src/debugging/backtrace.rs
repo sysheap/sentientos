@@ -47,7 +47,7 @@ impl<'a> Backtrace<'a> {
     fn init(&mut self) {
         assert!(self.fdes.is_empty(), "Init can only be called once.");
 
-        let eh_frame_start = LinkerInformation::eh_frame_start() as *const u8;
+        let eh_frame_start = LinkerInformation::__start_eh_frame() as *const u8;
         let eh_frame_size = LinkerInformation::eh_frame_size();
 
         info!(
@@ -58,7 +58,7 @@ impl<'a> Backtrace<'a> {
         let eh_frame = unsafe { core::slice::from_raw_parts(eh_frame_start, eh_frame_size) };
 
         let eh_frame_parser = EhFrameParser::new(eh_frame);
-        let eh_frames = eh_frame_parser.iter(LinkerInformation::eh_frame_start());
+        let eh_frames = eh_frame_parser.iter(LinkerInformation::__start_eh_frame());
 
         for frame in eh_frames {
             self.fdes.push(frame);
