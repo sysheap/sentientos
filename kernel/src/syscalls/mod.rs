@@ -6,18 +6,21 @@ use alloc::string::String;
 use common::{
     net::UDPDescriptor,
     syscalls::{
-        kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SysExecuteError,
-        SysSocketError, SysWaitError,
+        SysExecuteError, SysSocketError, SysWaitError, kernel::KernelSyscalls,
+        userspace_argument::UserspaceArgument,
     },
 };
 
 use crate::{
-    debug,
+    cpu, debug,
     io::stdin_buf::STDIN_BUFFER,
     klibc::macros::unwrap_or_return,
-    net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
+    net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
     print,
-    processes::scheduler::{self, get_current_process_expect, let_current_process_wait_for},
+    processes::scheduler::{
+        self, get_current_process_expect, let_current_process_wait_for,
+        let_current_process_wait_for_input,
+    },
     syscalls::validator::UserspaceArgumentValidator,
 };
 
@@ -26,6 +29,9 @@ use self::validator::{FailibleMutableSliceValidator, FailibleSliceValidator};
 struct SyscallHandler;
 
 impl KernelSyscalls for SyscallHandler {
+    fn sys_idle() {
+        cpu::wait_for_interrupt();
+    }
     fn sys_panic() {
         panic!("Userspace triggered kernel panic");
     }
@@ -36,6 +42,13 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_read_input() -> Option<u8> {
         let mut stdin = STDIN_BUFFER.lock();
         stdin.pop()
+    }
+    fn sys_read_input_wait() -> u8 {
+        if let Some(input) = STDIN_BUFFER.lock().pop() {
+            input
+        } else {
+            let_current_process_wait_for_input();
+        }
     }
 
     fn sys_exit(status: UserspaceArgument<isize>) {

@@ -1,4 +1,8 @@
-use crate::{info, klibc::sizes::MiB};
+use crate::{
+    info,
+    klibc::sizes::MiB,
+    processes::{process_list, scheduler::get_current_process},
+};
 
 pub mod backtrace;
 mod eh_frame_parser;
@@ -18,4 +22,12 @@ pub fn dump_current_state() {
         "Page allocator {} / {} used",
         used_heap_pages, total_heap_pages
     );
+
+    process_list::dump();
+
+    let current_process = get_current_process();
+    if let Some(process) = current_process {
+        let process = process.lock();
+        info!("Current process:\n{:?}", *process);
+    }
 }

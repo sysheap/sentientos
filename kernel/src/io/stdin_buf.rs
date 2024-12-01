@@ -1,3 +1,4 @@
+use crate::processes::process_list;
 use alloc::vec::Vec;
 use common::mutex::Mutex;
 
@@ -13,6 +14,7 @@ impl StdinBuffer {
     }
 
     pub fn push(&mut self, byte: u8) {
+        process_list::notify_input();
         self.data.push(byte);
     }
 

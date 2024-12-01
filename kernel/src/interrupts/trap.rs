@@ -56,13 +56,13 @@ extern "C" fn supervisor_mode_trap(
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
     match cause.get_exception_code() {
         ENVIRONMENT_CALL_FROM_U_MODE => {
-            cpu::write_sepc(sepc + 4); // Skip the ecall instruction
             let nr = trap_frame[Register::a0];
             let arg1 = trap_frame[Register::a1];
             let arg2 = trap_frame[Register::a2];
             let arg3 = trap_frame[Register::a3];
             (trap_frame[Register::a0], trap_frame[Register::a1]) =
                 handle_syscall(nr, arg1, arg2, arg3);
+            cpu::write_sepc(sepc + 4); // Skip the ecall instruction
         }
         _ => {
             if cause.is_stack_overflow(stval) {

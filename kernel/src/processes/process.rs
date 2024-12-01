@@ -11,7 +11,7 @@ use common::{
 use crate::{
     debug,
     klibc::elf::ElfFile,
-    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
+    memory::{PAGE_SIZE, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     net::sockets::SharedAssignedSocket,
     processes::loader::{self, LoadedElf},
 };
@@ -24,6 +24,7 @@ const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 pub enum ProcessState {
     Runnable,
     WaitingFor(Pid),
+    WaitingForInput,
 }
 
 fn get_next_pid() -> Pid {

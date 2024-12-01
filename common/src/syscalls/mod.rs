@@ -35,6 +35,7 @@ pub enum SysSocketError {
 syscalls!(
     sys_write_char(c: char) -> ();
     sys_read_input() -> Option<u8>;
+    sys_read_input_wait() -> u8;
     sys_exit(status: isize) -> ();
     // TODO: Implement slice as argument using a wrapper
     sys_execute(name: &u8, length: usize) -> Result<u64, SysExecuteError>;
@@ -44,4 +45,5 @@ syscalls!(
     sys_write_back_udp_socket(descriptor: UDPDescriptor, buffer: &u8, length: usize) -> Result<usize, SysSocketError>;
     sys_read_udp_socket(descriptor: UDPDescriptor, buffer: &mut u8, length: usize) -> Result<usize, SysSocketError>;
     sys_panic() -> ();
+    sys_idle() -> ();
 );

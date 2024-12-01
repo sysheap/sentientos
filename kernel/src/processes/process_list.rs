@@ -1,12 +1,31 @@
 use alloc::{collections::VecDeque, sync::Arc};
 use common::mutex::Mutex;
 
+use crate::info;
+
 use super::process::{Pid, Process, ProcessState};
 
 static PROCESSES: Mutex<VecDeque<Arc<Mutex<Process>>>> = Mutex::new(VecDeque::new());
 
 pub fn add_process(process: Process) {
     PROCESSES.lock().push_front(Arc::new(Mutex::new(process)));
+}
+
+pub fn is_empty() -> bool {
+    PROCESSES.lock().is_empty()
+}
+
+pub fn dump() {
+    let processes = PROCESSES.lock();
+    for process in &*processes {
+        let process = process.lock();
+        info!(
+            "PID={} NAME={} STATE={:?}",
+            process.get_pid(),
+            process.get_name(),
+            process.get_state()
+        );
+    }
 }
 
 pub fn next_runnable() -> Option<Arc<Mutex<Process>>> {
@@ -44,6 +63,16 @@ pub fn notify_died(pid: Pid) {
     for process in processes.iter() {
         if process.lock().get_state() == ProcessState::WaitingFor(pid) {
             process.lock().set_state(ProcessState::Runnable);
+        }
+    }
+}
+
+pub fn notify_input() {
+    let processes = PROCESSES.lock();
+    for process in processes.iter() {
+        let mut process = process.lock();
+        if process.get_state() == ProcessState::WaitingForInput {
+            process.set_state(ProcessState::Runnable);
         }
     }
 }
