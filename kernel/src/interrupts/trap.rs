@@ -12,7 +12,7 @@ use crate::{
         page_tables::{KERNEL_PAGE_TABLES, activate_page_table},
     },
     processes::{
-        scheduler::{self, get_current_process},
+        scheduler::{self, get_current_process, is_idle_process_running},
         timer,
     },
     syscalls::handle_syscall,
@@ -32,10 +32,9 @@ extern "C" fn supervisor_mode_trap(
     debug!("Activate KERNEL_PAGE_TABLES");
     activate_page_table(&KERNEL_PAGE_TABLES);
     debug!(
-        "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})\nTrap Frame: {:?}",
+        "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})",
         sepc,
         cause.get_reason(),
-        trap_frame
     );
     if cause.is_interrupt() {
         handle_interrupt(cause, stval, sepc, trap_frame);
@@ -115,7 +114,15 @@ fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_fr
 }
 
 fn handle_supervisor_timer_interrupt() {
-    timer::set_timer(10);
+    if is_idle_process_running() {
+        debug!("Deactivate timer interrupt for idle process");
+        // We only want to wake up if the idle is not running
+        // If the idle process is schedule it means that no other
+        // process is able to make progress.
+        timer::disable_timer();
+    } else {
+        timer::set_timer(10);
+    }
     scheduler::schedule();
 }
 

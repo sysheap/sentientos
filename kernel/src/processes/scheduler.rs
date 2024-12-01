@@ -21,7 +21,8 @@ pub fn initialize() {
     add_process(process);
 
     let elf = ElfFile::parse(IDLE).expect("Cannot parse ELF file");
-    let process = Process::from_elf(&elf, "idle");
+    let mut process = Process::from_elf(&elf, "idle");
+    process.set_as_idle_process();
     add_process(process);
 
     info!("Scheduler initialized and INIT and IDLE process added to queue");
@@ -31,6 +32,14 @@ static CURRENT_PROCESS: Mutex<Option<Arc<Mutex<Process>>>> = Mutex::new(None);
 
 unsafe extern "C" {
     fn restore_user_context() -> !;
+}
+
+pub fn is_idle_process_running() -> bool {
+    if let Some(process) = get_current_process() {
+        process.lock().is_idle_process()
+    } else {
+        false
+    }
 }
 
 pub fn get_current_process_expect() -> Arc<Mutex<Process>> {
@@ -110,9 +119,15 @@ fn prepare_next_process() {
     let current_process = CURRENT_PROCESS.lock().take();
 
     if let Some(current_process) = current_process {
-        current_process.lock().set_program_counter(cpu::read_sepc());
-        debug!("Saved context to current process");
-        debug!("Current process: {:?}", current_process);
+        {
+            let mut current_process = current_process.lock();
+            current_process.set_program_counter(cpu::read_sepc());
+            debug!(
+                "Unscheduling PID={} NAME={}",
+                current_process.get_pid(),
+                current_process.get_name()
+            );
+        }
         process_list::enqueue(current_process);
     }
 
@@ -137,7 +152,11 @@ fn prepare_next_process() {
 
         page_tables::activate_page_table(page_table);
 
-        debug!("Next process: {:?}", next_process);
+        debug!(
+            "Scheduling PID={} NAME={}",
+            next_process.get_pid(),
+            next_process.get_name()
+        );
     }
 
     *CURRENT_PROCESS.lock() = Some(next_process_ref);

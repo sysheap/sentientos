@@ -28,6 +28,11 @@ pub fn dump_current_state() {
     let current_process = get_current_process();
     if let Some(process) = current_process {
         let process = process.lock();
-        info!("Current process:\n{:?}", *process);
+        info!(
+            "Current Process: PID={} NAME={} STATE={:?}",
+            process.get_pid(),
+            process.get_name(),
+            process.get_state()
+        );
     }
 }

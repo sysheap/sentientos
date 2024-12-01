@@ -1,6 +1,7 @@
 // This variable contains the list of modules that should be logged. If "kernel" is specified, every module is logged.
 const LOG_FOLLOWING_MODULES: &[&str] = &[];
-const DONT_LOG_FOLLOWING_MODULES: &[&str] = &["kernel::interrupts::trap"];
+const DONT_LOG_FOLLOWING_MODULES: &[&str] =
+    &["kernel::interrupts::trap", "kernel::debugging::unwinder"];
 
 // TODO: This should be made compile-time, such that this thing doesn't need to be queried at runtime.
 pub fn should_log_module(module_name: &str) -> bool {

@@ -2,8 +2,8 @@
 #![no_main]
 
 use alloc::string::{String, ToString};
-use common::syscalls::{sys_execute, sys_exit, sys_read_input, sys_wait};
-use userspace::{print, println, util::wait};
+use common::syscalls::{sys_execute, sys_exit, sys_read_input_wait, sys_wait};
+use userspace::{print, println};
 
 extern crate alloc;
 extern crate userspace;
@@ -19,12 +19,7 @@ fn main() {
         print!("$ ");
         let mut input = String::new();
         loop {
-            let result = loop {
-                if let Some(c) = sys_read_input() {
-                    break c;
-                }
-                wait(10000);
-            };
+            let result = sys_read_input_wait();
             match result {
                 b'\r' => {
                     // Carriage return

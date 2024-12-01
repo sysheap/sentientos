@@ -76,6 +76,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     memory::init_page_allocator(&[device_tree_range]);
 
     backtrace::init();
+    processes::timer::init();
 
     #[cfg(test)]
     test_main();

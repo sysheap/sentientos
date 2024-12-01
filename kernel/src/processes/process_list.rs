@@ -3,7 +3,10 @@ use common::mutex::Mutex;
 
 use crate::info;
 
-use super::process::{Pid, Process, ProcessState};
+use super::{
+    process::{Pid, Process, ProcessState},
+    timer,
+};
 
 static PROCESSES: Mutex<VecDeque<Arc<Mutex<Process>>>> = Mutex::new(VecDeque::new());
 
@@ -31,19 +34,24 @@ pub fn dump() {
 pub fn next_runnable() -> Option<Arc<Mutex<Process>>> {
     let mut processes = PROCESSES.lock();
     let mut index_to_remove = None;
+    let mut index_to_remove_idle = None;
 
     for (index, process) in processes.iter().enumerate() {
-        if process.lock().get_state() == ProcessState::Runnable {
-            // Replace this condition with your property
-            index_to_remove = Some(index);
-            break;
+        let process = process.lock();
+        if process.get_state() == ProcessState::Runnable {
+            if process.is_idle_process() {
+                index_to_remove_idle = Some(index);
+            } else {
+                index_to_remove = Some(index);
+                break;
+            }
         }
     }
 
     if let Some(index) = index_to_remove {
         processes.remove(index)
     } else {
-        None
+        processes.remove(index_to_remove_idle.expect("There must always be an idle process."))
     }
 }
 
@@ -69,10 +77,16 @@ pub fn notify_died(pid: Pid) {
 
 pub fn notify_input() {
     let processes = PROCESSES.lock();
+    let mut notified = false;
     for process in processes.iter() {
         let mut process = process.lock();
         if process.get_state() == ProcessState::WaitingForInput {
             process.set_state(ProcessState::Runnable);
+            notified = true;
         }
+    }
+    if notified {
+        // Let's schedule a new process which can process the input
+        timer::set_timer(0);
     }
 }
