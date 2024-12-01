@@ -7,6 +7,8 @@ static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 #[cfg(not(miri))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    use crate::memory::page_tables::KERNEL_PAGE_TABLES;
+
     crate::cpu::disable_gloabl_interrupts();
 
     // SAFTEY: The worst what happen is scrambled output
@@ -23,6 +25,7 @@ fn panic(info: &PanicInfo) -> ! {
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
+    println!("Kernel Page Tables {}", &*KERNEL_PAGE_TABLES);
     abort_if_double_panic();
     crate::debugging::backtrace::print();
     crate::debugging::dump_current_state();

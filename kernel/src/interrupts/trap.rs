@@ -7,15 +7,19 @@ use crate::{
     debug,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
-    memory::page_tables::{activate_page_table, KERNEL_PAGE_TABLES},
+    memory::{
+        linker_information::LinkerInformation,
+        page_tables::{KERNEL_PAGE_TABLES, activate_page_table},
+    },
     processes::{
         scheduler::{self, get_current_process},
         timer,
     },
     syscalls::handle_syscall,
+    warn,
 };
 
-use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*, InterruptCause};
+use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*};
 
 #[unsafe(no_mangle)]
 extern "C" fn supervisor_mode_trap(
@@ -61,6 +65,16 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
                 handle_syscall(nr, arg1, arg2, arg3);
         }
         _ => {
+            if cause.is_stack_overflow(stval) {
+                let guard_range = LinkerInformation::__start_stack_overflow_guard()
+                    ..LinkerInformation::__start_kernel_stack();
+                warn!(
+                    "DANGER! STACK OVERFLOW DETECTED! stval={:p} inside guard page {:p}-{:p}",
+                    stval as *const (),
+                    guard_range.start as *const (),
+                    guard_range.end as *const ()
+                );
+            }
             let current_process = get_current_process();
             if let Some(current_process) = current_process {
                 let current_process = current_process.lock();
@@ -76,15 +90,15 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
                 );
             } else {
                 panic!(
-                "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
-                cause.get_reason(),
-                cause.get_exception_code(),
-                stval,
-                sepc,
-                false,
-                "No scheduled process",
-                trap_frame
-            );
+                    "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
+                    cause.get_reason(),
+                    cause.get_exception_code(),
+                    stval,
+                    sepc,
+                    false,
+                    "No scheduled process",
+                    trap_frame
+                );
             }
         }
     }

@@ -26,6 +26,9 @@ macro_rules! getter {
         pub fn ${concat($name, _size)}() -> usize {
             Self::${concat(__stop_, $name)}() - Self::${concat(__start_, $name)}()
         }
+        pub fn ${concat($name, _range)}() -> core::ops::Range<usize> {
+            Self::${concat(__start_, $name)}()..Self::${concat(__stop_, $name)}()
+        }
     };
 }
 
@@ -42,12 +45,16 @@ macro_rules! sections {
 
         pub struct LinkerInformation;
 
+        #[allow(dead_code)]
         impl LinkerInformation {
             $(getter!($name);)*
 
             // The heaps end address will be calcualted at runtime
             // Therefore, it is handled as a special case
             getter_address!(__start_heap);
+
+            // This page will not be mapped.
+            getter!(stack_overflow_guard);
 
             #[cfg(not(miri))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
