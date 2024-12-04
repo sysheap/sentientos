@@ -26,10 +26,10 @@ miri: build
     MIRIFLAGS="-Zmiri-permissive-provenance -Zmiri-env-forward=RUST_BACKTRACE" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
 debug:
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"' \; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"' \; attach
 
 debugf FUNC:
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -h 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"'\; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"'\; attach
 
 disassm: build
     riscv64-unknown-elf-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
