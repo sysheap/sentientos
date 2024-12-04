@@ -10,6 +10,6 @@ fn main() {
     println!("Hello from Loop");
     for i in 0..10 {
         println!("Looping... {}", i);
-        wait(1000000000);
+        wait(100000000);
     }
 }

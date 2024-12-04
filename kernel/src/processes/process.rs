@@ -46,7 +46,6 @@ pub struct Process {
     free_mmap_address: usize,
     next_free_descriptor: u64,
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
-    idle_process: bool,
 }
 
 impl Debug for Process {
@@ -85,14 +84,6 @@ impl Process {
         let ptr = self.free_mmap_address as *mut u8;
         self.free_mmap_address += number_of_pages * PAGE_SIZE;
         ptr
-    }
-
-    pub fn set_as_idle_process(&mut self) {
-        self.idle_process = true;
-    }
-
-    pub fn is_idle_process(&self) -> bool {
-        self.idle_process
     }
 
     pub fn register_state_ptr(&self) -> *const TrapFrame {
@@ -154,7 +145,6 @@ impl Process {
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             next_free_descriptor: 0,
             open_udp_sockets: BTreeMap::new(),
-            idle_process: false,
         }
     }
 

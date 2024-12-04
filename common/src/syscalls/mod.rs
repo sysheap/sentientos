@@ -45,5 +45,4 @@ syscalls!(
     sys_write_back_udp_socket(descriptor: UDPDescriptor, buffer: &u8, length: usize) -> Result<usize, SysSocketError>;
     sys_read_udp_socket(descriptor: UDPDescriptor, buffer: &mut u8, length: usize) -> Result<usize, SysSocketError>;
     sys_panic() -> ();
-    sys_idle() -> ();
 );

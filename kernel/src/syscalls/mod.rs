@@ -12,7 +12,7 @@ use common::{
 };
 
 use crate::{
-    cpu, debug,
+    debug,
     io::stdin_buf::STDIN_BUFFER,
     klibc::macros::unwrap_or_return,
     net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
@@ -29,9 +29,6 @@ use self::validator::{FailibleMutableSliceValidator, FailibleSliceValidator};
 struct SyscallHandler;
 
 impl KernelSyscalls for SyscallHandler {
-    fn sys_idle() {
-        cpu::wait_for_interrupt();
-    }
     fn sys_panic() {
         panic!("Userspace triggered kernel panic");
     }

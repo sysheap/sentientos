@@ -34,24 +34,19 @@ pub fn dump() {
 pub fn next_runnable() -> Option<Arc<Mutex<Process>>> {
     let mut processes = PROCESSES.lock();
     let mut index_to_remove = None;
-    let mut index_to_remove_idle = None;
 
     for (index, process) in processes.iter().enumerate() {
         let process = process.lock();
         if process.get_state() == ProcessState::Runnable {
-            if process.is_idle_process() {
-                index_to_remove_idle = Some(index);
-            } else {
-                index_to_remove = Some(index);
-                break;
-            }
+            index_to_remove = Some(index);
+            break;
         }
     }
 
     if let Some(index) = index_to_remove {
         processes.remove(index)
     } else {
-        processes.remove(index_to_remove_idle.expect("There must always be an idle process."))
+        None
     }
 }
 

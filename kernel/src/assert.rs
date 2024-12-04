@@ -1,6 +1,6 @@
 #[allow(dead_code)]
-pub fn assert_unreachable(message: &str) -> ! {
-    panic!("Unreachable: {}", message);
+pub fn assert_unreachable() -> ! {
+    panic!("assert_unreachable");
 }
 
 macro_rules! static_assert_size {

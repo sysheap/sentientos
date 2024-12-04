@@ -2,6 +2,8 @@ use core::arch::asm;
 
 use common::syscalls::trap_frame::TrapFrame;
 
+use crate::assert::assert_unreachable;
+
 pub fn write_sscratch_register(value: *const TrapFrame) {
     unsafe {
         asm!("csrw sscratch, {}", in(reg) value);
@@ -24,7 +26,7 @@ pub fn read_sepc() -> usize {
 
 pub unsafe fn write_satp_and_fence(satp_val: usize) {
     unsafe {
-        asm!("csrw satp, {satp_val}", satp_val = in(reg) satp_val);
+        asm!("csrw satp, {}", in(reg) satp_val);
         asm!("sfence.vma");
     }
 }
@@ -50,14 +52,45 @@ pub fn memory_fence() {
 pub fn disable_gloabl_interrupts() {
     unsafe {
         asm!(
-            "li t0, 0b10
-            csrc sstatus, t0",
-        out("t0") _);
+            "csrc sstatus, {}",
+        in(reg) 0b10);
     }
 }
 
 pub fn wait_for_interrupt() {
     unsafe {
         asm!("wfi");
+    }
+}
+
+pub fn sret_to_kernel() -> ! {
+    unsafe {
+        asm!(
+            "
+                csrs sstatus, {}
+                sret
+            ", in(reg) (1<<8)
+        )
+    }
+    assert_unreachable();
+}
+
+const SIE_STIE: usize = 5;
+
+pub fn disable_timer_interrupt() {
+    unsafe {
+        asm!("
+                csrc sie, {}
+            ", in(reg) (1 << SIE_STIE)
+        )
+    }
+}
+
+pub fn enable_timer_interrupt() {
+    unsafe {
+        asm!("
+                csrs sie, {}
+            ", in(reg) (1 << SIE_STIE)
+        )
     }
 }

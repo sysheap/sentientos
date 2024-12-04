@@ -1,8 +1,6 @@
-use core::arch::asm;
-
+use crate::{cpu, debug, device_tree, klibc::runtime_initialized::RuntimeInitializedData, sbi};
 use common::big_endian::BigEndian;
-
-use crate::{device_tree, klibc::runtime_initialized::RuntimeInitializedData, sbi};
+use core::arch::asm;
 
 pub const CLINT_BASE: usize = 0x2000000;
 pub const CLINT_SIZE: usize = 0x10000;
@@ -23,14 +21,20 @@ pub fn init() {
 }
 
 pub fn set_timer(milliseconds: u64) {
+    debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();
     assert_eq!(*CLOCKS_PER_SEC / 1000, 10_000);
     let next = current + ((*CLOCKS_PER_SEC / 1000) * milliseconds);
     sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
+    cpu::enable_timer_interrupt();
 }
 
 pub fn disable_timer() {
-    sbi::extensions::timer_extension::sbi_set_timer(u64::MAX).assert_success();
+    debug!("disabling timer");
+    cpu::disable_timer_interrupt();
+    // Somehow u64::MAX triggers timer interrupt indefinitely
+    // u64::MAX - 1 works as intended.
+    sbi::extensions::timer_extension::sbi_set_timer(u64::MAX - 1).assert_success();
 }
 
 fn get_current_clocks() -> u64 {

@@ -1,7 +1,4 @@
-use core::panic;
-
-use common::syscalls::trap_frame::{Register, TrapFrame};
-
+use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*};
 use crate::{
     cpu::{self, read_satp, write_satp_and_fence},
     debug,
@@ -11,15 +8,12 @@ use crate::{
         linker_information::LinkerInformation,
         page_tables::{KERNEL_PAGE_TABLES, activate_page_table},
     },
-    processes::{
-        scheduler::{self, get_current_process, is_idle_process_running},
-        timer,
-    },
+    processes::scheduler::{self, get_current_process},
     syscalls::handle_syscall,
     warn,
 };
-
-use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*};
+use common::syscalls::trap_frame::{Register, TrapFrame};
+use core::panic;
 
 #[unsafe(no_mangle)]
 extern "C" fn supervisor_mode_trap(
@@ -50,6 +44,7 @@ extern "C" fn supervisor_mode_trap(
     unsafe {
         write_satp_and_fence(old_tables);
     }
+    debug!("Return from supervisor_mode_trap");
 }
 
 fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
@@ -114,15 +109,6 @@ fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_fr
 }
 
 fn handle_supervisor_timer_interrupt() {
-    if is_idle_process_running() {
-        debug!("Deactivate timer interrupt for idle process");
-        // We only want to wake up if the idle is not running
-        // If the idle process is schedule it means that no other
-        // process is able to make progress.
-        timer::disable_timer();
-    } else {
-        timer::set_timer(10);
-    }
     scheduler::schedule();
 }
 

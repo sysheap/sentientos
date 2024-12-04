@@ -54,6 +54,6 @@ bss_cleared:
 	li t0, 0b10
 	csrs sstatus, t0
 
-loop:
+wfi_loop:
 	wfi
-	j loop
+	j wfi_loop
