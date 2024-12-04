@@ -51,8 +51,8 @@ pub fn disable_gloabl_interrupts() {
     unsafe {
         asm!(
             "li t0, 0b10
-            csrc sstatus, t0"
-        );
+            csrc sstatus, t0",
+        out("t0") _);
     }
 }
 
