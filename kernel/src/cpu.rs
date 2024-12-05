@@ -94,3 +94,17 @@ pub fn enable_timer_interrupt() {
         )
     }
 }
+
+#[unsafe(no_mangle)]
+#[naked]
+pub extern "C" fn wfi_loop() {
+    unsafe {
+        core::arch::naked_asm!(
+            "
+        0:
+            wfi
+            j 0
+        "
+        )
+    }
+}
