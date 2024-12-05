@@ -11,7 +11,7 @@ use common::{mutex::Mutex, util::align_up};
 use crate::{
     assert::static_assert_size,
     cpu::{read_satp, write_satp_and_fence},
-    debug, info,
+    debug, debugging, info,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESSS,
     klibc::{
@@ -198,6 +198,13 @@ impl RootPageTableHolder {
                 mapping.name,
             );
         }
+
+        root_page_table_holder.map_identity_kernel(
+            LinkerInformation::__start_symbols(),
+            debugging::symbols::symbols_size(),
+            XWRMode::ReadOnly,
+            "SYMBOLS",
+        );
 
         root_page_table_holder.map_identity_kernel(
             LinkerInformation::__start_heap(),

@@ -33,19 +33,22 @@ TODO
 To run the operating system you need to have the following tools installed:
 
 - Rust
+- just
 - qemu-system-riscv64
+- binutils-multiarch
 
 To install them on Ubuntu you can execute the following commands
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-sudo apt install qemu-system-riscv64
+sudo apt install qemu-system-riscv64 binutils-multiarch
+cargo install just --locked
 ```
 
 To run the operating system execute
 
 ```
-cargo run --release
+just run
 ```
 
 ## What can I do?

@@ -2,6 +2,7 @@ use super::eh_frame_parser;
 use crate::{
     assert::static_assert_size,
     debugging::{
+        self,
         eh_frame_parser::EhFrameParser,
         unwinder::{RegisterRule, Unwinder},
     },
@@ -327,7 +328,7 @@ pub fn print() {
         loop {
             match BACKTRACE.next(regs) {
                 Ok(address) => {
-                    info!("{counter}: {address:#x}");
+                    print_stacktrace_frame(counter, address);
                     counter += 1;
                 }
                 Err(BacktraceNextError::RaIsZero) => {
@@ -337,12 +338,29 @@ pub fn print() {
                 Err(BacktraceNextError::CouldNotGetFde(address)) => {
                     // We don't have any backtracing info from here
                     // but anyways it is the end of our call stack
-                    info!("{counter}: {address:#x}");
+                    print_stacktrace_frame(counter, address);
                     break;
                 }
             }
         }
     });
+}
+
+fn print_stacktrace_frame(counter: u64, address: usize) {
+    let symbol = debugging::symbols::get_symbol(address);
+    if let Some(symbol) = symbol {
+        let offset = address - symbol.address;
+        if let Some(file) = symbol.file {
+            info!(
+                "{counter}: {address:#x} <{}+{}>\n\t\t{}\n",
+                symbol.symbol, offset, file
+            );
+        } else {
+            info!("{counter}: {address:#x} <{}+{}>\n", symbol.symbol, offset);
+        }
+    } else {
+        info!("{counter}: {address:#x}\n");
+    }
 }
 
 #[cfg(not(miri))]

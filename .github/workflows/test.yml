@@ -12,7 +12,7 @@ jobs:
       - uses: taiki-e/install-action@just
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt update && sudo apt install qemu-system-riscv64
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-riscv64 binutils-multiarch
       - name: Run tests
         run: just test
       - name: Install miri

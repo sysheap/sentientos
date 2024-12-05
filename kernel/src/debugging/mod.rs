@@ -6,6 +6,7 @@ use crate::{
 
 pub mod backtrace;
 mod eh_frame_parser;
+pub mod symbols;
 mod unwinder;
 
 pub fn dump_current_state() {

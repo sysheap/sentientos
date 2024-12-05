@@ -54,7 +54,10 @@ SECTIONS
     . = . + 512K;
   }
 
-  heap (NOLOAD) : ALIGN(4K) {
-    # The end of the heap will be calcualted at runtime
+  # This section will contain the symbols of the binary
+  # We patch them in after the binary is built via objcopy
+  # The heap start directly after this section
+  symbols : ALIGN(4K) {
+    BYTE(0);
   }
 }

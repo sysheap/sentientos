@@ -42,6 +42,9 @@ macro_rules! sections {
     ($($name:ident, $xwr:expr;)*) => {
         use $crate::memory::page_tables::MappingDescription;
         use $crate::memory::page_tables::XWRMode;
+        use $crate::memory::PAGE_SIZE;
+        use $crate::debugging;
+        use common::util::align_up;
 
         pub struct LinkerInformation;
 
@@ -49,12 +52,17 @@ macro_rules! sections {
         impl LinkerInformation {
             $(getter!($name);)*
 
-            // The heaps end address will be calcualted at runtime
-            // Therefore, it is handled as a special case
-            getter_address!(__start_heap);
+            // We don't know the end of the symbols yet because it
+            // will be binary patched
+            getter_address!(__start_symbols);
 
             // This page will not be mapped.
             getter!(stack_overflow_guard);
+
+            // The heap will start directly page aligned after the symbols
+            pub fn __start_heap() -> usize {
+                align_up(debugging::symbols::symbols_end(), PAGE_SIZE)
+            }
 
             #[cfg(not(miri))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {

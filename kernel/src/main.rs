@@ -27,7 +27,7 @@ use crate::{
     processes::{scheduler, timer},
 };
 use alloc::vec::Vec;
-use debugging::backtrace;
+use debugging::{backtrace, symbols};
 use device_tree::get_devicetree_range;
 use memory::page_tables::MappingDescription;
 
@@ -70,6 +70,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         "Supported SBI Versions >= 0.2"
     );
 
+    symbols::init();
     device_tree::init(device_tree_pointer);
     let device_tree_range = get_devicetree_range();
 

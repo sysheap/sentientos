@@ -1,4 +1,10 @@
-build:
+build: build-cargo patch-symbols
+
+patch-symbols:
+    nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-linux-gnu-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
+
+build-cargo:
     cargo build --release
 
 clippy:
@@ -13,22 +19,19 @@ clean:
 
 debugReleaseCommand := "cargo run --release -- -s -S"
 
-run:
+run: build
     cargo run --release
-
-run-debug:
-    cargo run
 
 test:
     cargo test --release
 
-miri: build
+miri: build-cargo
     MIRIFLAGS="-Zmiri-permissive-provenance -Zmiri-env-forward=RUST_BACKTRACE" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
-debug:
+debug: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"' \; attach
 
-debugf FUNC:
+debugf FUNC: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"'\; attach
 
 disassm: build
