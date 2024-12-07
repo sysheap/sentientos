@@ -1,19 +1,18 @@
-use alloc::{collections::BTreeMap, string::String};
-use core::fmt::Debug;
-
-use alloc::{boxed::Box, vec::Vec};
-use common::{
-    mutex::Mutex,
-    net::UDPDescriptor,
-    syscalls::trap_frame::{Register, TrapFrame},
-};
-
 use crate::{
     debug,
     klibc::elf::ElfFile,
     memory::{PAGE_SIZE, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     net::sockets::SharedAssignedSocket,
     processes::loader::{self, LoadedElf},
+};
+use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
+use common::{
+    net::UDPDescriptor,
+    syscalls::trap_frame::{Register, TrapFrame},
+};
+use core::{
+    fmt::Debug,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 pub type Pid = u64;
@@ -28,10 +27,9 @@ pub enum ProcessState {
 }
 
 fn get_next_pid() -> Pid {
-    static PID_COUNTER: Mutex<Pid> = Mutex::new(0);
-    let mut pid_counter = PID_COUNTER.lock();
-    let next_pid = *pid_counter;
-    *pid_counter += 1;
+    static PID_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
     next_pid
 }
 
