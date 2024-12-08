@@ -41,7 +41,9 @@ pub fn _print(args: fmt::Arguments) {
     #[cfg(miri)]
     {
         use std::io::Write;
-        std::io::stdout().lock().write_fmt(args).unwrap();
+        let mut stdout = std::io::stdout().lock();
+        stdout.write_fmt(args).unwrap();
+        stdout.flush().unwrap();
     }
 
     #[cfg(not(miri))]
