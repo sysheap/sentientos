@@ -9,3 +9,46 @@ description.workspace = true
 
 [dependencies]
 common = { path = "../common" }
+
+# Without theese the rust-analyzer would try to build the crate with tests enabled
+# which is not possible in no_std environments. I'm looking for a way where I don't
+# have to specify that individually for every file. But because userspace will
+# change anyways in the future, let's leave like that for now.
+[lib]
+test = false
+bench = false
+
+[[bin]]
+name = "init"
+test = false
+bench = false
+
+[[bin]]
+name = "loop"
+test = false
+bench = false
+
+[[bin]]
+name = "panic"
+test = false
+bench = false
+
+[[bin]]
+name = "prog1"
+test = false
+bench = false
+
+[[bin]]
+name = "prog2"
+test = false
+bench = false
+
+[[bin]]
+name = "udp"
+test = false
+bench = false
+
+[[bin]]
+name = "yash"
+test = false
+bench = false
