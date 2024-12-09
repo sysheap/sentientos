@@ -27,9 +27,11 @@ pub fn exit_reset() -> ! {
     wait_for_the_end();
 }
 
-fn wait_for_the_end() -> ! {
-    cpu::disable_gloabl_interrupts();
-    cpu::wait_for_interrupt();
-    #[allow(clippy::empty_loop)]
-    loop {}
+pub fn wait_for_the_end() -> ! {
+    unsafe {
+        cpu::disable_global_interrupts();
+    }
+    loop {
+        cpu::wait_for_interrupt();
+    }
 }

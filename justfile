@@ -28,6 +28,9 @@ test:
 miri: build-cargo
     MIRIFLAGS="-Zmiri-permissive-provenance -Zmiri-env-forward=RUST_BACKTRACE" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
+attach:
+    gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"
+
 debug: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"' \; attach
 

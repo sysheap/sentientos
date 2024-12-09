@@ -49,10 +49,11 @@ pub fn memory_fence() {
     }
 }
 
-pub fn disable_gloabl_interrupts() {
+pub unsafe fn disable_global_interrupts() {
     unsafe {
         asm!(
-            "csrc sstatus, {}",
+            "csrc sstatus, {}", // Disable global interrupt flag
+            "csrw sie, x0", // Clear any local enabled interrupts otherwise wfi just goes to the current pending interrupt
         in(reg) 0b10);
     }
 }
