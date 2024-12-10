@@ -1,9 +1,10 @@
 [package]
 name = "system-tests"
-edition = "2024"
+edition = "2021"
 
 [workspace]
 
 [dependencies]
 anyhow = { version = "1.0.94", features = ["backtrace"] }
+serial_test = { version = "3.2.0", features = ["file_locks"] }
 tokio = { version = "1.42.0", features = ["full"] }
