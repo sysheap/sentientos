@@ -5,7 +5,7 @@ members = [
     "userspace",
 ]
 default-members = ["kernel"]
-resolver = "3"
+resolver = "2"
 
 [workspace.package]
 description = "Yet another Rust Operating System (YaROS)"

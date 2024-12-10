@@ -1,6 +1,6 @@
 [package]
 name = "userspace"
-edition = "2024"
+edition = "2021"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
