@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -e
+
+cd "$(dirname "$0")"
+
 QEMU_CMD="qemu-system-riscv64 \
     -s \
     -machine virt \
@@ -7,8 +11,7 @@ QEMU_CMD="qemu-system-riscv64 \
     -smp 1 \
     -m 128M \
     -nographic \
-    -serial mon:stdio \
-    -d guest_errors,cpu_reset,unimp"
+    -serial mon:stdio"
 
 # Process options
 while [[ $# -gt 0 ]]; do
@@ -59,4 +62,5 @@ QEMU_CMD+=" -kernel $KERNEL_PATH"
 
 # Execute the QEMU command
 echo "Executing: $QEMU_CMD"
-eval "$QEMU_CMD"
+
+exec bash -c "$QEMU_CMD"
