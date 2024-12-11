@@ -6,8 +6,8 @@ use alloc::string::String;
 use common::{
     net::UDPDescriptor,
     syscalls::{
-        SysExecuteError, SysSocketError, SysWaitError, kernel::KernelSyscalls,
-        userspace_argument::UserspaceArgument,
+        kernel::KernelSyscalls, userspace_argument::UserspaceArgument, SysExecuteError,
+        SysSocketError, SysWaitError,
     },
 };
 
@@ -15,7 +15,7 @@ use crate::{
     debug,
     io::stdin_buf::STDIN_BUFFER,
     klibc::macros::unwrap_or_return,
-    net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
+    net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
     print,
     processes::scheduler::{
         self, get_current_process_expect, let_current_process_wait_for,
@@ -41,7 +41,8 @@ impl KernelSyscalls for SyscallHandler {
         stdin.pop()
     }
     fn sys_read_input_wait() -> u8 {
-        if let Some(input) = STDIN_BUFFER.lock().pop() {
+        let input = STDIN_BUFFER.lock().pop();
+        if let Some(input) = input {
             input
         } else {
             let_current_process_wait_for_input();
