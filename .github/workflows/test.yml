@@ -13,9 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@nextest
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-riscv64 binutils-multiarch
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-riscv64 binutils-riscv64-linux-gnu
       - name: Run tests
         run: just test
       - name: Install miri

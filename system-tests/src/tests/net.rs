@@ -13,11 +13,11 @@ async fn udp() -> anyhow::Result<()> {
         .await
         .expect("udp program must succeed to start");
 
-    let socket = tokio::net::UdpSocket::bind("localhost:0").await?;
-    socket.connect("localhost:1234").await?;
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
+    socket.connect("127.0.0.1:1234").await?;
 
-    socket.send("42".as_bytes()).await?;
-    yaros.stdout().assert_read_until("42").await;
+    socket.send("42\n".as_bytes()).await?;
+    yaros.stdout().assert_read_until("42\n").await;
 
     yaros
         .stdin()
@@ -30,8 +30,8 @@ async fn udp() -> anyhow::Result<()> {
 
     assert_eq!(response, "Hello from YaROS!\n");
 
-    socket.send("Finalize test".as_bytes()).await?;
-    yaros.stdout().assert_read_until("Finalize test").await;
+    socket.send("Finalize test\n".as_bytes()).await?;
+    yaros.stdout().assert_read_until("Finalize test\n").await;
 
     Ok(())
 }

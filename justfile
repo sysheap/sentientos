@@ -1,7 +1,7 @@
 build: build-cargo patch-symbols
 
 patch-symbols:
-    nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-linux-gnu-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
     riscv64-linux-gnu-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
@@ -10,7 +10,7 @@ build-cargo:
 clippy:
     cd userspace && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
-    cargo clippy --manifest-path integration-tests/Cargo.toml --target x86_64-unknown-linux-gnu -- -D warnings
+    cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu -- -D warnings
 
 clean:
     rm -f kernel/compiled_userspace/*
