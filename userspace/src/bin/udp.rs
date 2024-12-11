@@ -30,7 +30,7 @@ fn main() {
 
         if let Some(c) = sys_read_input() {
             match c {
-                b'\r' => {
+                b'\r' | b'\n' => {
                     // Carriage return
                     // Send data
                     println!();

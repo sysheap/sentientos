@@ -19,10 +19,6 @@ impl SearchableBuffer {
         self.buffer.extend_from_slice(data);
     }
 
-    pub fn as_str(&self) -> &str {
-        std::str::from_utf8(&self.buffer).expect("Text is not UTF-8")
-    }
-
     fn find_end_index_in_buffer(&self, needle: &str) -> Option<usize> {
         let needle = needle.as_bytes();
         self.buffer

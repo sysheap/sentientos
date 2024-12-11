@@ -5,7 +5,6 @@ set -e
 cd "$(dirname "$0")"
 
 QEMU_CMD="qemu-system-riscv64 \
-    -s \
     -machine virt \
     -cpu rv64 \
     -smp 1 \
@@ -16,6 +15,10 @@ QEMU_CMD="qemu-system-riscv64 \
 # Process options
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --gdb)
+            QEMU_CMD+=" -s"
+            shift
+            ;;
         --log)
             QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaros.log"
             shift
@@ -32,6 +35,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS] <KERNEL_PATH>"
             echo ""
             echo "Options:"
+            echo "  --gdb          Let qemu listen on :1234 for gdb connections"
             echo "  --log          Log qemu events to /tmp/yaros.log"
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net          Enable network card"

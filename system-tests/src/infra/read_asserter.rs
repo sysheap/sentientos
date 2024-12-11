@@ -1,19 +1,12 @@
-use std::time::Duration;
-
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    time::timeout,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 use super::searchable_buffer::SearchableBuffer;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 pub struct ReadAsserter<Reader: AsyncRead + Unpin> {
     reader: Reader,
     buffer: SearchableBuffer,
-    timeout: Duration,
 }
 
 impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
@@ -21,21 +14,10 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
         Self {
             reader,
             buffer: SearchableBuffer::new(Vec::with_capacity(DEFAULT_BUFFER_SIZE)),
-            timeout: DEFAULT_TIMEOUT,
         }
     }
 
     pub async fn assert_read_until(&mut self, needle: &str) -> Vec<u8> {
-        let result = timeout(self.timeout.clone(), self.read_until(needle)).await;
-
-        if let Ok(result) = result {
-            return result;
-        } else {
-            panic!("Expected\n{needle}\nFound\n{}", self.buffer.as_str());
-        }
-    }
-
-    async fn read_until(&mut self, needle: &str) -> Vec<u8> {
         loop {
             if let Some(front) = self.buffer.find_and_remove(needle) {
                 return front;
@@ -46,7 +28,17 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
                 .read(&mut local_buffer)
                 .await
                 .expect("Read must succeed.");
-            self.buffer.append(&local_buffer[0..bytes]);
+            let input = &local_buffer[0..bytes];
+            self.print_to_stderr(input).await;
+            self.buffer.append(input);
         }
+    }
+
+    async fn print_to_stderr(&self, data: &[u8]) {
+        let mut stderr = tokio::io::stderr();
+        stderr
+            .write_all(data)
+            .await
+            .expect("Write to stderr must succeed.");
     }
 }

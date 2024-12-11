@@ -5,4 +5,4 @@ target = "riscv64gc-unknown-none-elf"
 # rustflags = ["-Ctarget-feature=+relax"]
 
 [target.riscv64gc-unknown-none-elf]
-runner = "./qemu_wrapper.sh"
+runner = "./qemu_wrapper.sh --gdb --net"

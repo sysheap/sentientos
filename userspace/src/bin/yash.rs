@@ -21,7 +21,7 @@ fn main() {
         loop {
             let result = sys_read_input_wait();
             match result {
-                b'\r' => {
+                b'\r' | b'\n' => {
                     // Carriage return
                     println!();
                     break;
