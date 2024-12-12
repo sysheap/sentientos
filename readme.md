@@ -42,7 +42,7 @@ To install them on Ubuntu you can execute the following commands
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-sudo apt install qemu-system-riscv64 binutils-multiarch
+sudo apt install qemu-system-riscv64 binutils-riscv64-linux-gnu
 cargo install just cargo-nextest --locked
 ```
 

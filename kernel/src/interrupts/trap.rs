@@ -1,4 +1,4 @@
-use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*};
+use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*, InterruptCause};
 use crate::{
     cpu::{self, read_satp, write_satp_and_fence},
     debug,
@@ -6,7 +6,7 @@ use crate::{
     io::{stdin_buf::STDIN_BUFFER, uart},
     memory::{
         linker_information::LinkerInformation,
-        page_tables::{KERNEL_PAGE_TABLES, activate_page_table},
+        page_tables::{activate_page_table, KERNEL_PAGE_TABLES},
     },
     processes::scheduler::{self, get_current_process},
     syscalls::handle_syscall,

@@ -10,7 +10,7 @@ build-cargo:
 clippy:
     cd userspace && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
-    cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu -- -D warnings
+    cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --no-deps -- -D warnings
 
 clean:
     rm -f kernel/compiled_userspace/*
@@ -33,6 +33,10 @@ system-test: build
 
 miri: build-cargo
     MIRIFLAGS="-Zmiri-permissive-provenance -Zmiri-env-forward=RUST_BACKTRACE" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
+
+fetch-deps:
+    cargo fetch
+    cargo fetch --manifest-path ./system-tests/Cargo.toml
 
 attach:
     gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"

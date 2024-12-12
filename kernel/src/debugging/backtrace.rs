@@ -369,7 +369,7 @@ mod tests {
     use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CallerSavedRegs};
     use alloc::collections::VecDeque;
     use core::ffi::c_void;
-    use unwinding::abi::{_Unwind_Backtrace, _Unwind_GetIP, UnwindContext, UnwindReasonCode};
+    use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
 
     #[test_case]
     fn backtrace() {
