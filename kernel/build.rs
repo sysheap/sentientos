@@ -1,4 +1,4 @@
-use std::{env, error::Error, io::Write, path::Path, process::Command};
+use std::{collections::BTreeMap, env, error::Error, io::Write, path::Path, process::Command};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");
@@ -29,7 +29,8 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
         "use crate::klibc::macros::include_bytes_align_as;\n"
     )?;
 
-    let mut programs: Vec<(String, String)> = Vec::new();
+    // Use BTreeMap to have the program names in a sorted order
+    let mut programs: BTreeMap<String, String> = BTreeMap::new();
 
     for entry in std::fs::read_dir("../kernel/compiled_userspace")? {
         let entry = entry?;
@@ -37,7 +38,7 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
         let original_file_name = path.file_name().unwrap().to_str().unwrap();
         let file_name = original_file_name.to_uppercase();
 
-        programs.push((original_file_name.to_owned(), file_name.clone()));
+        programs.insert(original_file_name.to_owned(), file_name.clone());
 
         writeln!(
             userspace_programs,

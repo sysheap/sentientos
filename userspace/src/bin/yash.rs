@@ -2,7 +2,7 @@
 #![no_main]
 
 use alloc::string::{String, ToString};
-use common::syscalls::{sys_execute, sys_exit, sys_read_input_wait, sys_wait};
+use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_read_input_wait, sys_wait};
 use userspace::{print, println};
 
 extern crate alloc;
@@ -56,6 +56,8 @@ fn parse_command_and_execute(mut command: String) {
             println!("Available commands:");
             println!("exit - Exit the shell");
             println!("help - Print this help message");
+            println!("\nFollowing programs exist and can be called:");
+            sys_print_programs();
         }
         _ => {
             let mut background = false;
