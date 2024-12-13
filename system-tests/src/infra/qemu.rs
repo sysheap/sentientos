@@ -5,9 +5,7 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
-use super::read_asserter::ReadAsserter;
-
-const PROMPT: &str = "$ ";
+use super::{read_asserter::ReadAsserter, PROMPT};
 
 pub struct QemuOptions {
     add_network_card: bool,
