@@ -18,6 +18,14 @@ pub fn is_empty() -> bool {
     PROCESSES.lock().is_empty()
 }
 
+pub fn get_highest_pid() -> Option<Arc<Mutex<Process>>> {
+    let processes = PROCESSES.lock();
+
+    let max_pid = processes.iter().max_by_key(|p| p.lock().get_pid()).cloned();
+
+    max_pid
+}
+
 pub fn dump() {
     let processes = PROCESSES.lock();
     for process in &*processes {
@@ -28,6 +36,24 @@ pub fn dump() {
             process.get_name(),
             process.get_state()
         );
+    }
+}
+
+pub fn kill(pid: Pid) {
+    let mut processes = PROCESSES.lock();
+
+    if let Some(pos) = processes.iter().position(|p| p.lock().get_pid() == pid) {
+        let process = processes
+            .remove(pos)
+            .unwrap_or_else(|| panic!("Pid {pid} to exist"));
+        assert_eq!(
+            Arc::strong_count(&process),
+            1,
+            "Expect to have the last copy of the process"
+        );
+        // Drop process lock
+        drop(processes);
+        notify_died(pid);
     }
 }
 

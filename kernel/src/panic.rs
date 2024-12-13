@@ -10,6 +10,8 @@ static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 #[cfg(not(miri))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    use crate::processes::scheduler::disarm_current_process;
+
     unsafe {
         crate::cpu::disable_global_interrupts();
     }
@@ -20,6 +22,7 @@ fn panic(info: &PanicInfo) -> ! {
     // output some data
     unsafe {
         QEMU_UART.disarm();
+        disarm_current_process();
     }
 
     println!("");

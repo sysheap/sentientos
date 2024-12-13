@@ -27,6 +27,10 @@ pub fn initialize() {
 
 static CURRENT_PROCESS: Mutex<Option<Arc<Mutex<Process>>>> = Mutex::new(None);
 
+pub unsafe fn disarm_current_process() {
+    CURRENT_PROCESS.disarm();
+}
+
 unsafe extern "C" {
     fn restore_user_context() -> !;
 }
@@ -99,6 +103,24 @@ pub fn let_current_process_wait_for_input() -> ! {
     schedule();
 }
 
+pub fn send_ctrl_c() {
+    queue_current_process_back();
+    let highest_pid = process_list::get_highest_pid();
+
+    if let Some(process) = highest_pid {
+        let process_lock = process.lock();
+        if process_lock.get_name() == "yash" {
+            return;
+        }
+        let pid = process_lock.get_pid();
+        drop(process_lock);
+        drop(process);
+        process_list::kill(pid);
+    }
+
+    schedule();
+}
+
 pub fn schedule_program(name: &str) -> Option<Pid> {
     for (prog_name, elf) in PROGRAMS {
         if name == *prog_name {
@@ -112,7 +134,7 @@ pub fn schedule_program(name: &str) -> Option<Pid> {
     None
 }
 
-fn prepare_next_process() -> bool {
+fn queue_current_process_back() {
     let current_process = CURRENT_PROCESS.lock().take();
 
     if let Some(current_process) = current_process {
@@ -127,6 +149,10 @@ fn prepare_next_process() -> bool {
         }
         process_list::enqueue(current_process);
     }
+}
+
+fn prepare_next_process() -> bool {
+    queue_current_process_back();
 
     if process_list::is_empty() {
         info!("No more processes to schedule, shutting down system");
