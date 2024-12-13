@@ -16,3 +16,7 @@ cargo install just cargo-nextest --locked
 
 # Download dependencies into cache
 just fetch-deps
+
+# Prepare the sysroot for miri such that it is cached as well
+cd /tmp
+cargo +"$TOOLCHAIN" miri test --target riscv64gc-unknown-linux-gnu || true
