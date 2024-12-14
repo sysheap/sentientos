@@ -30,6 +30,7 @@ use interrupt::*;
 use crate::memory::linker_information::LinkerInformation;
 
 #[repr(transparent)]
+#[derive(Clone, Copy)]
 pub struct InterruptCause(usize);
 
 impl InterruptCause {
