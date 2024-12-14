@@ -40,7 +40,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net          Enable network card"
             echo "  -h, --help     Show this help message"
+            echo "  --wait         Wait cpu until gdb is attached"
             exit 0
+            ;;
+        --wait)
+            QEMU_CMD+=" -S"
+            shift
             ;;
         -*)
             echo "Unknown option: $1"

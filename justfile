@@ -18,7 +18,7 @@ clean:
     rm -rf target-userspace
     cargo clean
 
-debugReleaseCommand := "cargo run --release -- -s -S"
+debugReleaseCommand := "cargo run --release -- --wait"
 
 run: build
     cargo run --release
