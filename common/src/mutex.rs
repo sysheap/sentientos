@@ -24,6 +24,11 @@ impl<T> Mutex<T> {
         }
     }
 
+    pub fn with_lock<'a, R>(&'a self, f: impl FnOnce(MutexGuard<'a, T>) -> R) -> R {
+        let lock = self.lock();
+        f(lock)
+    }
+
     pub fn lock(&self) -> MutexGuard<T> {
         if self.disarmed.load(Ordering::SeqCst) {
             return MutexGuard { mutex: self };

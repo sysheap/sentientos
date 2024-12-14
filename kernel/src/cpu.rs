@@ -65,6 +65,12 @@ pub fn wait_for_interrupt() {
 const SIE_STIE: usize = 5;
 const SSTATUS_SPP: usize = 8;
 
+pub fn is_timer_enabled() -> bool {
+    let sie: usize;
+    unsafe { asm!("csrr {}, sie", out(reg) sie) }
+    (sie & (1 << SIE_STIE)) > 0
+}
+
 pub fn disable_timer_interrupt() {
     unsafe {
         asm!("

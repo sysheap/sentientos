@@ -1,4 +1,10 @@
-use crate::processes::{process::Pid, process_list};
+use crate::{
+    cpu,
+    processes::{
+        process::{Pid, ProcessState},
+        process_table, timer,
+    },
+};
 use alloc::collections::{BTreeSet, VecDeque};
 use common::mutex::Mutex;
 
@@ -22,14 +28,24 @@ impl StdinBuffer {
     }
 
     pub fn push(&mut self, byte: u8) {
-        let mut notified = false;
-        for pid in &self.wakeup_queue {
-            if process_list::notify_input(*pid, byte) {
-                notified = true;
+        let notified = !self.wakeup_queue.is_empty();
+        process_table::THE.with_lock(|pt| {
+            for pid in &self.wakeup_queue {
+                if let Some(process) = pt.get_process(*pid) {
+                    process.with_lock(|mut p| {
+                        p.set_state(ProcessState::Runnable);
+                        p.set_syscall_return_code(byte as usize);
+                    })
+                }
             }
-        }
+        });
         self.wakeup_queue.clear();
         if notified {
+            if !cpu::is_timer_enabled() {
+                // Enable timer because we were sleeping and waiting
+                // for input
+                timer::set_timer(0);
+            }
             return;
         }
         self.data.push_back(byte);

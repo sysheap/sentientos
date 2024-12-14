@@ -3,10 +3,7 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
     net::sockets::SharedAssignedSocket,
-    processes::{
-        loader::{self, LoadedElf},
-        process_list,
-    },
+    processes::loader::{self, LoadedElf},
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -33,7 +30,7 @@ pub enum ProcessState {
 }
 
 fn get_next_pid() -> Pid {
-    static PID_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static PID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
     next_pid
@@ -79,6 +76,10 @@ impl Debug for Process {
 }
 
 impl Process {
+    pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Pid> {
+        self.notify_on_die.iter()
+    }
+
     pub fn mmap_pages(&mut self, number_of_pages: usize) -> *mut u8 {
         let pages = PinnedHeapPages::new(number_of_pages);
         self.page_table.map_userspace(
@@ -196,9 +197,6 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
-        for pid in &self.notify_on_die {
-            process_list::wake_up(*pid);
-        }
         debug!(
             "Drop process (PID: {}) (Allocated pages: {:?})",
             self.pid, self.allocated_pages

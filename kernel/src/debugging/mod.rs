@@ -1,7 +1,7 @@
 use crate::{
     info,
     klibc::sizes::MiB,
-    processes::{process_list, scheduler::get_current_process},
+    processes::{process_table, scheduler::get_current_process},
 };
 
 pub mod backtrace;
@@ -24,7 +24,7 @@ pub fn dump_current_state() {
         used_heap_pages, total_heap_pages
     );
 
-    process_list::dump();
+    process_table::THE.lock().dump();
 
     let current_process = get_current_process();
     if let Some(process) = current_process {
