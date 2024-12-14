@@ -55,10 +55,11 @@
 	.endr
 .endm
 
+.macro handler func
 .section .text
-.global supervisor_trap_vector
+.global asm_\func
 .align 4
-supervisor_trap_vector:
+asm_\func:
 	
 	save_regs
 
@@ -69,9 +70,37 @@ supervisor_trap_vector:
 	csrr a1, stval
 	csrr a2, sepc
 	csrr a3, sscratch
-	call supervisor_mode_trap
+	call \func
 
 	restore_regs
 
 	sret
+
+.endm
+
+handler handle_exception
+handler handle_unimplemented
+handler handle_timer_interrupt
+handler handle_external_interrupt
+
+.section .text
+.global supervisor_trap_table
+.align 4
+supervisor_trap_table:
+	j asm_handle_exception
+	j asm_handle_unimplemented        # cause: 1
+	j asm_handle_unimplemented        # cause: 2
+	j asm_handle_unimplemented        # cause: 3
+	j asm_handle_unimplemented        # cause: 4
+	j asm_handle_timer_interrupt      # cause: 5
+	j asm_handle_unimplemented        # cause: 6
+	j asm_handle_unimplemented        # cause: 7
+	j asm_handle_unimplemented        # cause: 8
+	j asm_handle_external_interrupt   # cause: 9
+	j asm_handle_unimplemented        # cause: 10
+	j asm_handle_unimplemented        # cause: 11
+	j asm_handle_unimplemented        # cause: 12
+	j asm_handle_unimplemented        # cause: 13
+	j asm_handle_unimplemented        # cause: 14
+	j asm_handle_unimplemented        # cause: 15
 

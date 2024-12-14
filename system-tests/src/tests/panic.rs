@@ -10,7 +10,8 @@ async fn panic() -> anyhow::Result<()> {
     assert!(output.contains("Hello from Panic! Triggering kernel panic"));
     assert!(output.contains("Kernel Page Tables Pagetables at"));
     assert!(output.contains("<rust_begin_unwind+"));
-    assert!(output.contains("<supervisor_trap_vector+"));
+    assert!(output.contains("<handle_exception+"));
+    assert!(output.contains("<asm_handle_exception+"));
     assert!(output
         .contains("[info][kernel::debugging] Current Process: PID=2 NAME=panic STATE=Runnabl"));
 

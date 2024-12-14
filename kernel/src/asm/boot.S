@@ -41,7 +41,8 @@ bss_cleared:
 	la sp, __stop_kernel_stack
 
 	# Load trap vector machine mode
-	la t0, supervisor_trap_vector
+	la t0, supervisor_trap_table
+	addi t0, t0, 1 # Use vectored mode -> we know the address is 4 byte aligned
 	csrw stvec, t0
 
 	call kernel_init

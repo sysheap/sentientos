@@ -1,4 +1,4 @@
-use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*, InterruptCause};
+use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, InterruptCause};
 use crate::{
     cpu::{self},
     debug,
@@ -12,35 +12,38 @@ use crate::{
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::panic;
 
-#[unsafe(no_mangle)]
-extern "C" fn supervisor_mode_trap(
+#[no_mangle]
+extern "C" fn handle_timer_interrupt() {
+    scheduler::schedule();
+}
+
+#[no_mangle]
+fn handle_external_interrupt() {
+    debug!("External interrupt occurred!");
+    let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
+    assert!(
+        plic_interrupt == InterruptSource::Uart,
+        "Plic interrupt should be uart."
+    );
+
+    let input = uart::read().expect("There should be input from the uart.");
+
+    plic::complete_interrupt(plic_interrupt);
+
+    match input {
+        3 => crate::processes::scheduler::send_ctrl_c(),
+        4 => crate::debugging::dump_current_state(),
+        _ => STDIN_BUFFER.lock().push(input),
+    }
+}
+
+#[no_mangle]
+extern "C" fn handle_exception(
     cause: InterruptCause,
     stval: usize,
     sepc: usize,
     trap_frame: &mut TrapFrame,
 ) {
-    debug!(
-        "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})",
-        sepc,
-        cause.get_reason(),
-    );
-    if cause.is_interrupt() {
-        handle_interrupt(cause, stval, sepc, trap_frame);
-    } else {
-        handle_exception(cause, stval, sepc, trap_frame);
-    }
-
-    // In case our current process was set to waiting state we need to reschedule
-    if let Some(process) = get_current_process()
-        && process.lock().get_state().is_waiting()
-    {
-        schedule();
-    }
-
-    debug!("Return from supervisor_mode_trap");
-}
-
-fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame: &mut TrapFrame) {
     match cause.get_exception_code() {
         ENVIRONMENT_CALL_FROM_U_MODE => {
             let nr = trap_frame[Register::a0];
@@ -52,6 +55,12 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
                 trap_frame[Register::a0] = ret1;
                 trap_frame[Register::a1] = ret2;
                 cpu::write_sepc(sepc + 4); // Skip the ecall instruction
+            }
+            // In case our current process was set to waiting state we need to reschedule
+            if let Some(process) = get_current_process()
+                && process.lock().get_state().is_waiting()
+            {
+                schedule();
             }
         }
         _ => {
@@ -94,35 +103,16 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
     }
 }
 
-fn handle_interrupt(cause: InterruptCause, _stval: usize, _sepc: usize, _trap_frame: &TrapFrame) {
-    match cause.get_exception_code() {
-        SUPERVISOR_TIMER_INTERRUPT => handle_supervisor_timer_interrupt(),
-        SUPERVISOR_EXTERNAL_INTERRUPT => handle_external_interrupt(),
-        _ => {
-            panic!("Unknwon interrupt! (Name: {})", cause.get_reason());
-        }
-    }
-}
-
-fn handle_supervisor_timer_interrupt() {
-    scheduler::schedule();
-}
-
-fn handle_external_interrupt() {
-    debug!("External interrupt occurred!");
-    let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
-    assert!(
-        plic_interrupt == InterruptSource::Uart,
-        "Plic interrupt should be uart."
+#[no_mangle]
+extern "C" fn handle_unimplemented(
+    cause: InterruptCause,
+    _stval: usize,
+    sepc: usize,
+    _trap_frame: &mut TrapFrame,
+) {
+    panic!(
+        "Unimplemeneted trap occurred! (sepc: {:x?}) (cause: {:?})",
+        sepc,
+        cause.get_reason(),
     );
-
-    let input = uart::read().expect("There should be input from the uart.");
-
-    plic::complete_interrupt(plic_interrupt);
-
-    match input {
-        3 => crate::processes::scheduler::send_ctrl_c(),
-        4 => crate::debugging::dump_current_state(),
-        _ => STDIN_BUFFER.lock().push(input),
-    }
 }
