@@ -3,9 +3,16 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
     net::sockets::SharedAssignedSocket,
-    processes::loader::{self, LoadedElf},
+    processes::{
+        loader::{self, LoadedElf},
+        process_list,
+    },
 };
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    string::String,
+    vec::Vec,
+};
 use common::{
     net::UDPDescriptor,
     syscalls::trap_frame::{Register, TrapFrame},
@@ -22,17 +29,7 @@ const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
     Runnable,
-    WaitingFor(Pid),
-    WaitingForInput,
-}
-
-impl ProcessState {
-    pub fn is_waiting(&self) -> bool {
-        matches!(
-            self,
-            ProcessState::WaitingFor(_) | ProcessState::WaitingForInput
-        )
-    }
+    Waiting,
 }
 
 fn get_next_pid() -> Pid {
@@ -54,6 +51,7 @@ pub struct Process {
     next_free_descriptor: u64,
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
     in_kernel_mode: bool,
+    notify_on_die: BTreeSet<Pid>,
 }
 
 impl Debug for Process {
@@ -94,6 +92,10 @@ impl Process {
         let ptr = core::ptr::without_provenance_mut(self.free_mmap_address);
         self.free_mmap_address += number_of_pages * PAGE_SIZE;
         ptr
+    }
+
+    pub fn add_notify_on_die(&mut self, pid: Pid) {
+        self.notify_on_die.insert(pid);
     }
 
     pub fn get_register_state(&self) -> &TrapFrame {
@@ -168,6 +170,7 @@ impl Process {
             next_free_descriptor: 0,
             open_udp_sockets: BTreeMap::new(),
             in_kernel_mode: false,
+            notify_on_die: BTreeSet::new(),
         }
     }
 
@@ -193,6 +196,9 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
+        for pid in &self.notify_on_die {
+            process_list::wake_up(*pid);
+        }
         debug!(
             "Drop process (PID: {}) (Allocated pages: {:?})",
             self.pid, self.allocated_pages

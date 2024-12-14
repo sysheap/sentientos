@@ -5,7 +5,10 @@ use crate::{
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
     memory::linker_information::LinkerInformation,
-    processes::scheduler::{self, get_current_process, schedule},
+    processes::{
+        process::ProcessState,
+        scheduler::{self, get_current_process, schedule},
+    },
     syscalls::{self},
     warn,
 };
@@ -51,7 +54,7 @@ fn handle_syscall(sepc: usize, trap_frame: &mut TrapFrame) {
     }
     // In case our current process was set to waiting state we need to reschedule
     if let Some(process) = get_current_process()
-        && process.lock().get_state().is_waiting()
+        && process.lock().get_state() == ProcessState::Waiting
     {
         schedule();
     }

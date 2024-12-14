@@ -53,7 +53,6 @@ pub fn kill(pid: Pid) {
         );
         // Drop process lock
         drop(processes);
-        notify_died(pid);
     }
 }
 
@@ -87,26 +86,33 @@ pub fn does_pid_exits(pid: Pid) -> bool {
         .any(|process| process.lock().get_pid() == pid)
 }
 
-pub fn notify_died(pid: Pid) {
-    let processes = PROCESSES.lock();
-    for process in processes.iter() {
-        if process.lock().get_state() == ProcessState::WaitingFor(pid) {
-            process.lock().set_state(ProcessState::Runnable);
-        }
+pub fn get_process(pid: Pid) -> Option<Arc<Mutex<Process>>> {
+    PROCESSES
+        .lock()
+        .iter()
+        .find(|process| process.lock().get_pid() == pid)
+        .cloned()
+}
+
+pub fn wake_up(pid: Pid) {
+    let mut processes = PROCESSES.lock();
+    let process = processes.iter_mut().find(|p| p.lock().get_pid() == pid);
+
+    if let Some(process) = process {
+        process.lock().set_state(ProcessState::Runnable);
     }
 }
 
-pub fn notify_input(byte: u8) -> bool {
+pub fn notify_input(pid: Pid, byte: u8) -> bool {
     let processes = PROCESSES.lock();
     let mut notified = false;
-    for process in processes.iter() {
+    if let Some(process) = processes.iter().find(|p| p.lock().get_pid() == pid) {
         let mut process = process.lock();
-        if process.get_state() == ProcessState::WaitingForInput {
-            process.set_state(ProcessState::Runnable);
-            process.set_syscall_return_code(byte as usize);
-            notified = true;
-        }
+        process.set_state(ProcessState::Runnable);
+        process.set_syscall_return_code(byte as usize);
+        notified = true;
     }
+
     if notified {
         // Let's schedule a new process which can process the input
         timer::set_timer(0);

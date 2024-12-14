@@ -2,8 +2,6 @@ use core::arch::asm;
 
 use common::syscalls::trap_frame::TrapFrame;
 
-use crate::assert::assert_unreachable;
-
 pub fn write_sscratch_register(value: *const TrapFrame) {
     unsafe {
         asm!("csrw sscratch, {}", in(reg) value);
@@ -62,18 +60,6 @@ pub fn wait_for_interrupt() {
     unsafe {
         asm!("wfi");
     }
-}
-
-pub fn sret_to_kernel() -> ! {
-    unsafe {
-        asm!(
-            "
-                csrs sstatus, {}
-                sret
-            ", in(reg) (1<<8)
-        )
-    }
-    assert_unreachable();
 }
 
 const SIE_STIE: usize = 5;
