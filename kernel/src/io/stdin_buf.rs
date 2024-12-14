@@ -16,7 +16,10 @@ impl StdinBuffer {
     }
 
     pub fn push(&mut self, byte: u8) {
-        process_list::notify_input();
+        if process_list::notify_input(byte) {
+            // We already delivered the byte to the processes waiting for it
+            return;
+        }
         self.data.push_back(byte);
     }
 

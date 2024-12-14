@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct TrapFrame {
     registers: [usize; 32],
     floating_registers: [usize; 32],

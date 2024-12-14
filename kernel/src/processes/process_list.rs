@@ -96,13 +96,14 @@ pub fn notify_died(pid: Pid) {
     }
 }
 
-pub fn notify_input() {
+pub fn notify_input(byte: u8) -> bool {
     let processes = PROCESSES.lock();
     let mut notified = false;
     for process in processes.iter() {
         let mut process = process.lock();
         if process.get_state() == ProcessState::WaitingForInput {
             process.set_state(ProcessState::Runnable);
+            process.set_syscall_return_code(byte as usize);
             notified = true;
         }
     }
@@ -110,4 +111,5 @@ pub fn notify_input() {
         // Let's schedule a new process which can process the input
         timer::set_timer(0);
     }
+    notified
 }

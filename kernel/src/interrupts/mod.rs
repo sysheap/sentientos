@@ -10,6 +10,14 @@ mod trap_cause;
 
 static mut KERNEL_TRAP_FRAME: TrapFrame = TrapFrame::zero();
 
+pub fn read_trap_frame() -> TrapFrame {
+    unsafe { KERNEL_TRAP_FRAME }
+}
+
+pub fn write_trap_frame(trap_frame: &TrapFrame) {
+    unsafe { KERNEL_TRAP_FRAME = *trap_frame };
+}
+
 pub fn set_sscratch_to_kernel_trap_frame() {
     debug!(
         "Set kernel trap frame ({:p}) to sscratch register",

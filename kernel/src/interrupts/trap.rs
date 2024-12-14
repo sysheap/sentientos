@@ -1,14 +1,11 @@
 use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt::*, InterruptCause};
 use crate::{
-    cpu::{self, read_satp, write_satp_and_fence},
+    cpu::{self},
     debug,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
-    memory::{
-        linker_information::LinkerInformation,
-        page_tables::{activate_page_table, KERNEL_PAGE_TABLES},
-    },
-    processes::scheduler::{self, get_current_process},
+    memory::linker_information::LinkerInformation,
+    processes::scheduler::{self, get_current_process, schedule},
     syscalls::handle_syscall,
     warn,
 };
@@ -22,9 +19,6 @@ extern "C" fn supervisor_mode_trap(
     sepc: usize,
     trap_frame: &mut TrapFrame,
 ) {
-    let old_tables = read_satp();
-    debug!("Activate KERNEL_PAGE_TABLES");
-    activate_page_table(&KERNEL_PAGE_TABLES);
     debug!(
         "Supervisor mode trap occurred! (sepc: {:x?}) (cause: {:?})",
         sepc,
@@ -36,14 +30,13 @@ extern "C" fn supervisor_mode_trap(
         handle_exception(cause, stval, sepc, trap_frame);
     }
 
-    // Restore old page tables
-    // SAFTEY: They should be valid. If a process dies we don't come here
-    // because the scheduler returns with restore_user_context
-    // Hoewever: This is very ugly and prone to error.
-    // TODO: Find a better way to do this
-    unsafe {
-        write_satp_and_fence(old_tables);
+    // In case our current process was set to waiting state we need to reschedule
+    if let Some(process) = get_current_process()
+        && process.lock().get_state().is_waiting()
+    {
+        schedule();
     }
+
     debug!("Return from supervisor_mode_trap");
 }
 
@@ -54,9 +47,12 @@ fn handle_exception(cause: InterruptCause, stval: usize, sepc: usize, trap_frame
             let arg1 = trap_frame[Register::a1];
             let arg2 = trap_frame[Register::a2];
             let arg3 = trap_frame[Register::a3];
-            (trap_frame[Register::a0], trap_frame[Register::a1]) =
-                handle_syscall(nr, arg1, arg2, arg3);
-            cpu::write_sepc(sepc + 4); // Skip the ecall instruction
+            let ret = handle_syscall(nr, arg1, arg2, arg3);
+            if let Some((ret1, ret2)) = ret {
+                trap_frame[Register::a0] = ret1;
+                trap_frame[Register::a1] = ret2;
+                cpu::write_sepc(sepc + 4); // Skip the ecall instruction
+            }
         }
         _ => {
             if cause.is_stack_overflow(stval) {

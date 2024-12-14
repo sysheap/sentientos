@@ -27,41 +27,48 @@ use crate::{
 
 use self::validator::{FailibleMutableSliceValidator, FailibleSliceValidator};
 
-struct SyscallHandler;
+#[derive(Default)]
+struct SyscallHandler {
+    process_exit: bool,
+}
 
 impl KernelSyscalls for SyscallHandler {
-    fn sys_print_programs() {
+    fn sys_print_programs(&mut self) {
         for (name, _) in PROGRAMS {
             print!("{name} ");
         }
         println!("");
     }
-    fn sys_panic() {
+    fn sys_panic(&mut self) {
         panic!("Userspace triggered kernel panic");
     }
-    fn sys_write_char(c: UserspaceArgument<char>) {
+    fn sys_write_char(&mut self, c: UserspaceArgument<char>) {
         print!("{}", c.validate());
     }
 
-    fn sys_read_input() -> Option<u8> {
+    fn sys_read_input(&mut self) -> Option<u8> {
         let mut stdin = STDIN_BUFFER.lock();
         stdin.pop()
     }
-    fn sys_read_input_wait() -> u8 {
+    fn sys_read_input_wait(&mut self) -> u8 {
         let input = STDIN_BUFFER.lock().pop();
         if let Some(input) = input {
             input
         } else {
             let_current_process_wait_for_input();
+            0
         }
     }
 
-    fn sys_exit(status: UserspaceArgument<isize>) {
+    fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
+        // We don't want to overwrite the next process trap frame
+        self.process_exit = true;
         debug!("Exit process with status: {}\n", status.validate());
         scheduler::kill_current_process();
     }
 
     fn sys_execute(
+        &mut self,
         name: UserspaceArgument<&u8>,
         length: UserspaceArgument<usize>,
     ) -> Result<u64, SysExecuteError> {
@@ -84,7 +91,7 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_wait(pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
+    fn sys_wait(&mut self, pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
         if let_current_process_wait_for(pid.validate()) {
             Ok(())
         } else {
@@ -92,13 +99,16 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_mmap_pages(number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
+    fn sys_mmap_pages(&mut self, number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
         let current_process = get_current_process_expect();
         let mut current_process = current_process.lock();
         current_process.mmap_pages(number_of_pages.validate())
     }
 
-    fn sys_open_udp_socket(port: UserspaceArgument<u16>) -> Result<UDPDescriptor, SysSocketError> {
+    fn sys_open_udp_socket(
+        &mut self,
+        port: UserspaceArgument<u16>,
+    ) -> Result<UDPDescriptor, SysSocketError> {
         let port = port.validate();
         let socket = match OPEN_UDP_SOCKETS.lock().try_get_socket(port) {
             None => return Err(SysSocketError::PortAlreadyUsed),
@@ -110,6 +120,7 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_write_back_udp_socket(
+        &mut self,
         descriptor: UserspaceArgument<UDPDescriptor>,
         buffer: UserspaceArgument<&u8>,
         length: UserspaceArgument<usize>,
@@ -155,6 +166,7 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_read_udp_socket(
+        &mut self,
         descriptor: UserspaceArgument<UDPDescriptor>,
         buffer: UserspaceArgument<&mut u8>,
         length: UserspaceArgument<usize>,
@@ -182,6 +194,13 @@ impl KernelSyscalls for SyscallHandler {
     }
 }
 
-pub fn handle_syscall(nr: usize, arg1: usize, arg2: usize, arg3: usize) -> (usize, usize) {
-    SyscallHandler::dispatch(nr, arg1, arg2, arg3)
+pub fn handle_syscall(nr: usize, arg1: usize, arg2: usize, arg3: usize) -> Option<(usize, usize)> {
+    let mut handler = SyscallHandler::default();
+    let result = handler.dispatch(nr, arg1, arg2, arg3);
+
+    if handler.process_exit {
+        None
+    } else {
+        Some(result)
+    }
 }

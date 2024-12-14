@@ -5,7 +5,7 @@ use crate::{
     net::sockets::SharedAssignedSocket,
     processes::loader::{self, LoadedElf},
 };
-use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use common::{
     net::UDPDescriptor,
     syscalls::trap_frame::{Register, TrapFrame},
@@ -26,6 +26,15 @@ pub enum ProcessState {
     WaitingForInput,
 }
 
+impl ProcessState {
+    pub fn is_waiting(&self) -> bool {
+        matches!(
+            self,
+            ProcessState::WaitingFor(_) | ProcessState::WaitingForInput
+        )
+    }
+}
+
 fn get_next_pid() -> Pid {
     static PID_COUNTER: AtomicU64 = AtomicU64::new(0);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -36,7 +45,7 @@ fn get_next_pid() -> Pid {
 pub struct Process {
     name: String,
     pid: Pid,
-    register_state: Box<TrapFrame>,
+    register_state: TrapFrame,
     page_table: RootPageTableHolder,
     program_counter: usize,
     allocated_pages: Vec<PinnedHeapPages>,
@@ -87,8 +96,12 @@ impl Process {
         ptr
     }
 
-    pub fn register_state_ptr(&self) -> *const TrapFrame {
-        self.register_state.as_ref() as *const TrapFrame
+    pub fn get_register_state(&self) -> &TrapFrame {
+        &self.register_state
+    }
+
+    pub fn set_register_state(&mut self, register_state: &TrapFrame) {
+        self.register_state = *register_state;
     }
 
     pub fn get_program_counter(&self) -> usize {
@@ -146,7 +159,7 @@ impl Process {
         Self {
             name: name.into(),
             pid: get_next_pid(),
-            register_state: Box::new(register_state),
+            register_state,
             page_table,
             program_counter: entry_address,
             allocated_pages,

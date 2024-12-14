@@ -75,8 +75,6 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 }
 
 fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
-    let profile = std::env::var("PROFILE")?;
-
     let compiled_userspace_path = Path::new("../kernel/compiled_userspace");
 
     let _ = std::fs::remove_dir_all(compiled_userspace_path);
@@ -93,11 +91,8 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
         compiled_userspace_path.to_str().unwrap(),
         "-Z",
         "unstable-options",
+        "--release",
     ]);
-
-    if profile == "release" {
-        command.arg("--release");
-    }
 
     let status = command.status()?;
     if !status.success() {

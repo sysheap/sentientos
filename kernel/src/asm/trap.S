@@ -75,13 +75,3 @@ supervisor_trap_vector:
 
 	sret
 
-.section .text
-.global restore_user_context
-restore_user_context:
-	# Set previous privilege mode to user
-	li t0, (1 << 8)
-	csrc sstatus, t0
-
-	restore_regs
-restore_user_context_sret:
-	sret
