@@ -91,7 +91,7 @@ impl Process {
             "Heap",
         );
         self.allocated_pages.push(pages);
-        let ptr = self.free_mmap_address as *mut u8;
+        let ptr = core::ptr::without_provenance_mut(self.free_mmap_address);
         self.free_mmap_address += number_of_pages * PAGE_SIZE;
         ptr
     }
