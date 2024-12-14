@@ -141,6 +141,7 @@ fn queue_current_process_back() {
         {
             let mut current_process = current_process.lock();
             current_process.set_program_counter(cpu::read_sepc());
+            current_process.set_in_kernel_mode(cpu::is_in_kernel_mode());
             debug!(
                 "Unscheduling PID={} NAME={}",
                 current_process.get_pid(),
@@ -174,6 +175,7 @@ fn prepare_next_process() -> bool {
 
         cpu::write_sscratch_register(trap_frame_ptr);
         cpu::write_sepc(pc);
+        cpu::set_ret_to_kernel_mode(next_process.get_in_kernel_mode());
 
         page_tables::activate_page_table(page_table);
 

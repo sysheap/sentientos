@@ -77,6 +77,7 @@ pub fn sret_to_kernel() -> ! {
 }
 
 const SIE_STIE: usize = 5;
+const SSTATUS_SPP: usize = 8;
 
 pub fn disable_timer_interrupt() {
     unsafe {
@@ -107,5 +108,25 @@ pub extern "C" fn wfi_loop() {
             j 0
         "
         )
+    }
+}
+
+pub fn is_in_kernel_mode() -> bool {
+    let value: usize;
+    unsafe {
+        asm!("csrr {0}, sstatus", out(reg) value);
+    }
+    (value & (1 << SSTATUS_SPP)) > 0
+}
+
+pub fn set_ret_to_kernel_mode(kernel_mode: bool) {
+    if kernel_mode {
+        unsafe {
+            asm!("csrs sstatus, {}", in(reg) (1<<SSTATUS_SPP));
+        }
+    } else {
+        unsafe {
+            asm!("csrc sstatus, {}", in(reg) (1<<SSTATUS_SPP));
+        }
     }
 }

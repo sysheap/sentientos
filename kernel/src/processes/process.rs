@@ -44,6 +44,7 @@ pub struct Process {
     free_mmap_address: usize,
     next_free_descriptor: u64,
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
+    in_kernel_mode: bool,
 }
 
 impl Debug for Process {
@@ -56,14 +57,16 @@ impl Debug for Process {
             Page Table: {:?},
             Program Counter: {:#x},
             Number of allocated pages: {},
-            State: {:?}
+            State: {:?},
+            In kernel mode: {}
         ]",
             self.pid,
             self.register_state,
             self.page_table,
             self.program_counter,
             self.allocated_pages.len(),
-            self.state
+            self.state,
+            self.in_kernel_mode
         )
     }
 }
@@ -120,6 +123,14 @@ impl Process {
         self.register_state[Register::a0] = return_code;
     }
 
+    pub fn set_in_kernel_mode(&mut self, in_kernel_mode: bool) {
+        self.in_kernel_mode = in_kernel_mode;
+    }
+
+    pub fn get_in_kernel_mode(&self) -> bool {
+        self.in_kernel_mode
+    }
+
     pub fn from_elf(elf_file: &ElfFile, name: &str) -> Self {
         debug!("Create process from elf file");
 
@@ -143,6 +154,7 @@ impl Process {
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             next_free_descriptor: 0,
             open_udp_sockets: BTreeMap::new(),
+            in_kernel_mode: false,
         }
     }
 
