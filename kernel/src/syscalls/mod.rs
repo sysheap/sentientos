@@ -18,18 +18,32 @@ use crate::{
     klibc::macros::unwrap_or_return,
     net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
     print, println,
-    processes::scheduler::{
-        self, get_current_process_expect, let_current_process_wait_for,
-        let_current_process_wait_for_input,
+    processes::{
+        process::{Pid, ProcessState, NEVER_PID},
+        process_table::ProcessRef,
+        scheduler::{self},
     },
     syscalls::validator::UserspaceArgumentValidator,
 };
 
 use self::validator::{FailibleMutableSliceValidator, FailibleSliceValidator};
 
-#[derive(Default)]
 struct SyscallHandler {
     process_exit: bool,
+    current_process: ProcessRef,
+    current_pid: Pid,
+}
+
+impl SyscallHandler {
+    fn new() -> Self {
+        let current_process = scheduler::THE.lock().get_current_process().clone();
+        let current_pid = current_process.lock().get_pid();
+        Self {
+            process_exit: false,
+            current_process,
+            current_pid,
+        }
+    }
 }
 
 impl KernelSyscalls for SyscallHandler {
@@ -55,7 +69,8 @@ impl KernelSyscalls for SyscallHandler {
         if let Some(input) = input {
             input
         } else {
-            let_current_process_wait_for_input();
+            STDIN_BUFFER.lock().register_wakeup(self.current_pid);
+            self.current_process.lock().set_state(ProcessState::Waiting);
             0
         }
     }
@@ -63,8 +78,11 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
         // We don't want to overwrite the next process trap frame
         self.process_exit = true;
+        self.current_process = scheduler::THE.lock().get_dummy_process();
+        self.current_pid = NEVER_PID;
+
         debug!("Exit process with status: {}\n", status.validate());
-        scheduler::kill_current_process();
+        scheduler::THE.lock().kill_current_process();
     }
 
     fn sys_execute(
@@ -81,7 +99,7 @@ impl KernelSyscalls for SyscallHandler {
                 name.push(*c as char);
             }
 
-            if let Some(pid) = scheduler::schedule_program(&name) {
+            if let Some(pid) = scheduler::THE.lock().start_program(&name) {
                 Ok(pid)
             } else {
                 Err(SysExecuteError::InvalidProgram)
@@ -92,7 +110,10 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_wait(&mut self, pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
-        if let_current_process_wait_for(pid.validate()) {
+        if scheduler::THE
+            .lock()
+            .let_current_process_wait_for(pid.validate())
+        {
             Ok(())
         } else {
             Err(SysWaitError::InvalidPid)
@@ -100,9 +121,9 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_mmap_pages(&mut self, number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
-        let current_process = get_current_process_expect();
-        let mut current_process = current_process.lock();
-        current_process.mmap_pages(number_of_pages.validate())
+        self.current_process
+            .lock()
+            .mmap_pages(number_of_pages.validate())
     }
 
     fn sys_open_udp_socket(
@@ -114,9 +135,7 @@ impl KernelSyscalls for SyscallHandler {
             None => return Err(SysSocketError::PortAlreadyUsed),
             Some(socket) => socket,
         };
-        let current_process = get_current_process_expect();
-        let mut current_process = current_process.lock();
-        Ok(current_process.put_new_udp_socket(socket))
+        Ok(self.current_process.lock().put_new_udp_socket(socket))
     }
 
     fn sys_write_back_udp_socket(
@@ -128,41 +147,40 @@ impl KernelSyscalls for SyscallHandler {
         let length = length.validate();
         let pa = buffer.validate(length);
 
-        let current_process = get_current_process_expect();
-        let mut current_process = current_process.lock();
+        self.current_process.with_lock(|mut p| {
+            let socket = unwrap_or_return!(
+                p.get_shared_udp_socket(descriptor.validate()),
+                Err(SysSocketError::InvalidDescriptor)
+            )
+            .lock();
 
-        let socket = unwrap_or_return!(
-            current_process.get_shared_udp_socket(descriptor.validate()),
-            Err(SysSocketError::InvalidDescriptor)
-        )
-        .lock();
-
-        let recv_ip = unwrap_or_return!(socket.get_from(), Err(SysSocketError::NoReceiveIPYet));
-        let recv_port = unwrap_or_return!(
-            socket.get_received_port(),
-            Err(SysSocketError::NoReceiveIPYet)
-        );
-
-        if let Ok(physical_address) = pa {
-            let slice = unsafe { &*slice_from_raw_parts(physical_address, length) };
-            // Get mac address of receiver
-            // Since we already received a packet we should have it in the cache
-            let destination_mac = *ARP_CACHE
-                .lock()
-                .get(&recv_ip)
-                .expect("There must be a receiver mac already in the arp cache.");
-            let constructed_packet = UdpHeader::create_udp_packet(
-                recv_ip,
-                recv_port,
-                destination_mac,
-                socket.get_port(),
-                slice,
+            let recv_ip = unwrap_or_return!(socket.get_from(), Err(SysSocketError::NoReceiveIPYet));
+            let recv_port = unwrap_or_return!(
+                socket.get_received_port(),
+                Err(SysSocketError::NoReceiveIPYet)
             );
-            crate::net::send_packet(constructed_packet);
-            Ok(length)
-        } else {
-            Err(SysSocketError::InvalidPtr)
-        }
+
+            if let Ok(physical_address) = pa {
+                let slice = unsafe { &*slice_from_raw_parts(physical_address, length) };
+                // Get mac address of receiver
+                // Since we already received a packet we should have it in the cache
+                let destination_mac = *ARP_CACHE
+                    .lock()
+                    .get(&recv_ip)
+                    .expect("There must be a receiver mac already in the arp cache.");
+                let constructed_packet = UdpHeader::create_udp_packet(
+                    recv_ip,
+                    recv_port,
+                    destination_mac,
+                    socket.get_port(),
+                    slice,
+                );
+                crate::net::send_packet(constructed_packet);
+                Ok(length)
+            } else {
+                Err(SysSocketError::InvalidPtr)
+            }
+        })
     }
 
     fn sys_read_udp_socket(
@@ -176,26 +194,26 @@ impl KernelSyscalls for SyscallHandler {
 
         let length = length.validate();
         let pa = buffer.validate(length);
-        let current_process = get_current_process_expect();
-        let mut current_process = current_process.lock();
 
-        let mut socket = unwrap_or_return!(
-            current_process.get_shared_udp_socket(descriptor.validate()),
-            Err(SysSocketError::InvalidDescriptor)
-        )
-        .lock();
+        self.current_process.with_lock(|mut p| {
+            let mut socket = unwrap_or_return!(
+                p.get_shared_udp_socket(descriptor.validate()),
+                Err(SysSocketError::InvalidDescriptor)
+            )
+            .lock();
 
-        if let Ok(physical_address) = pa {
-            let slice = unsafe { &mut *slice_from_raw_parts_mut(physical_address, length) };
-            Ok(socket.get_data(slice))
-        } else {
-            Err(SysSocketError::InvalidPtr)
-        }
+            if let Ok(physical_address) = pa {
+                let slice = unsafe { &mut *slice_from_raw_parts_mut(physical_address, length) };
+                Ok(socket.get_data(slice))
+            } else {
+                Err(SysSocketError::InvalidPtr)
+            }
+        })
     }
 }
 
 pub fn handle_syscall(nr: usize, arg1: usize, arg2: usize, arg3: usize) -> Option<(usize, usize)> {
-    let mut handler = SyscallHandler::default();
+    let mut handler = SyscallHandler::new();
     let result = handler.dispatch(nr, arg1, arg2, arg3);
 
     if handler.process_exit {

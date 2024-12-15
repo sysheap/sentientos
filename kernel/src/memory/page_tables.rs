@@ -163,6 +163,13 @@ impl RootPageTableHolder {
         }
     }
 
+    pub const fn invalid() -> Self {
+        Self {
+            root_table: null_mut(),
+            already_mapped: Vec::new(),
+        }
+    }
+
     fn table(&self) -> &PageTable {
         // SAFETY: It is always allocated
         unsafe { &*self.root_table }

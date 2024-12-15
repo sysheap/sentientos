@@ -2,7 +2,7 @@ use crate::{
     cpu,
     processes::{
         process::{Pid, ProcessState},
-        process_table, timer,
+        scheduler, timer,
     },
 };
 use alloc::collections::{BTreeSet, VecDeque};
@@ -29,9 +29,9 @@ impl StdinBuffer {
 
     pub fn push(&mut self, byte: u8) {
         let notified = !self.wakeup_queue.is_empty();
-        process_table::THE.with_lock(|pt| {
+        scheduler::THE.with_lock(|s| {
             for pid in &self.wakeup_queue {
-                if let Some(process) = pt.get_process(*pid) {
+                if let Some(process) = s.get_process(*pid) {
                     process.with_lock(|mut p| {
                         p.set_state(ProcessState::Runnable);
                         p.set_syscall_return_code(byte as usize);

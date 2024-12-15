@@ -3,7 +3,7 @@ use common::{
     syscalls::userspace_argument::{UserspaceArgument, UserspaceArgumentValueExtractor},
 };
 
-use crate::processes::scheduler::get_current_process_expect;
+use crate::processes::scheduler;
 
 pub trait FailibleSliceValidator<'a, T: 'a> {
     fn validate(self, len: usize) -> Result<&'a T, ()>;
@@ -36,45 +36,49 @@ simple_type!(UDPDescriptor);
 
 impl<'a> FailibleSliceValidator<'a, u8> for UserspaceArgument<&'a u8> {
     fn validate(self, len: usize) -> Result<&'a u8, ()> {
-        let current_process = get_current_process_expect();
-        let current_process = current_process.lock();
-        let page_table = current_process.get_page_table();
+        let current_process = scheduler::THE.lock().get_current_process().clone();
 
-        let addr = self.get() as *const u8;
-        let last = addr.wrapping_add(len - 1);
+        current_process.with_lock(|p| {
+            let page_table = p.get_page_table();
 
-        if page_table
-            .translate_userspace_address_to_physical_address(last)
-            .is_none()
-        {
-            return Err(());
-        }
+            let addr = self.get() as *const u8;
+            let last = addr.wrapping_add(len - 1);
 
-        page_table
-            .translate_userspace_address_to_physical_address(addr)
-            .map(|ptr| unsafe { &*ptr })
-            .ok_or(())
+            if page_table
+                .translate_userspace_address_to_physical_address(last)
+                .is_none()
+            {
+                return Err(());
+            }
+
+            page_table
+                .translate_userspace_address_to_physical_address(addr)
+                .map(|ptr| unsafe { &*ptr })
+                .ok_or(())
+        })
     }
 }
 impl<'a> FailibleMutableSliceValidator<'a, u8> for UserspaceArgument<&'a mut u8> {
     fn validate(self, len: usize) -> Result<&'a mut u8, ()> {
-        let current_process = get_current_process_expect();
-        let current_process = current_process.lock();
-        let page_table = current_process.get_page_table();
+        let current_process = scheduler::THE.lock().get_current_process().clone();
 
-        let addr = self.get() as *mut u8;
-        let last = addr.wrapping_add(len - 1);
+        current_process.with_lock(|p| {
+            let page_table = p.get_page_table();
 
-        if page_table
-            .translate_userspace_address_to_physical_address(last)
-            .is_none()
-        {
-            return Err(());
-        }
+            let addr = self.get() as *mut u8;
+            let last = addr.wrapping_add(len - 1);
 
-        page_table
-            .translate_userspace_address_to_physical_address(addr)
-            .map(|ptr| unsafe { &mut *(ptr as *mut _) })
-            .ok_or(())
+            if page_table
+                .translate_userspace_address_to_physical_address(last)
+                .is_none()
+            {
+                return Err(());
+            }
+
+            page_table
+                .translate_userspace_address_to_physical_address(addr)
+                .map(|ptr| unsafe { &mut *(ptr as *mut _) })
+                .ok_or(())
+        })
     }
 }

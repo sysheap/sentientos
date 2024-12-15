@@ -3,9 +3,7 @@ use common::mutex::Mutex;
 
 use crate::{debug, info};
 
-use super::process::{Pid, Process, ProcessState};
-
-pub static THE: Mutex<ProcessTable> = Mutex::new(ProcessTable::new());
+use super::process::{Pid, Process, ProcessState, NEVER_PID};
 
 pub type ProcessRef = Arc<Mutex<Process>>;
 
@@ -14,10 +12,12 @@ pub struct ProcessTable {
 }
 
 impl ProcessTable {
-    const fn new() -> Self {
-        Self {
+    pub fn new() -> Self {
+        let mut self_ = Self {
             processes: BTreeMap::new(),
-        }
+        };
+        self_.add_process(Process::never());
+        self_
     }
 
     pub fn add_process(&mut self, process: Process) {
@@ -26,13 +26,18 @@ impl ProcessTable {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.processes.is_empty()
+        // If only the never process is left
+        // we know the process table is empty
+        self.processes.len() == 1
     }
 
-    pub fn get_highest_pid_without_yash(&self) -> Option<Pid> {
+    pub fn get_highest_pid_without(&self, process_names: &[&str]) -> Option<Pid> {
         self.processes
             .iter()
-            .filter(|(_, p)| p.lock().get_name() != "yash")
+            .filter(|(_, p)| {
+                let p = p.lock();
+                !process_names.iter().any(|n| p.get_name() == *n) && p.get_pid() != NEVER_PID
+            })
             .max_by_key(|(pid, _)| *pid)
             .map(|(pid, _)| *pid)
     }
@@ -50,6 +55,10 @@ impl ProcessTable {
     }
 
     pub fn kill(&mut self, pid: Pid) {
+        assert!(
+            pid != NEVER_PID,
+            "We are not allowed to kill the never process"
+        );
         debug!("Removing pid={pid} from process table");
         if let Some(process) = self.processes.remove(&pid) {
             assert_eq!(
@@ -93,8 +102,11 @@ impl ProcessTable {
         self.processes.get(&pid)
     }
 
-    pub fn does_pid_exist(&self, pid: Pid) -> bool {
-        self.processes.contains_key(&pid)
+    pub fn get_dummy_process(&self) -> ProcessRef {
+        self.processes
+            .get(&NEVER_PID)
+            .expect("The dummy process must always exist")
+            .clone()
     }
 
     pub fn wake_process_up(&self, pid: Pid) {

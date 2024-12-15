@@ -118,7 +118,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     plic::init_uart_interrupt();
 
-    scheduler::initialize();
+    scheduler::init();
 
     let mut pci_devices = enumerate_devices(&pci_information);
 

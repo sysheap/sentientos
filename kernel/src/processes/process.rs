@@ -7,7 +7,7 @@ use crate::{
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
-    string::String,
+    string::{String, ToString},
     vec::Vec,
 };
 use common::{
@@ -21,6 +21,8 @@ use core::{
 
 pub type Pid = u64;
 
+pub const NEVER_PID: Pid = 0;
+
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +32,8 @@ pub enum ProcessState {
 }
 
 fn get_next_pid() -> Pid {
+    // PIDs will start from 1
+    // 0 is reserved for the never process which will be never scheduled
     static PID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
@@ -76,6 +80,23 @@ impl Debug for Process {
 }
 
 impl Process {
+    pub fn never() -> Self {
+        Self {
+            name: "never".to_string(),
+            pid: NEVER_PID,
+            register_state: TrapFrame::zero(),
+            page_table: RootPageTableHolder::invalid(),
+            program_counter: 0,
+            allocated_pages: Vec::new(),
+            state: ProcessState::Waiting,
+            free_mmap_address: FREE_MMAP_START_ADDRESS,
+            next_free_descriptor: 0,
+            open_udp_sockets: BTreeMap::new(),
+            in_kernel_mode: false,
+            notify_on_die: BTreeSet::new(),
+        }
+    }
+
     pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Pid> {
         self.notify_on_die.iter()
     }

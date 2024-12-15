@@ -7,18 +7,17 @@ use crate::{
     memory::linker_information::LinkerInformation,
     processes::{
         process::ProcessState,
-        scheduler::{self, get_current_process, schedule},
+        scheduler::{self},
     },
     syscalls::{self},
     warn,
 };
-use alloc::string::ToString;
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::panic;
 
 #[no_mangle]
 extern "C" fn handle_timer_interrupt() {
-    scheduler::schedule();
+    scheduler::THE.lock().schedule();
 }
 
 #[no_mangle]
@@ -35,7 +34,7 @@ fn handle_external_interrupt() {
     plic::complete_interrupt(plic_interrupt);
 
     match input {
-        3 => crate::processes::scheduler::send_ctrl_c(),
+        3 => scheduler::THE.lock().send_ctrl_c(),
         4 => crate::debugging::dump_current_state(),
         _ => STDIN_BUFFER.lock().push(input),
     }
@@ -53,11 +52,11 @@ fn handle_syscall(sepc: usize, trap_frame: &mut TrapFrame) {
         cpu::write_sepc(sepc + 4); // Skip the ecall instruction
     }
     // In case our current process was set to waiting state we need to reschedule
-    if let Some(process) = get_current_process()
-        && process.lock().get_state() == ProcessState::Waiting
-    {
-        schedule();
-    }
+    scheduler::THE.with_lock(|mut s| {
+        if s.get_current_process().lock().get_state() == ProcessState::Waiting {
+            s.schedule();
+        }
+    });
 }
 
 fn warn_on_stackoverflow(cause: InterruptCause, stval: usize) {
@@ -77,27 +76,19 @@ fn handle_unhandled_exception(
     sepc: usize,
     trap_frame: &mut TrapFrame,
 ) {
-    let current_process = get_current_process();
-    let mut is_userspace_address = "NO ACTIVE PROCESS".to_string();
-    let mut process_name = is_userspace_address.clone();
-    if let Some(current_process) = current_process {
-        let current_process = current_process.lock();
-        is_userspace_address = format!(
-            "{}",
-            current_process.get_page_table().is_userspace_address(sepc)
-        );
-        process_name = current_process.get_name().to_string();
-    }
-    panic!(
+    let message= scheduler::THE.lock().get_current_process().with_lock(|p| {
+        format!(
             "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
             cause.get_reason(),
             cause.get_exception_code(),
             stval,
             sepc,
-            is_userspace_address,
-            process_name,
+            p.get_page_table().is_userspace_address(sepc),
+            p.get_name(),
             trap_frame
-        );
+        )
+    });
+    panic!("{}", message);
 }
 
 #[no_mangle]
