@@ -19,6 +19,11 @@ test = false
 bench = false
 
 [[bin]]
+name = "connect4"
+test = false
+bench = false
+
+[[bin]]
 name = "init"
 test = false
 bench = false
