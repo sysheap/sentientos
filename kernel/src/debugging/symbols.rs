@@ -29,7 +29,7 @@ pub fn symbols_size() -> usize {
 
 #[cfg(miri)]
 pub fn symbols_size() -> usize {
-    0
+    1
 }
 
 pub struct AddressAndSymbol {

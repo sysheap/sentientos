@@ -8,9 +8,11 @@ use crate::{
 use alloc::{
     collections::{BTreeMap, BTreeSet},
     string::{String, ToString},
+    sync::Arc,
     vec::Vec,
 };
 use common::{
+    mutex::Mutex,
     net::UDPDescriptor,
     syscalls::trap_frame::{Register, TrapFrame},
 };
@@ -22,12 +24,13 @@ use core::{
 
 pub type Pid = u64;
 
-pub const NEVER_PID: Pid = 0;
+pub const POWERSAVE_PID: Pid = 0;
 
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessState {
+    Running,
     Runnable,
     Waiting,
 }
@@ -82,22 +85,25 @@ impl Debug for Process {
 }
 
 impl Process {
-    pub fn never() -> Self {
-        Self {
-            name: "never".to_string(),
-            pid: NEVER_PID,
+    pub fn create_powersave_process() -> Arc<Mutex<Self>> {
+        extern "C" {
+            fn powersave();
+        }
+        Arc::new(Mutex::new(Self {
+            name: "powersave".to_string(),
+            pid: POWERSAVE_PID,
             register_state: TrapFrame::zero(),
-            page_table: RootPageTableHolder::invalid(),
-            program_counter: 0,
+            page_table: RootPageTableHolder::new_with_kernel_mapping(),
+            program_counter: powersave as usize,
             allocated_pages: Vec::new(),
-            state: ProcessState::Waiting,
+            state: ProcessState::Runnable,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             next_free_descriptor: 0,
             open_udp_sockets: BTreeMap::new(),
-            in_kernel_mode: false,
+            in_kernel_mode: true,
             notify_on_die: BTreeSet::new(),
             waiting_on_syscall: None,
-        }
+        }))
     }
 
     pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Pid> {
@@ -111,7 +117,7 @@ impl Process {
             pages.as_ptr() as usize,
             PAGE_SIZE * number_of_pages,
             crate::memory::page_tables::XWRMode::ReadWrite,
-            "Heap",
+            "Heap".to_string(),
         );
         self.allocated_pages.push(pages);
         let ptr = core::ptr::without_provenance_mut(self.free_mmap_address);

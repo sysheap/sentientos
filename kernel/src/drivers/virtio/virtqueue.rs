@@ -1,6 +1,6 @@
 use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
-use crate::{cpu, debug, klibc::MMIO};
+use crate::{cpu::Cpu, debug, klibc::MMIO};
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
@@ -125,11 +125,11 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         // avail->ring[avail->idx % qsz] = head;
         self.driver_area.ring[self.driver_area.idx as usize % QUEUE_SIZE] = free_descriptor_index;
 
-        cpu::memory_fence();
+        Cpu::memory_fence();
 
         self.driver_area.idx = self.driver_area.idx.wrapping_add(1);
 
-        cpu::memory_fence();
+        Cpu::memory_fence();
 
         let insert_result = self
             .outstanding_buffers
@@ -145,7 +145,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     }
 
     pub fn receive_buffer(&mut self) -> Vec<UsedBuffer> {
-        cpu::memory_fence();
+        Cpu::memory_fence();
         // Prevent re/reading the hardware. Only tackle the current amount of buffers.
         let current_device_index = self.device_area.idx;
         if self.last_used_ring_index == current_device_index {

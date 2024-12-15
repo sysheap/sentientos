@@ -13,7 +13,7 @@ async fn panic() -> anyhow::Result<()> {
     assert!(output.contains("<handle_exception+"));
     assert!(output.contains("<asm_handle_exception+"));
     assert!(output
-        .contains("[info][kernel::debugging] Current Process: PID=3 NAME=panic STATE=Runnabl"));
+        .contains("[info][kernel::debugging] Current Process: PID=3 NAME=panic STATE=Running"));
 
     Ok(())
 }

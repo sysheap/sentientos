@@ -1,4 +1,4 @@
-use crate::{info, klibc::sizes::MiB, processes::scheduler};
+use crate::{cpu::Cpu, info, klibc::sizes::MiB, processes::process_table};
 
 pub mod backtrace;
 mod eh_frame_parser;
@@ -20,14 +20,13 @@ pub fn dump_current_state() {
         used_heap_pages, total_heap_pages
     );
 
-    scheduler::THE.with_lock(|s| {
-        s.dump();
-        let current_process = s.get_current_process().lock();
+    process_table::THE.lock().dump();
+    Cpu::current_process().with_lock(|p| {
         info!(
             "Current Process: PID={} NAME={} STATE={:?}",
-            current_process.get_pid(),
-            current_process.get_name(),
-            current_process.get_state()
+            p.get_pid(),
+            p.get_name(),
+            p.get_state()
         );
     });
 }

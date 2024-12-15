@@ -1,6 +1,6 @@
 use common::mutex::Mutex;
 
-use crate::{cpu, io::TEST_DEVICE_ADDRESSS, klibc::MMIO};
+use crate::{cpu::Cpu, io::TEST_DEVICE_ADDRESSS, klibc::MMIO};
 
 const EXIT_SUCCESS_CODE: u32 = 0x5555;
 #[allow(dead_code)]
@@ -31,9 +31,9 @@ pub fn exit_reset() -> ! {
 
 pub fn wait_for_the_end() -> ! {
     unsafe {
-        cpu::disable_global_interrupts();
+        Cpu::disable_global_interrupts();
     }
     loop {
-        cpu::wait_for_interrupt();
+        Cpu::wait_for_interrupt();
     }
 }
