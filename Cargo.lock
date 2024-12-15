@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yaros"
+name = "yaos"
 version = "0.1.0"
 dependencies = [
  "common",

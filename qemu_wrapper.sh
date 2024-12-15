@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --log)
-            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaros.log"
+            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaos.log"
             shift
             ;;
         --net)
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --gdb          Let qemu listen on :1234 for gdb connections"
-            echo "  --log          Log qemu events to /tmp/yaros.log"
+            echo "  --log          Log qemu events to /tmp/yaos.log"
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net          Enable network card"
             echo "  -h, --help     Show this help message"

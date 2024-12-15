@@ -2,8 +2,8 @@ use crate::infra::qemu::QemuInstance;
 
 #[tokio::test]
 async fn panic() -> anyhow::Result<()> {
-    let mut yaros = QemuInstance::start().await?;
-    let output = yaros
+    let mut yaos = QemuInstance::start().await?;
+    let output = yaos
         .run_prog_waiting_for("panic", "Time to attach gdb ;) use 'just attach'")
         .await?;
 

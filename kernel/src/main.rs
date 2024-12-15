@@ -59,7 +59,7 @@ extern crate alloc;
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
     QEMU_UART.lock().init();
 
-    info!("Hello World from YaROS!\n");
+    info!("Hello World from YaOS!\n");
     info!("Hart ID: {}", hart_id);
     info!("Device Tree Pointer: {:p}", device_tree_pointer);
 

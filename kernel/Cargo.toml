@@ -1,5 +1,5 @@
 [package]
-name = "yaros"
+name = "yaos"
 edition = "2021"
 version.workspace = true
 authors.workspace = true

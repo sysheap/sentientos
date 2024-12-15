@@ -70,7 +70,7 @@ impl QemuInstance {
 
         let mut stdout = ReadAsserter::new(stdout);
 
-        stdout.assert_read_until("Hello World from YaROS!").await;
+        stdout.assert_read_until("Hello World from YaOS!").await;
         stdout.assert_read_until("kernel_init done!").await;
         stdout.assert_read_until("init process started").await;
         stdout
