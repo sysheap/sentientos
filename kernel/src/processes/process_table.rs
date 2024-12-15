@@ -34,11 +34,11 @@ impl ProcessTable {
     pub fn get_highest_pid_without(&self, process_names: &[&str]) -> Option<Pid> {
         self.processes
             .iter()
+            .max_by_key(|(pid, _)| *pid)
             .filter(|(_, p)| {
                 let p = p.lock();
                 !process_names.iter().any(|n| p.get_name() == *n) && p.get_pid() != NEVER_PID
             })
-            .max_by_key(|(pid, _)| *pid)
             .map(|(pid, _)| *pid)
     }
 
