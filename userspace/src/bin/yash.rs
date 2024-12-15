@@ -2,13 +2,11 @@
 #![no_main]
 
 use alloc::string::{String, ToString};
-use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_read_input_wait, sys_wait};
-use userspace::{print, println};
+use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
+use userspace::{print, println, util::read_line};
 
 extern crate alloc;
 extern crate userspace;
-
-const DELETE: u8 = 127;
 
 #[unsafe(no_mangle)]
 fn main() {
@@ -17,28 +15,7 @@ fn main() {
     println!("Type 'help' for a list of available commands.");
     loop {
         print!("$ ");
-        let mut input = String::new();
-        loop {
-            let result = sys_read_input_wait();
-            match result {
-                b'\r' | b'\n' => {
-                    // Carriage return
-                    println!();
-                    break;
-                }
-                DELETE => {
-                    if input.pop().is_some() {
-                        print!("{}{}{}", 8 as char, ' ', 8 as char);
-                    }
-                }
-                _ => {
-                    assert!(result.is_ascii());
-                    let result = result as char;
-                    input.push(result);
-                    print!("{}", result);
-                }
-            }
-        }
+        let input = read_line();
         // Parse input and execute
         parse_command_and_execute(input);
     }
