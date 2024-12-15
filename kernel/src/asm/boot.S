@@ -47,12 +47,39 @@ bss_cleared:
 
 	call kernel_init
 
-	# Enable all interrupts
-	li t0, -1
-	csrw sie, t0
+	# We should never come here
+	j asm_panic_rust
 
-	# Enable global interrupts
-	li t0, 0b10
-	csrs sstatus, t0
+.section .text
+.global start_hart
+.align 4
+start_hart:
+.option push
+.option norelax
+	la		gp, __global_pointer$
+.option pop
 
-	j wfi_loop
+	# disable interrupts.
+	csrw sie, zero
+
+	# Load trap vector machine mode
+	la t0, supervisor_trap_table
+	addi t0, t0, 1 # Use vectored mode -> we know the address is 4 byte aligned
+	csrw stvec, t0
+
+	# a1 contains the cpu struct
+	csrw sscratch, a1
+
+	# Load kernel page tables such that we get the correct stack
+	ld t1, {KERNEL_PAGE_TABLES_SATP_OFFSET}(a1)
+	csrw satp, t1
+	sfence.vma zero, zero
+
+	# Set kernel stack pointer to 0xffffffffffffffff
+	li sp, 0
+	addi sp, sp, -64
+
+	call hart_init
+
+	# We should never come here
+	j asm_panic_rust

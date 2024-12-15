@@ -1,6 +1,9 @@
 use common::mutex::Mutex;
 
-use crate::{info, klibc::MMIO};
+use crate::{
+    info,
+    klibc::{runtime_initialized::RuntimeInitializedData, MMIO},
+};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x1000_0000;
@@ -14,15 +17,16 @@ struct Plic {
 }
 
 impl Plic {
-    const unsafe fn new(plic_base: usize) -> Self {
+    fn new(plic_base: usize, hart_id: usize) -> Self {
+        let context = hart_id * 2 + 1;
         // These constants are set to interrupt context 1 which corresponds to Supervisor Mode on Hart 0
         // If we support multiple harts, we will need to change these constants to be configurable
         Self {
             priority_register_base: MMIO::new(plic_base),
             // pending_register: MMIO::new(plic_base + 0x1000),
-            enable_register: MMIO::new(plic_base + 0x2080),
-            threshold_register: MMIO::new(plic_base + 0x20_1000),
-            claim_complete_register: MMIO::new(plic_base + 0x20_1004),
+            enable_register: MMIO::new(plic_base + 0x2000 + (0x80 * context)),
+            threshold_register: MMIO::new(plic_base + 0x20_0000 + (0x1000 * context)),
+            claim_complete_register: MMIO::new(plic_base + 0x20_0004 + (0x1000 * context)),
         }
     }
     pub fn enable(&mut self, interrupt_id: u32) {
@@ -62,7 +66,7 @@ impl Plic {
     }
 }
 
-static PLIC: Mutex<Plic> = Mutex::new(unsafe { Plic::new(PLIC_BASE) });
+static PLIC: RuntimeInitializedData<Mutex<Plic>> = RuntimeInitializedData::new();
 
 const UART_INTERRUPT_NUMBER: u32 = 10;
 
@@ -72,8 +76,11 @@ pub enum InterruptSource {
     Else,
 }
 
-pub fn init_uart_interrupt() {
+pub fn init_uart_interrupt(hart_id: usize) {
     info!("Initializing plic uart interrupt");
+
+    PLIC.initialize(Mutex::new(Plic::new(PLIC_BASE, hart_id)));
+
     let mut plic = PLIC.lock();
     plic.set_threshold(0);
     plic.enable(UART_INTERRUPT_NUMBER);

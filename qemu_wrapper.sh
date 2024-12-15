@@ -7,7 +7,6 @@ cd "$(dirname "$0")"
 QEMU_CMD="qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
-    -smp 1 \
     -m 128M \
     -nographic \
     -serial mon:stdio"
@@ -15,20 +14,12 @@ QEMU_CMD="qemu-system-riscv64 \
 # Process options
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --gdb)
-            QEMU_CMD+=" -s"
-            shift
-            ;;
-        --log)
-            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaos.log"
-            shift
-            ;;
-        --net)
-            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1"
-            shift
-            ;;
         --capture)
             QEMU_CMD+=" -object filter-dump,id=f1,netdev=netdev1,file=network.pcap "
+            shift
+            ;;
+        --gdb)
+            QEMU_CMD+=" -s"
             shift
             ;;
         --help|-h)
@@ -42,6 +33,18 @@ while [[ $# -gt 0 ]]; do
             echo "  -h, --help     Show this help message"
             echo "  --wait         Wait cpu until gdb is attached"
             exit 0
+            ;;
+        --log)
+            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaos.log"
+            shift
+            ;;
+        --net)
+            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1"
+            shift
+            ;;
+        --smp)
+            QEMU_CMD+=" -smp $(nproc)"
+            shift
             ;;
         --wait)
             QEMU_CMD+=" -S"

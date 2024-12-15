@@ -1,8 +1,5 @@
 #![cfg_attr(miri, allow(unused_imports))]
-use crate::{
-    io::uart::QEMU_UART, memory::page_tables::KERNEL_PAGE_TABLES, println,
-    test::qemu_exit::wait_for_the_end,
-};
+use crate::{io::uart::QEMU_UART, println, test::qemu_exit::wait_for_the_end};
 use core::{panic::PanicInfo, sync::atomic::AtomicU8};
 
 #[cfg(test)]
@@ -13,8 +10,10 @@ static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 #[cfg(not(miri))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    use crate::cpu::Cpu;
+
     unsafe {
-        crate::cpu::disable_global_interrupts();
+        crate::Cpu::disable_global_interrupts();
     }
 
     // SAFTEY: The worst what happen is scrambled output
@@ -25,13 +24,15 @@ fn panic(info: &PanicInfo) -> ! {
         QEMU_UART.disarm();
     }
 
+    let cpu = unsafe { Cpu::current_nevertheless() };
+
     println!("");
-    println!("KERNEL Panic Occured!");
+    println!("KERNEL Panic Occured on cpu {}!", Cpu::cpu_id());
     println!("Message: {}", info.message());
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
-    println!("Kernel Page Tables {}", &*KERNEL_PAGE_TABLES);
+    println!("Kernel Page Tables {}", cpu.kernel_page_table());
     abort_if_double_panic();
     crate::debugging::backtrace::print();
     crate::debugging::dump_current_state();

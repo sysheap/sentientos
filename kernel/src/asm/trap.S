@@ -23,6 +23,9 @@
 	# Save all registers to the kernel trap frame
 	csrrw t6, sscratch, t6
 
+	# Add trap frame offset
+	addi t6, t6, {TRAP_FRAME_OFFSET}
+
 	# Save all registers
 	# In order to make things easier we also save x0 which is always zero
 	.set 	i, 0
@@ -39,6 +42,9 @@
 	csrr t6, sscratch
 	save_gp 31, t5
 
+	# Remove trap frame offset
+	addi t5, t5, -{TRAP_FRAME_OFFSET}
+
 	# Restore trap frame pointer
 	csrw sscratch, t5
 .endm
@@ -46,6 +52,9 @@
 .macro restore_regs
 	# Restore all registers
 	csrr t6, sscratch
+
+	# Add trap frame offset
+	addi t6, t6, {TRAP_FRAME_OFFSET}
 
 	.set i,0
 	.rept 32
@@ -63,15 +72,23 @@ asm_\func:
 	
 	save_regs
 
-	# Load kernel stack frame
-	la sp, __stop_kernel_stack
+	# Load kernel page tables such that we get the correct stack
+	csrr t0, sscratch
+	ld t1, {KERNEL_PAGE_TABLES_SATP_OFFSET}(t0)
+	csrw satp, t1
+	sfence.vma zero, zero
 
-	csrr a0, scause
-	csrr a1, stval
-	csrr a2, sepc
-	csrr a3, sscratch
+	# Set kernel stack pointer to 0xffffffffffffffff
+	li sp, 0
+	addi sp, sp, -64
+
 	call \func
 
+	# Restore the process page table
+	call get_process_satp_value
+	csrw satp, a0
+	sfence.vma
+	
 	restore_regs
 
 	sret

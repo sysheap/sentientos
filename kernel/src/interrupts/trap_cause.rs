@@ -27,13 +27,17 @@ pub mod exception {
 use exception::*;
 use interrupt::*;
 
-use crate::memory::linker_information::LinkerInformation;
+use crate::cpu::Cpu;
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct InterruptCause(usize);
 
 impl InterruptCause {
+    pub fn from_scause() -> Self {
+        Self(Cpu::read_scause())
+    }
+
     pub fn is_interrupt(&self) -> bool {
         self.0 >> 63 == 1
     }
@@ -74,13 +78,5 @@ impl InterruptCause {
                 _ => "Reserved or designated for platform use",
             }
         }
-    }
-
-    pub fn is_stack_overflow(&self, stval: usize) -> bool {
-        let exception_code = self.get_exception_code();
-        let range = LinkerInformation::__start_stack_overflow_guard()
-            ..LinkerInformation::__start_kernel_stack();
-        (exception_code == LOAD_PAGE_FAULT || exception_code == STORE_AMO_PAGE_FAULT)
-            && range.contains(&stval)
     }
 }

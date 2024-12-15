@@ -56,9 +56,6 @@ macro_rules! sections {
             // will be binary patched
             getter_address!(__start_symbols);
 
-            // This page will not be mapped.
-            getter!(stack_overflow_guard);
-
             // The heap will start directly page aligned after the symbols
             pub fn __start_heap() -> usize {
                 align_up(debugging::symbols::symbols_end(), PAGE_SIZE)

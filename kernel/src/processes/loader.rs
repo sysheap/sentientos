@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{string::ToString, vec::Vec};
 
 use crate::{
     klibc::{
@@ -34,7 +34,7 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
         stack_addr.get(),
         PAGE_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
-        "Stack",
+        "Stack".to_string(),
     );
 
     // Map load program header
@@ -60,7 +60,7 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
             pages_addr.get(),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
-            "LOAD",
+            "LOAD".to_string(),
         );
     }
 

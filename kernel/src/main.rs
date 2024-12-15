@@ -21,16 +21,16 @@
 #![reexport_test_harness_main = "test_main"]
 
 use crate::{
-    interrupts::plic,
-    io::uart::QEMU_UART,
-    memory::page_tables,
-    pci::enumerate_devices,
-    processes::{scheduler, timer},
+    interrupts::plic, io::uart::QEMU_UART, memory::page_tables, pci::enumerate_devices,
+    processes::timer,
 };
 use alloc::vec::Vec;
+use asm::wfi_loop;
+use cpu::Cpu;
 use debugging::{backtrace, symbols};
 use device_tree::get_devicetree_range;
 use memory::page_tables::MappingDescription;
+use processes::process_table;
 
 mod asm;
 mod assert;
@@ -57,7 +57,7 @@ mod test;
 extern crate alloc;
 
 #[unsafe(no_mangle)]
-extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
+extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     QEMU_UART.lock().init();
 
     info!("Hello World from YaOS!\n");
@@ -70,6 +70,9 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         (version.major == 0 && version.minor >= 2) || version.major > 0,
         "Supported SBI Versions >= 0.2"
     );
+
+    let num_cpus = sbi::extensions::hart_state_extension::get_number_of_harts();
+    info!("Number of Cores: {num_cpus}");
 
     symbols::init();
     device_tree::init(device_tree_pointer);
@@ -113,13 +116,13 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
 
     memory::initialize_runtime_mappings(&runtime_mapping);
 
-    page_tables::activate_page_table(&page_tables::KERNEL_PAGE_TABLES);
+    process_table::init();
 
-    interrupts::set_sscratch_to_kernel_trap_frame();
+    Cpu::write_sscratch(Cpu::init(hart_id) as usize);
 
-    plic::init_uart_interrupt();
+    Cpu::current().activate_kernel_page_table();
 
-    scheduler::init();
+    plic::init_uart_interrupt(hart_id);
 
     let mut pci_devices = enumerate_devices(&pci_information);
 
@@ -130,7 +133,48 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) {
         net::assign_network_device(network_device);
     }
 
+    start_other_harts(hart_id, num_cpus);
+
+    info!("kernel_init done! Enabling interrupts");
+
+    prepare_for_scheduling();
+}
+
+fn prepare_for_scheduling() -> ! {
+    // Enable all interrupts
+    Cpu::write_sie(usize::MAX);
+
+    // Enable global interrupts
+    Cpu::csrs_sstatus(0b10);
+
     timer::set_timer(0);
 
-    info!("kernel_init done!");
+    wfi_loop();
+}
+
+fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
+    extern "C" {
+        fn start_hart();
+    }
+    for cpu_id in 0..number_of_cpus {
+        if cpu_id == current_hart_id {
+            continue;
+        }
+
+        info!("Starting cpu {cpu_id}");
+        let cpu_struct = Cpu::init(cpu_id);
+        sbi::extensions::hart_state_extension::start_hart(
+            cpu_id,
+            start_hart as usize,
+            cpu_struct as usize,
+        )
+        .assert_success();
+    }
+}
+
+#[no_mangle]
+extern "C" fn hart_init() -> ! {
+    let cpu_id = Cpu::cpu_id();
+    info!("Cpu {cpu_id} started!");
+    prepare_for_scheduling();
 }

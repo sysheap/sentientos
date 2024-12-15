@@ -39,17 +39,6 @@ SECTIONS
     *(.sbss .sbss.*) *(.bss .bss.*)
   }
 
-  # This page will be an unmapped area to prevent stack overflows
-  # I know - it is not the most efficient way because we waste some actual
-  # memory here. It would be better to only have a guard page in virtual memory.
-  # However, this needs more redesigning about adress space layout
-  # so lets leave this here as quick fix
-  # The guard page ist not aligned such that it starts directly after bss
-  # and continues until the kernel_stack
-  stack_overflow_guard (NOLOAD) : ALIGN(4K) {
-    . = . + 1;
-  }
-
   kernel_stack (NOLOAD) : ALIGN(4K) {
     . = . + 512K;
   }

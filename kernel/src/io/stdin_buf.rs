@@ -1,6 +1,6 @@
 use crate::{
-    cpu,
-    processes::{process::Pid, scheduler, timer},
+    cpu::Cpu,
+    processes::{process::Pid, process_table, timer},
 };
 use alloc::collections::{BTreeSet, VecDeque};
 use common::mutex::Mutex;
@@ -26,18 +26,23 @@ impl StdinBuffer {
 
     pub fn push(&mut self, byte: u8) {
         let notified = !self.wakeup_queue.is_empty();
-        scheduler::THE.with_lock(|s| {
+        process_table::THE.with_lock(|pt| {
             for pid in &self.wakeup_queue {
-                if let Some(process) = s.get_process(*pid) {
+                if let Some(process) = pt.get_process(*pid) {
                     process.with_lock(|mut p| {
                         p.resume_on_syscall(byte);
                     })
                 }
             }
         });
+        Cpu::with_scheduler(|s| {
+            if notified && s.is_current_process_energy_saver() {
+                s.schedule();
+            }
+        });
         self.wakeup_queue.clear();
         if notified {
-            if !cpu::is_timer_enabled() {
+            if !Cpu::is_timer_enabled() {
                 // Enable timer because we were sleeping and waiting
                 // for input
                 timer::set_timer(0);

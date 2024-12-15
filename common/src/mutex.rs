@@ -33,13 +33,12 @@ impl<T> Mutex<T> {
         if self.disarmed.load(Ordering::SeqCst) {
             return MutexGuard { mutex: self };
         }
-        if self
+        while self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            panic!("Lock held twice of Mutex<{}>", core::any::type_name::<T>());
-            // core::hint::spin_loop();
+            core::hint::spin_loop();
         }
         MutexGuard { mutex: self }
     }
