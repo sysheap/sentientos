@@ -6,7 +6,7 @@ use crate::klibc::MMIO;
 
 pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 
-pub static QEMU_UART: Mutex<Uart> = Mutex::new(unsafe { Uart::new(UART_BASE_ADDRESS) });
+pub static QEMU_UART: Mutex<Uart> = Mutex::new(Uart::new(UART_BASE_ADDRESS));
 
 unsafe impl Sync for Uart {}
 unsafe impl Send for Uart {}
@@ -14,29 +14,29 @@ unsafe impl Send for Uart {}
 pub struct Uart {
     transmitter: MMIO<u8>,
     lcr: MMIO<u8>,
+    is_init: bool,
 }
 
 impl Uart {
-    const unsafe fn new(uart_base_address: usize) -> Self {
-        unsafe {
-            Self {
-                transmitter: MMIO::new(uart_base_address),
-                lcr: MMIO::new(uart_base_address + 5),
-            }
+    const fn new(uart_base_address: usize) -> Self {
+        Self {
+            transmitter: MMIO::new(uart_base_address),
+            lcr: MMIO::new(uart_base_address + 5),
+            is_init: false,
         }
     }
 
-    pub fn init(&self) {
-        let mut lcr: MMIO<u8> = unsafe { MMIO::new(UART_BASE_ADDRESS + 3) };
-        let mut fifo: MMIO<u8> = unsafe { MMIO::new(UART_BASE_ADDRESS + 2) };
-        let mut ier: MMIO<u8> = unsafe { MMIO::new(UART_BASE_ADDRESS + 1) };
+    pub fn init(&mut self) {
+        let mut lcr: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 3);
+        let mut fifo: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 2);
+        let mut ier: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);
         let lcr_value = 0b11;
         // Set word length to 8 bit
-        *lcr = lcr_value;
+        lcr.write(lcr_value);
         // Enable fifo
-        *fifo = 0b1;
+        fifo.write(0b1);
         // Enable receiver buffer interrupts
-        *ier = 0b1;
+        ier.write(0b1);
 
         // If we cared about the divisor, the code below would set the divisor
         // from a global clock rate of 22.729 MHz (22,729,000 cycles per second)
@@ -64,39 +64,42 @@ impl Uart {
         // open the "divisor latch" by writing 1 into the Divisor Latch Access Bit
         // (DLAB), which is bit index 7 of the Line Control Register (LCR) which
         // is at base_address + 3.
-        unsafe {
-            *lcr = lcr_value | 1 << 7;
+        lcr.write(lcr_value | 1 << 7);
 
-            let mut dll: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS);
-            let mut dlm: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);
+        let mut dll: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS);
+        let mut dlm: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);
 
-            // Now, base addresses 0 and 1 point to DLL and DLM, respectively.
-            // Put the lower 8 bits of the divisor into DLL
-            *dll = divisor_least;
-            *dlm = divisor_most;
+        // Now, base addresses 0 and 1 point to DLL and DLM, respectively.
+        // Put the lower 8 bits of the divisor into DLL
+        dll.write(divisor_least);
+        dlm.write(divisor_most);
 
-            // Now that we've written the divisor, we never have to touch this again. In
-            // hardware, this will divide the global clock (22.729 MHz) into one suitable
-            // for 2,400 signals per second. So, to once again get access to the
-            // RBR/THR/IER registers, we need to close the DLAB bit by clearing it to 0.
-            *lcr = lcr_value;
-        }
+        // Now that we've written the divisor, we never have to touch this again. In
+        // hardware, this will divide the global clock (22.729 MHz) into one suitable
+        // for 2,400 signals per second. So, to once again get access to the
+        // RBR/THR/IER registers, we need to close the DLAB bit by clearing it to 0.
+        lcr.write(lcr_value);
+
+        self.is_init = true;
     }
 
     fn write(&mut self, character: u8) {
-        *self.transmitter = character
+        self.transmitter.write(character);
     }
 
     fn read(&self) -> Option<u8> {
-        if *self.lcr & 1 == 0 {
+        if self.lcr.read() & 1 == 0 {
             return None;
         }
-        Some(*self.transmitter)
+        Some(self.transmitter.read())
     }
 }
 
 impl Write for Uart {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if !self.is_init {
+            return Ok(());
+        }
         for c in s.bytes() {
             self.write(c);
         }

@@ -5,6 +5,9 @@ use crate::{
 };
 use core::{panic::PanicInfo, sync::atomic::AtomicU8};
 
+#[cfg(test)]
+use crate::test::qemu_exit::exit_failure;
+
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 
 #[cfg(not(miri))]
@@ -34,6 +37,11 @@ fn panic(info: &PanicInfo) -> ! {
     crate::debugging::dump_current_state();
 
     println!("Time to attach gdb ;) use 'just attach'");
+
+    #[cfg(test)]
+    exit_failure(1);
+
+    #[cfg(not(test))]
     wait_for_the_end();
 }
 
@@ -43,6 +51,11 @@ fn abort_if_double_panic() {
     if current >= 1 {
         println!("Panic in panic! ABORTING!");
         println!("Time to attach gdb ;) use 'just attach'");
+
+        #[cfg(test)]
+        exit_failure(1);
+
+        #[cfg(not(test))]
         wait_for_the_end();
     }
 }

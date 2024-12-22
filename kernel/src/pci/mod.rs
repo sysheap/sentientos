@@ -1,4 +1,4 @@
-use crate::{debug, info, klibc::MMIO, pci};
+use crate::{debug, info, klibc::MMIO, mmio_struct, pci};
 use alloc::{collections::BTreeMap, vec::Vec};
 
 mod allocator;
@@ -31,46 +31,49 @@ pub mod command_register {
     pub const MEMORY_SPACE: u16 = 1 << 1;
 }
 
-#[repr(C)]
-#[allow(dead_code)]
-pub struct GeneralDevicePciHeader {
-    vendor_id: u16,
-    device_id: u16,
-    command_register: u16,
-    status_register: u16,
-    revision_id: u8,
-    programming_interface_byte: u8,
-    subclass: u8,
-    class_code: u8,
-    cache_line_size: u8,
-    latency_timer: u8,
-    header_type: u8,
-    built_in_self_test: u8,
-    bars: [u32; 6],
-    cardbus_cis_pointer: u32,
-    subsystem_vendor_id: u16,
-    subsystem_id: u16,
-    expnasion_rom_base_address: u32,
-    capabilities_pointer: u8,
+mmio_struct! {
+    #[repr(C)]
+    struct GeneralDevicePciHeader {
+        vendor_id: u16,
+        device_id: u16,
+        command_register: u16,
+        status_register: u16,
+        revision_id: u8,
+        programming_interface_byte: u8,
+        subclass: u8,
+        class_code: u8,
+        cache_line_size: u8,
+        latency_timer: u8,
+        header_type: u8,
+        built_in_self_test: u8,
+        bars: [u32; 6],
+        cardbus_cis_pointer: u32,
+        subsystem_vendor_id: u16,
+        subsystem_id: u16,
+        expnasion_rom_base_address: u32,
+        capabilities_pointer: u8,
+    }
 }
 
-impl GeneralDevicePciHeader {
+impl MMIO<GeneralDevicePciHeader> {
     pub fn bar(&self, index: u8) -> u32 {
         assert!(index < 6);
-        self.bars[index as usize]
+        self.bars().read_index(index as usize)
     }
 
     pub fn write_bar(&mut self, index: u8, value: u32) {
         assert!(index < 6);
-        self.bars[index as usize] = value;
+        self.bars().write_index(index as usize, value);
     }
 
     pub fn set_command_register_bits(&mut self, bits: u16) {
-        self.command_register |= bits;
+        let mut command_register = self.command_register();
+        command_register |= bits;
     }
 
     pub fn clear_command_register_bits(&mut self, bits: u16) {
-        self.command_register &= !bits;
+        let mut command_register = self.command_register();
+        command_register &= !bits;
     }
 }
 
@@ -79,16 +82,11 @@ pub struct PciCapabilityIter<'a> {
     next_offset: u8, // 0 means there is no next pointer
 }
 
-#[derive(Debug)]
-#[repr(C)]
-pub struct PciCapability {
-    id: u8,
-    next: u8,
-}
-
-impl PciCapability {
-    pub fn id(&self) -> u8 {
-        self.id
+mmio_struct! {
+    #[repr(C)]
+    struct PciCapability {
+        id: u8,
+        next: u8,
     }
 }
 
@@ -104,12 +102,11 @@ impl Iterator for PciCapabilityIter<'_> {
                     .new_type_with_offset(self.next_offset as usize)
             },
         };
-        self.next_offset = capability.next;
+        self.next_offset = capability.next().read();
         Some(capability)
     }
 }
 
-#[derive(Debug)]
 pub struct PCIDevice {
     configuration_space: MMIO<GeneralDevicePciHeader>,
     initialized_bars: BTreeMap<u8, PCIAllocatedSpace>,
@@ -125,11 +122,11 @@ impl PCIDevice {
     }
 
     unsafe fn try_new(address: usize) -> Option<Self> {
-        let pci_device: MMIO<GeneralDevicePciHeader> = unsafe { MMIO::new(address) };
-        if pci_device.vendor_id == INVALID_VENDOR_ID {
+        let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address);
+        if pci_device.vendor_id().read() == INVALID_VENDOR_ID {
             return None;
         }
-        assert!(pci_device.header_type & GENERAL_DEVICE_TYPE_MASK == GENERAL_DEVICE_TYPE);
+        assert!(pci_device.header_type().read() & GENERAL_DEVICE_TYPE_MASK == GENERAL_DEVICE_TYPE);
         Some(Self {
             configuration_space: pci_device,
             initialized_bars: BTreeMap::new(),
@@ -138,7 +135,7 @@ impl PCIDevice {
 
     const CAPABILITIES_LIST_BIT: u16 = 1 << 4;
     pub fn capabilities(&self) -> PciCapabilityIter {
-        if self.configuration_space.status_register & Self::CAPABILITIES_LIST_BIT == 0 {
+        if self.configuration_space.status_register().read() & Self::CAPABILITIES_LIST_BIT == 0 {
             PciCapabilityIter {
                 pci_device: self,
                 next_offset: 0,
@@ -146,7 +143,7 @@ impl PCIDevice {
         } else {
             PciCapabilityIter {
                 pci_device: self,
-                next_offset: self.configuration_space.capabilities_pointer
+                next_offset: self.configuration_space.capabilities_pointer().read()
                     & CAPABILITY_POINTER_MASK,
             }
         }
@@ -200,7 +197,6 @@ impl PCIDevice {
     }
 }
 
-#[derive(Debug)]
 pub struct PciDeviceAddresses {
     pub network_devices: Vec<PCIDevice>,
 }
@@ -226,8 +222,8 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                 );
                 let maybe_device = unsafe { PCIDevice::try_new(address) };
                 if let Some(device) = maybe_device {
-                    let vendor_id = device.configuration_space.vendor_id;
-                    let device_id = device.configuration_space.device_id;
+                    let vendor_id = device.configuration_space.vendor_id().read();
+                    let device_id = device.configuration_space.device_id().read();
                     let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
                     info!(
                         "PCI Device {:#x}:{:#x} found at {:#x} ({})",
@@ -237,7 +233,8 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                     // Add virtio devices to device list
                     if vendor_id == VIRTIO_VENDOR_ID
                         && VIRTIO_DEVICE_ID.contains(&device_id)
-                        && device.configuration_space.subsystem_id == VIRTIO_NETWORK_SUBSYSTEM_ID
+                        && device.configuration_space.subsystem_id().read()
+                            == VIRTIO_NETWORK_SUBSYSTEM_ID
                     {
                         pci_devices.network_devices.push(device);
                     }
