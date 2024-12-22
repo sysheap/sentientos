@@ -177,7 +177,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
 
     pub fn notify(&mut self) {
         if let Some(notify) = &mut self.notify {
-            **notify = self.queue_index;
+            notify.write(self.queue_index);
         }
     }
 }
