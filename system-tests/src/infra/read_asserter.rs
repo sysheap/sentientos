@@ -7,6 +7,10 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 pub struct ReadAsserter<Reader: AsyncRead + Unpin> {
     reader: Reader,
     buffer: SearchableBuffer,
+    // It is important to only keep one stderr instance
+    // Otherwise the output could be interlaved, especially with
+    // write_all
+    stderr: tokio::io::Stderr,
 }
 
 impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
@@ -14,6 +18,7 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
         Self {
             reader,
             buffer: SearchableBuffer::new(Vec::with_capacity(DEFAULT_BUFFER_SIZE)),
+            stderr: tokio::io::stderr(),
         }
     }
 
@@ -34,9 +39,8 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
         }
     }
 
-    async fn print_to_stderr(&self, data: &[u8]) {
-        let mut stderr = tokio::io::stderr();
-        stderr
+    async fn print_to_stderr(&mut self, data: &[u8]) {
+        self.stderr
             .write_all(data)
             .await
             .expect("Write to stderr must succeed.");
