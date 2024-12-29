@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 
 TOOLCHAIN=$(cat ../../rust-toolchain | grep channel | awk '{print $3}' | tr -d '"')
 
+sudo apt-get update
 sudo apt-get install -y qemu-system-riscv64 binutils-riscv64-linux-gnu curl
 sudo rm -rf /var/lib/apt/lists/*
 
