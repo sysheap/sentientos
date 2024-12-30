@@ -20,4 +20,4 @@ elf = { version = "0.7", default-features = false }
 gimli = { version = "0.31", default-features = false, features = ["read"] }
 
 [target.'cfg(not(miri))'.dev-dependencies]
-unwinding = { version = "0.2.4", default-features = false, features = ["fde-static", "panic", "personality", "unwinder"] }
+unwinding = { version = "0.2.5", default-features = false, features = ["fde-static", "panic", "personality", "unwinder"] }
