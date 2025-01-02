@@ -1,4 +1,4 @@
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct UDPDescriptor(u64);
 
 impl UDPDescriptor {

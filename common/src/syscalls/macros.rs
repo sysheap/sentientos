@@ -1,62 +1,74 @@
-#[macro_export]
-macro_rules! ecall {
-    ($syscall:expr,) => {
-        ecall_0($syscall as usize)
-    };
-    ($syscall:expr, $arg1:expr) => {
-        ecall_1($syscall as usize, $arg1.into_reg())
-    };
-    ($syscall:expr, $arg1:expr, $arg2:expr) => {
-        ecall_2($syscall as usize, $arg1.into_reg(), $arg2.into_reg())
-    };
-    ($syscall:expr, $arg1:expr, $arg2:expr, $arg3:expr) => {
-        ecall_3(
-            $syscall as usize,
-            $arg1.into_reg(),
-            $arg2.into_reg(),
-            $arg3.into_reg(),
-        )
-    };
-}
-
-#[macro_export]
 macro_rules! syscalls {
-    ($($name:ident($($arg_name:ident: $arg_ty:ty),*) -> $ret:ty);* $(;)?) => {
-        #[repr(usize)]
-        #[allow(non_camel_case_types)]
-        pub enum Syscalls {
-            $($name,)*
-        }
-
+    ($($name:ident$(<$lt:lifetime>)?($($arg_name:ident: $arg_ty:ty),*) -> $ret:ty);* $(;)?) => {
         $(
-            pub fn $name($($arg_name: $arg_ty),*) -> $ret {
-                let (first, second) = ecall!(Syscalls::$name, $($arg_name),*);
-                <$ret>::from_double_reg(first, second)
+            #[allow(non_camel_case_types)]
+            #[derive(Debug)]
+            struct ${concat($name, Argument)}$(<$lt>)? {
+                $(
+                    pub $arg_name: $arg_ty,
+                )*
+            }
+
+            pub fn $name$(<$lt>)?($($arg_name: $arg_ty),*) -> $ret {
+                let mut arguments = ${concat($name, Argument)} {
+                  $($arg_name,)*
+                };
+                let mut ret = core::mem::MaybeUninit::<$ret>::uninit();
+                let successful: usize;
+                unsafe {
+                    core::arch::asm!(
+                        "ecall",
+                        in("a0") ${index()},
+                        in("a1") &mut arguments,
+                        in("a2") &mut ret,
+                        lateout("a0") successful,
+                    );
+                }
+                let status = $crate::syscalls::SyscallStatus::try_from(successful);
+
+                if status != Ok($crate::syscalls::SyscallStatus::Success) {
+                    panic!("Could not execute syscall {}: {:?}", stringify!($name), status);
+                }
+                unsafe {
+                    ret.assume_init()
+                }
             }
         )*
 
 
         pub mod kernel {
             use super::*;
+            use $crate::constructable::Constructable;
 
             pub trait KernelSyscalls {
-                $(fn $name(&mut self, $($arg_name: UserspaceArgument<$arg_ty>),*) -> $ret;)*
-                fn dispatch(&mut self, nr: usize, arg0: usize, arg1: usize, arg2: usize) -> (usize, usize) {
-                    use super::Syscalls;
-                    macro_rules! kernel_dispatch_call {
-                        ($x:ident,) => { self.$x().into_double_reg() };
-                        ($x:ident, $arg1:ty) => { self.$x(UserspaceArgument::new(<$arg1>::from_reg(arg0))).into_double_reg() };
-                        ($x:ident, $arg1:ty, $arg2:ty) => { self.$x(UserspaceArgument::new(<$arg1>::from_reg(arg0)), UserspaceArgument::new(<$arg2>::from_reg(arg1))).into_double_reg() };
-                        ($x:ident, $arg1:ty, $arg2:ty, $arg3:ty) => { self.$x(UserspaceArgument::new(<$arg1>::from_reg(arg0)), UserspaceArgument::new(<$arg2>::from_reg(arg1)), UserspaceArgument::new(<$arg3>::from_reg(arg2))).into_double_reg() };
-                    }
-                    let enum_value: Syscalls = unsafe { core::mem::transmute(nr) };
-                    match enum_value {
-                        $(
-                            Syscalls::$name => { kernel_dispatch_call!($name, $($arg_ty),*) },
-                        )*
+
+                type ArgWrapper<T>: $crate::constructable::Constructable<T>;
+
+                // Syscall functions
+                $(fn $name$(<$lt>)?(&mut self, $($arg_name: Self::ArgWrapper<$arg_ty>),*) -> $ret;)*
+
+                /// Validate a pointer such that it is a valid userspace pointer
+                fn validate_and_translate_pointer<T, PTR: $crate::pointer::Pointer<T>>(&self, ptr: PTR) -> Option<PTR>;
+
+                fn dispatch(&mut self, nr: usize, arg: usize, ret: usize) -> $crate::syscalls::SyscallStatus {
+                    use $crate::syscalls::SyscallStatus;
+                    match nr {
+                        $(${index()} => {
+                            let arg_ptr = $crate::unwrap_or_return!(self.validate_and_translate_pointer(arg as *mut ${concat($name, Argument)}), SyscallStatus::InvalidArgPtr);
+                            let ret_ptr = $crate::unwrap_or_return!(self.validate_and_translate_pointer(ret as *mut core::mem::MaybeUninit::<$ret>), SyscallStatus::InvalidRetPtr);
+                            // SAFETY: We just validated the pointers
+                            let (arg_ref, ret_ref) = unsafe {
+                                (&mut *arg_ptr, &mut *ret_ptr)
+                            };
+                            ret_ref.write(self.$name($(Self::ArgWrapper::new(arg_ref.$arg_name)),*));
+                            $crate::syscalls::SyscallStatus::Success
+                        })*
+                        _ => $crate::syscalls::SyscallStatus::InvalidSyscallNumber
                     }
                 }
             }
         }
     };
 }
+
+pub(super) use syscalls;

@@ -1,9 +1,6 @@
 use crate::{
     cpu,
-    processes::{
-        process::{Pid, ProcessState},
-        scheduler, timer,
-    },
+    processes::{process::Pid, scheduler, timer},
 };
 use alloc::collections::{BTreeSet, VecDeque};
 use common::mutex::Mutex;
@@ -33,8 +30,7 @@ impl StdinBuffer {
             for pid in &self.wakeup_queue {
                 if let Some(process) = s.get_process(*pid) {
                     process.with_lock(|mut p| {
-                        p.set_state(ProcessState::Runnable);
-                        p.set_syscall_return_code(byte as usize);
+                        p.resume_on_syscall(byte);
                     })
                 }
             }

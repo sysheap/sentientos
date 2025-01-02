@@ -42,15 +42,16 @@ fn handle_external_interrupt() {
 
 fn handle_syscall(sepc: usize, trap_frame: &mut TrapFrame) {
     let nr = trap_frame[Register::a0];
-    let arg1 = trap_frame[Register::a1];
-    let arg2 = trap_frame[Register::a2];
-    let arg3 = trap_frame[Register::a3];
-    let ret = syscalls::handle_syscall(nr, arg1, arg2, arg3);
-    if let Some((ret1, ret2)) = ret {
-        trap_frame[Register::a0] = ret1;
-        trap_frame[Register::a1] = ret2;
+    let arg = trap_frame[Register::a1];
+    let ret = trap_frame[Register::a2];
+
+    let ret = syscalls::handle_syscall(nr, arg, ret);
+
+    if let Some(ret) = ret {
+        trap_frame[Register::a0] = ret as usize;
         cpu::write_sepc(sepc + 4); // Skip the ecall instruction
     }
+
     // In case our current process was set to waiting state we need to reschedule
     scheduler::THE.with_lock(|mut s| {
         if s.get_current_process().lock().get_state() == ProcessState::Waiting {

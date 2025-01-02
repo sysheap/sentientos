@@ -344,7 +344,9 @@ impl<'a> ElfFile<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::klibc::{elf::ProgramHeaderType, macros::include_bytes_align_as};
+    use common::include_bytes_align_as;
+
+    use crate::klibc::elf::ProgramHeaderType;
 
     use super::{ElfFile, ElfProgramHeaderEntry, ProgramHeaderFlags};
 
