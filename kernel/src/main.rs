@@ -16,6 +16,7 @@
 #![feature(ptr_metadata)]
 #![feature(macro_metavar_expr_concat)]
 #![feature(generic_arg_infer)]
+#![feature(str_from_raw_parts)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 

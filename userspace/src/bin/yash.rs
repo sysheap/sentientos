@@ -45,10 +45,7 @@ fn parse_command_and_execute(mut command: String) {
                 command = command.trim().to_string();
             }
 
-            let reference = unsafe { &*command.as_ptr() };
-            let len = command.len();
-
-            let execute_result = sys_execute(reference, len);
+            let execute_result = sys_execute(&command);
             match execute_result {
                 Ok(pid) => {
                     if !background {

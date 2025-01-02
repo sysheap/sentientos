@@ -359,9 +359,8 @@ mod tests {
     use crate::{
         device_tree::{DeviceTree, Header},
         info,
-        klibc::macros::include_bytes_align_as,
     };
-    use common::big_endian::BigEndian;
+    use common::{big_endian::BigEndian, include_bytes_align_as};
 
     const DTB: &[u8] = include_bytes_align_as!(Header, "test/test_data/dtb");
 

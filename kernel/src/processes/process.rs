@@ -15,6 +15,7 @@ use common::{
     syscalls::trap_frame::{Register, TrapFrame},
 };
 use core::{
+    any::TypeId,
     fmt::Debug,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -53,6 +54,7 @@ pub struct Process {
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
     in_kernel_mode: bool,
     notify_on_die: BTreeSet<Pid>,
+    waiting_on_syscall: Option<TypeId>,
 }
 
 impl Debug for Process {
@@ -94,6 +96,7 @@ impl Process {
             open_udp_sockets: BTreeMap::new(),
             in_kernel_mode: false,
             notify_on_die: BTreeSet::new(),
+            waiting_on_syscall: None,
         }
     }
 
@@ -156,16 +159,40 @@ impl Process {
         self.pid
     }
 
-    pub fn set_syscall_return_code(&mut self, return_code: usize) {
-        self.register_state[Register::a0] = return_code;
-    }
-
     pub fn set_in_kernel_mode(&mut self, in_kernel_mode: bool) {
         self.in_kernel_mode = in_kernel_mode;
     }
 
     pub fn get_in_kernel_mode(&self) -> bool {
         self.in_kernel_mode
+    }
+
+    pub fn set_waiting_on_syscall<RetType: 'static>(&mut self) {
+        self.state = ProcessState::Waiting;
+        self.waiting_on_syscall = Some(core::any::TypeId::of::<RetType>());
+    }
+
+    pub fn resume_on_syscall<RetType: 'static>(&mut self, return_value: RetType) {
+        assert_eq!(
+            self.waiting_on_syscall,
+            Some(core::any::TypeId::of::<RetType>()),
+            "resume return type is different than expected"
+        );
+        let ptr = self.register_state[Register::a2] as *mut RetType;
+        assert!(!ptr.is_null() && ptr.is_aligned());
+        assert!(self.page_table.is_valid_userspace_ptr(ptr, true));
+        let kernel_ptr = self
+            .page_table
+            .translate_userspace_address_to_physical_address(ptr)
+            .expect("Return pointer must be valid");
+
+        // SAFETY: We assured safety in the above checks
+        unsafe {
+            kernel_ptr.write(return_value);
+        }
+
+        self.waiting_on_syscall = None;
+        self.state = ProcessState::Runnable;
     }
 
     pub fn from_elf(elf_file: &ElfFile, name: &str) -> Self {
@@ -193,6 +220,7 @@ impl Process {
             open_udp_sockets: BTreeMap::new(),
             in_kernel_mode: false,
             notify_on_die: BTreeSet::new(),
+            waiting_on_syscall: None,
         }
     }
 

@@ -24,10 +24,7 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 
     let mut userspace_programs = std::fs::File::create(USERSPACE_PROGRAMS_PATH)?;
 
-    writeln!(
-        userspace_programs,
-        "use crate::klibc::macros::include_bytes_align_as;\n"
-    )?;
+    writeln!(userspace_programs, "use common::include_bytes_align_as;\n")?;
 
     // Use BTreeMap to have the program names in a sorted order
     let mut programs: BTreeMap<String, String> = BTreeMap::new();

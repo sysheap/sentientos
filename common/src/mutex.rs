@@ -38,7 +38,7 @@ impl<T> Mutex<T> {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
-            panic!("Lock held twice.");
+            panic!("Lock held twice of Mutex<{}>", core::any::type_name::<T>());
             // core::hint::spin_loop();
         }
         MutexGuard { mutex: self }

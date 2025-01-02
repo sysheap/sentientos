@@ -6,7 +6,7 @@ use core::{
 };
 
 use alloc::{boxed::Box, vec::Vec};
-use common::{mutex::Mutex, util::align_up};
+use common::{mutex::Mutex, pointer::Pointer, unwrap_or_return, util::align_up};
 
 use crate::{
     assert::static_assert_size,
@@ -481,21 +481,50 @@ impl RootPageTableHolder {
 
     pub fn is_userspace_address(&self, address: usize) -> bool {
         self.get_page_table_entry_for_address(address)
-            .is_some_and(|entry| entry.get_user_mode_accessible())
+            .is_some_and(|entry| entry.get_validity() && entry.get_user_mode_accessible())
     }
 
-    pub fn translate_userspace_address_to_physical_address<T>(
+    pub fn is_valid_userspace_fat_ptr<T>(
         &self,
-        address: *const T,
-    ) -> Option<*const T> {
-        let address = address as usize;
+        ptr: impl Pointer<T>,
+        len: usize,
+        writable: bool,
+    ) -> bool {
+        let start = ptr.as_raw();
+        let end = start + (core::mem::size_of::<T>() * len);
+        // We only need to check for each PAGE_SIZE step if it is mapped
+        for addr in (start..end).step_by(PAGE_SIZE) {
+            let entry = unwrap_or_return!(self.get_page_table_entry_for_address(addr), false);
+            let xwr = entry.get_xwr_mode();
+            if !entry.get_validity()
+                || !entry.get_user_mode_accessible()
+                || !matches!(xwr, XWRMode::ReadOnly | XWRMode::ReadWrite)
+            {
+                return false;
+            }
+            if writable && !matches!(xwr, XWRMode::ReadWrite) {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn is_valid_userspace_ptr<T>(&self, ptr: impl Pointer<T>, writable: bool) -> bool {
+        self.is_valid_userspace_fat_ptr(ptr, 1, writable)
+    }
+
+    pub fn translate_userspace_address_to_physical_address<T, PTR: Pointer<T>>(
+        &self,
+        ptr: PTR,
+    ) -> Option<PTR> {
+        let address = ptr.as_raw();
         if !self.is_userspace_address(address) {
             return None;
         }
 
         let offset_from_page_start = address % PAGE_SIZE;
         self.get_page_table_entry_for_address(address).map(|entry| {
-            (entry.get_physical_address() as usize + offset_from_page_start) as *const T
+            PTR::as_pointer(entry.get_physical_address() as usize + offset_from_page_start)
         })
     }
 }
