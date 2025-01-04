@@ -1,11 +1,15 @@
 /// This trait both abstracts *const T and *mut T
 /// It can be used if a method can receive both types of pointers
-pub trait Pointer<T>: Clone + Copy {
+pub trait Pointer: Clone + Copy {
+    type Pointee;
+
     fn as_raw(&self) -> usize;
     fn as_pointer(ptr: usize) -> Self;
 }
 
-impl<T> Pointer<T> for *const T {
+impl<T> Pointer for *const T {
+    type Pointee = T;
+
     fn as_raw(&self) -> usize {
         *self as usize
     }
@@ -15,7 +19,9 @@ impl<T> Pointer<T> for *const T {
     }
 }
 
-impl<T> Pointer<T> for *mut T {
+impl<T> Pointer for *mut T {
+    type Pointee = T;
+
     fn as_raw(&self) -> usize {
         *self as usize
     }
@@ -30,8 +36,8 @@ pub struct FatPointer<Ptr> {
     len: usize,
 }
 
-impl<Ptr: Clone + Copy> FatPointer<Ptr> {
-    fn new(ptr: Ptr, len: usize) -> Self {
+impl<Ptr: Pointer> FatPointer<Ptr> {
+    pub fn new(ptr: Ptr, len: usize) -> Self {
         Self { ptr, len }
     }
 
@@ -39,41 +45,37 @@ impl<Ptr: Clone + Copy> FatPointer<Ptr> {
         self.ptr
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.len
     }
 }
 
 pub trait AsFatPointer {
-    type T;
-    fn as_fat_pointer(&self) -> FatPointer<*const Self::T>;
-}
-
-pub trait AsFatPointerMut {
-    type T;
-    fn as_fat_pointer_mut(&mut self) -> FatPointer<*mut Self::T>;
+    type Ptr;
+    fn to_fat_pointer(self) -> FatPointer<Self::Ptr>;
 }
 
 impl AsFatPointer for &str {
-    type T = u8;
+    type Ptr = *const u8;
 
-    fn as_fat_pointer(&self) -> FatPointer<*const u8> {
+    fn to_fat_pointer(self) -> FatPointer<Self::Ptr> {
         FatPointer::new(self.as_ptr(), self.len())
     }
 }
 
 impl<T> AsFatPointer for &[T] {
-    type T = T;
+    type Ptr = *const T;
 
-    fn as_fat_pointer(&self) -> FatPointer<*const T> {
+    fn to_fat_pointer(self) -> FatPointer<Self::Ptr> {
         FatPointer::new(self.as_ptr(), self.len())
     }
 }
 
-impl<T> AsFatPointerMut for &mut [T] {
-    type T = T;
+impl<T> AsFatPointer for &mut [T] {
+    type Ptr = *mut T;
 
-    fn as_fat_pointer_mut(&mut self) -> FatPointer<*mut T> {
+    fn to_fat_pointer(self) -> FatPointer<Self::Ptr> {
         FatPointer::new(self.as_mut_ptr(), self.len())
     }
 }

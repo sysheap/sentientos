@@ -167,7 +167,7 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     #[doc = r" Validate a pointer such that it is a valid userspace pointer"]
-    fn validate_and_translate_pointer<T, PTR: Pointer<T>>(&self, ptr: PTR) -> Option<PTR> {
+    fn validate_and_translate_pointer<PTR: Pointer>(&self, ptr: PTR) -> Option<PTR> {
         self.current_process.with_lock(|p| {
             let pt = p.get_page_table();
             if !pt.is_valid_userspace_ptr(ptr, true) {
