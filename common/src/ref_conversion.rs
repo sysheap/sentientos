@@ -1,3 +1,5 @@
+use crate::pointer::{AsFatPointer, AsFatPointerMut, FatPointer};
+
 auto trait IsValue {}
 
 impl<T> !IsValue for &T {}
@@ -36,25 +38,25 @@ impl<T> RefToPointer<T> for &mut T {
 }
 
 impl RefToPointer<&str> for &str {
-    type Out = (*const u8, usize);
+    type Out = FatPointer<*const u8>;
 
     fn to_pointer_if_ref(self) -> Self::Out {
-        (self.as_ptr(), self.len())
+        self.as_fat_pointer()
     }
 }
 
 impl RefToPointer<&[u8]> for &[u8] {
-    type Out = (*const u8, usize);
+    type Out = FatPointer<*const u8>;
 
     fn to_pointer_if_ref(self) -> Self::Out {
-        (self.as_ptr(), self.len())
+        self.as_fat_pointer()
     }
 }
 
 impl RefToPointer<&mut [u8]> for &mut [u8] {
-    type Out = (*mut u8, usize);
+    type Out = FatPointer<*mut u8>;
 
-    fn to_pointer_if_ref(self) -> Self::Out {
-        (self.as_mut_ptr(), self.len())
+    fn to_pointer_if_ref(mut self) -> Self::Out {
+        self.as_fat_pointer_mut()
     }
 }
