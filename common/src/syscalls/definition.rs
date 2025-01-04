@@ -54,7 +54,7 @@ scalar_enum! {
 }
 
 syscalls!(
-    sys_write_char(c: char) -> ();
+    sys_write<'a>(s: &'a str) -> Result<(), ValidationError>;
     sys_read_input() -> Option<u8>;
     sys_read_input_wait() -> u8;
     sys_exit(status: isize) -> ();
