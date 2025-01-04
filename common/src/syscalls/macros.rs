@@ -49,7 +49,7 @@ macro_rules! syscalls {
                 $(fn $name$(<$lt>)?(&mut self, $($arg_name: Self::ArgWrapper<$arg_ty>),*) -> $ret;)*
 
                 /// Validate a pointer such that it is a valid userspace pointer
-                fn validate_and_translate_pointer<T, PTR: $crate::pointer::Pointer<T>>(&self, ptr: PTR) -> Option<PTR>;
+                fn validate_and_translate_pointer<PTR: $crate::pointer::Pointer>(&self, ptr: PTR) -> Option<PTR>;
 
                 fn dispatch(&mut self, nr: usize, arg: usize, ret: usize) -> $crate::syscalls::SyscallStatus {
                     use $crate::syscalls::SyscallStatus;

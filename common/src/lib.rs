@@ -6,6 +6,7 @@
 #![feature(macro_metavar_expr_concat)]
 #![feature(auto_traits)]
 #![feature(negative_impls)]
+#![feature(str_from_raw_parts)]
 
 pub mod array_vec;
 pub mod big_endian;

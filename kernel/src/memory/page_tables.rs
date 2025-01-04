@@ -484,14 +484,14 @@ impl RootPageTableHolder {
             .is_some_and(|entry| entry.get_validity() && entry.get_user_mode_accessible())
     }
 
-    pub fn is_valid_userspace_fat_ptr<T>(
+    pub fn is_valid_userspace_fat_ptr<PTR: Pointer>(
         &self,
-        ptr: impl Pointer<T>,
+        ptr: PTR,
         len: usize,
         writable: bool,
     ) -> bool {
         let start = ptr.as_raw();
-        let end = start + (core::mem::size_of::<T>() * len);
+        let end = start + (core::mem::size_of::<PTR::Pointee>() * len);
         // We only need to check for each PAGE_SIZE step if it is mapped
         for addr in (start..end).step_by(PAGE_SIZE) {
             let entry = unwrap_or_return!(self.get_page_table_entry_for_address(addr), false);
@@ -509,11 +509,11 @@ impl RootPageTableHolder {
         true
     }
 
-    pub fn is_valid_userspace_ptr<T>(&self, ptr: impl Pointer<T>, writable: bool) -> bool {
+    pub fn is_valid_userspace_ptr(&self, ptr: impl Pointer, writable: bool) -> bool {
         self.is_valid_userspace_fat_ptr(ptr, 1, writable)
     }
 
-    pub fn translate_userspace_address_to_physical_address<T, PTR: Pointer<T>>(
+    pub fn translate_userspace_address_to_physical_address<PTR: Pointer>(
         &self,
         ptr: PTR,
     ) -> Option<PTR> {

@@ -3,6 +3,7 @@ use core::ops::{Deref, DerefMut};
 use common::{
     constructable::Constructable,
     net::UDPDescriptor,
+    pointer::{FatPointer, Pointer},
     ref_conversion::RefToPointer,
     syscalls::{SysSocketError, ValidationError},
     unwrap_or_return,
@@ -46,9 +47,16 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
     }
 }
 
-impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
+/// I know this is really unreadable. However, I like to learn the power of
+/// the type system and traits.
+/// What this impl does is basically implement validation for all RefToPointer
+/// where Out is an FatPointer.
+impl<Ptr: Pointer, T: RefToPointer<T, Out = FatPointer<Ptr>>> Validatable<T>
+    for UserspaceArgument<T>
+{
     type Error = ValidationError;
-    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a str, Self::Error> {
+
+    fn validate(self, handler: &mut SyscallHandler) -> Result<T, Self::Error> {
         let start = self.inner.ptr();
         let len = self.inner.len();
         let ptr = handler.current_process().with_lock(|p| {
@@ -61,51 +69,7 @@ impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
 
         if let Some(ptr) = ptr {
             // SAFETY: We validated the pointer above
-            unsafe { Ok(core::str::from_raw_parts(ptr, len)) }
-        } else {
-            Err(ValidationError::InvalidPtr)
-        }
-    }
-}
-
-impl<'a> Validatable<&'a [u8]> for UserspaceArgument<&'a [u8]> {
-    type Error = ValidationError;
-    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a [u8], Self::Error> {
-        let start = self.inner.ptr();
-        let len = self.inner.len();
-        let ptr = handler.current_process().with_lock(|p| {
-            let pt = p.get_page_table();
-            if !pt.is_valid_userspace_fat_ptr(start, len, false) {
-                return None;
-            }
-            pt.translate_userspace_address_to_physical_address(start)
-        });
-
-        if let Some(ptr) = ptr {
-            // SAFETY: We validated the pointer above
-            unsafe { Ok(core::slice::from_raw_parts(ptr, len)) }
-        } else {
-            Err(ValidationError::InvalidPtr)
-        }
-    }
-}
-
-impl<'a> Validatable<&'a mut [u8]> for UserspaceArgument<&'a mut [u8]> {
-    type Error = ValidationError;
-    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a mut [u8], Self::Error> {
-        let start = self.inner.ptr();
-        let len = self.inner.len();
-        let ptr = handler.current_process().with_lock(|p| {
-            let pt = p.get_page_table();
-            if !pt.is_valid_userspace_fat_ptr(start, len, false) {
-                return None;
-            }
-            pt.translate_userspace_address_to_physical_address(start)
-        });
-
-        if let Some(ptr) = ptr {
-            // SAFETY: We validated the pointer above
-            unsafe { Ok(core::slice::from_raw_parts_mut(ptr, len)) }
+            unsafe { Ok(T::to_ref_if_pointer(FatPointer::new(ptr, len))) }
         } else {
             Err(ValidationError::InvalidPtr)
         }
