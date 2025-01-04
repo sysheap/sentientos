@@ -1,6 +1,7 @@
 use common::{
     net::UDPDescriptor,
     pointer::Pointer,
+    ref_conversion::RefToPointer,
     syscalls::{
         kernel::KernelSyscalls, SysExecuteError, SysSocketError, SysWaitError, SyscallStatus,
     },
@@ -45,7 +46,7 @@ impl SyscallHandler {
 }
 
 impl KernelSyscalls for SyscallHandler {
-    type ArgWrapper<T> = UserspaceArgument<T>;
+    type ArgWrapper<T: RefToPointer<T>> = UserspaceArgument<T>;
 
     fn sys_print_programs(&mut self) {
         for (name, _) in PROGRAMS {

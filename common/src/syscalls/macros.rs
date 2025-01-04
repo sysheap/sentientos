@@ -39,10 +39,11 @@ macro_rules! syscalls {
         pub mod kernel {
             use super::*;
             use $crate::constructable::Constructable;
+            use $crate::ref_conversion::RefToPointer;
 
             pub trait KernelSyscalls {
 
-                type ArgWrapper<T>: $crate::constructable::Constructable<T>;
+                type ArgWrapper<T: RefToPointer<T>>: $crate::constructable::Constructable<T>;
 
                 // Syscall functions
                 $(fn $name$(<$lt>)?(&mut self, $($arg_name: Self::ArgWrapper<$arg_ty>),*) -> $ret;)*
