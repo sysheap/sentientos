@@ -4,6 +4,7 @@ use common::{
     ref_conversion::RefToPointer,
     syscalls::{
         kernel::KernelSyscalls, SysExecuteError, SysSocketError, SysWaitError, SyscallStatus,
+        ValidationError,
     },
     unwrap_or_return,
 };
@@ -57,8 +58,10 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_panic(&mut self) {
         panic!("Userspace triggered kernel panic");
     }
-    fn sys_write_char(&mut self, c: UserspaceArgument<char>) {
-        print!("{}", *c);
+    fn sys_write(&mut self, s: UserspaceArgument<&str>) -> Result<(), ValidationError> {
+        let s = s.validate(self)?;
+        print!("{s}");
+        Ok(())
     }
 
     fn sys_read_input(&mut self) -> Option<u8> {
