@@ -49,8 +49,8 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
 impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
     type Error = ValidationError;
     fn validate(self, handler: &mut SyscallHandler) -> Result<&'a str, Self::Error> {
-        let start = self.inner.0;
-        let len = self.inner.1;
+        let start = self.inner.ptr();
+        let len = self.inner.len();
         let ptr = handler.current_process().with_lock(|p| {
             let pt = p.get_page_table();
             if !pt.is_valid_userspace_fat_ptr(start, len, false) {
@@ -71,8 +71,8 @@ impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
 impl<'a> Validatable<&'a [u8]> for UserspaceArgument<&'a [u8]> {
     type Error = ValidationError;
     fn validate(self, handler: &mut SyscallHandler) -> Result<&'a [u8], Self::Error> {
-        let start = self.inner.0;
-        let len = self.inner.1;
+        let start = self.inner.ptr();
+        let len = self.inner.len();
         let ptr = handler.current_process().with_lock(|p| {
             let pt = p.get_page_table();
             if !pt.is_valid_userspace_fat_ptr(start, len, false) {
@@ -93,8 +93,8 @@ impl<'a> Validatable<&'a [u8]> for UserspaceArgument<&'a [u8]> {
 impl<'a> Validatable<&'a mut [u8]> for UserspaceArgument<&'a mut [u8]> {
     type Error = ValidationError;
     fn validate(self, handler: &mut SyscallHandler) -> Result<&'a mut [u8], Self::Error> {
-        let start = self.inner.0;
-        let len = self.inner.1;
+        let start = self.inner.ptr();
+        let len = self.inner.len();
         let ptr = handler.current_process().with_lock(|p| {
             let pt = p.get_page_table();
             if !pt.is_valid_userspace_fat_ptr(start, len, false) {
