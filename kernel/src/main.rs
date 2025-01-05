@@ -141,7 +141,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     prepare_for_scheduling();
 }
 
-fn prepare_for_scheduling() -> ! {
+#[no_mangle]
+pub extern "C" fn prepare_for_scheduling() -> ! {
     // Enable all interrupts
     Cpu::write_sie(usize::MAX);
 
@@ -171,11 +172,4 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
         )
         .assert_success();
     }
-}
-
-#[no_mangle]
-extern "C" fn hart_init() -> ! {
-    let cpu_id = Cpu::cpu_id();
-    info!("Cpu {cpu_id} started!");
-    prepare_for_scheduling();
 }
