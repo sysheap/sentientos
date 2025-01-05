@@ -79,7 +79,7 @@ start_hart:
 	li sp, 0
 	addi sp, sp, -64
 
-	call hart_init
+	call prepare_for_scheduling
 
 	# We should never come here
 	j asm_panic_rust
