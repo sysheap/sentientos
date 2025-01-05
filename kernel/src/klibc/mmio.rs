@@ -171,9 +171,13 @@ mod tests {
         };
     }
 
+    fn mmio<T>(value: *mut T) -> MMIO<T> {
+        MMIO { addr: value }
+    }
+
     #[test_case]
     fn print_works() {
-        let value = get_test_data();
+        let mut value = get_test_data();
 
         unsafe {
             QEMU_UART.disarm();
@@ -181,16 +185,16 @@ mod tests {
 
         crate::println!("value at {:p}", &value);
 
-        let mmio = MMIO::<mmio_a>::new(&value as *const _ as usize);
+        let mmio = mmio(&mut value);
 
         crate::println!("{:?}", mmio);
     }
 
     #[test_case]
     fn offsets() {
-        let value = get_test_data();
+        let mut value = get_test_data();
 
-        let mmio = MMIO::<mmio_a>::new(&value as *const _ as usize);
+        let mmio = mmio(&mut value);
 
         check_offset!(value, mmio, a1);
         check_offset!(value, mmio, a2);
@@ -208,7 +212,7 @@ mod tests {
         let value = UnsafeCell::new(get_test_data());
         let ptr = value.get();
 
-        let mmio = MMIO::<mmio_a>::new(ptr as usize);
+        let mmio = mmio(ptr);
 
         mmio.a1().write(0);
         mmio.a2().write(1);
@@ -239,7 +243,7 @@ mod tests {
         let mut value = UnsafeCell::new(42);
         let ptr = value.get();
 
-        let mut mmio = MMIO::<i32>::new(ptr as usize);
+        let mut mmio = mmio(ptr);
 
         assert_eq!(mmio.addr as *const i32, ptr);
 

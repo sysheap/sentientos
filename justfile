@@ -32,7 +32,7 @@ system-test: build
     cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu
 
 miri: build-cargo
-    MIRIFLAGS="-Zmiri-env-forward=RUST_BACKTRACE" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
+    MIRIFLAGS="-Zmiri-env-forward=RUST_BACKTRACE -Zmiri-strict-provenance" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
 fetch-deps:
     cargo fetch
