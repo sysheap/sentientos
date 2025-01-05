@@ -3,7 +3,7 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
     net::sockets::SharedAssignedSocket,
-    processes::loader::{self, LoadedElf},
+    processes::loader::{self, LoadedElf, STACK_END},
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -89,13 +89,34 @@ impl Process {
         extern "C" {
             fn powersave();
         }
+
+        let mut allocated_pages = Vec::with_capacity(1);
+
+        // Map 4KB stack
+        let mut stack = PinnedHeapPages::new(1);
+        let stack_addr = stack.addr();
+        allocated_pages.push(stack);
+
+        let mut page_table = RootPageTableHolder::new_with_kernel_mapping();
+
+        page_table.map_userspace(
+            STACK_END,
+            stack_addr.get(),
+            PAGE_SIZE,
+            crate::memory::page_tables::XWRMode::ReadWrite,
+            "Stack".to_string(),
+        );
+
+        let mut register_state = TrapFrame::zero();
+        register_state[Register::sp] = stack_addr.get();
+
         Arc::new(Mutex::new(Self {
             name: "powersave".to_string(),
             pid: POWERSAVE_PID,
-            register_state: TrapFrame::zero(),
-            page_table: RootPageTableHolder::new_with_kernel_mapping(),
+            register_state,
+            page_table,
             program_counter: powersave as usize,
-            allocated_pages: Vec::new(),
+            allocated_pages,
             state: ProcessState::Runnable,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             next_free_descriptor: 0,

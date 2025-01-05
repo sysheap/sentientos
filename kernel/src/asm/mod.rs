@@ -1,10 +1,10 @@
 use core::arch::{asm, global_asm};
 
-use crate::{cpu, sbi::extensions::timer_extension};
+use crate::cpu;
 
 global_asm!(include_str!("boot.S"), KERNEL_PAGE_TABLES_SATP_OFFSET = const cpu::KERNEL_PAGE_TABLES_SATP_OFFSET);
 global_asm!(include_str!("trap.S"), TRAP_FRAME_OFFSET = const cpu::TRAP_FRAME_OFFSET, KERNEL_PAGE_TABLES_SATP_OFFSET = const cpu::KERNEL_PAGE_TABLES_SATP_OFFSET);
-global_asm!(include_str!("powersave.S"), EID = const timer_extension::EID, FID_SET_TIMER = const timer_extension::FID_SET_TIMER);
+global_asm!(include_str!("powersave.S"));
 global_asm!(include_str!("panic.S"));
 
 #[unsafe(no_mangle)]
