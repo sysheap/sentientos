@@ -22,7 +22,8 @@ pub fn init() {
     CLOCKS_PER_SEC.initialize(clocks_per_sec);
 }
 
-pub fn set_timer(milliseconds: u64) {
+#[no_mangle]
+pub extern "C" fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();
     assert_eq!(*CLOCKS_PER_SEC / 1000, 10_000);
