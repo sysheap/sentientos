@@ -58,10 +58,11 @@ extern crate alloc;
 
 #[unsafe(no_mangle)]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
+    cpu::STARTING_CPU_ID.initialize(hart_id);
+
     QEMU_UART.lock().init();
 
     info!("Hello World from YaOS!\n");
-    info!("Hart ID: {}", hart_id);
     info!("Device Tree Pointer: {:p}", device_tree_pointer);
 
     let version = sbi::extensions::base_extension::sbi_get_spec_version();
