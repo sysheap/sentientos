@@ -16,12 +16,12 @@ Implemented
 - Scheduler
 - Systemcalls
 - Networkstack (udp)
+- SMP
 
 TODO
 
 - VirtIO / Filesystem
 - TCP
-- SMP
 - Async Runtime in Kernel
 - GUI
 - See [todo](./todo.md)
