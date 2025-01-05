@@ -10,7 +10,7 @@ use core::{
 use common::mutex::MutexGuard;
 
 use crate::{
-    klibc::sizes::KiB,
+    klibc::{runtime_initialized::RuntimeInitializedData, sizes::KiB},
     memory::page_tables::RootPageTableHolder,
     processes::{
         process::Process,
@@ -23,6 +23,8 @@ const KERNEL_STACK_SIZE: usize = KiB(512);
 
 const SIE_STIE: usize = 5;
 const SSTATUS_SPP: usize = 8;
+
+pub static STARTING_CPU_ID: RuntimeInitializedData<usize> = RuntimeInitializedData::new();
 
 pub const TRAP_FRAME_OFFSET: usize = offset_of!(Cpu, scheduler) + scheduler::TRAP_FRAME_OFFSET;
 
@@ -169,12 +171,12 @@ impl Cpu {
         unsafe { CpuRefHolder(&mut *ptr) }
     }
 
-    pub fn cpu_id() -> isize {
+    pub fn cpu_id() -> usize {
         let ptr = Self::read_sscratch() as *mut Self;
         if ptr.is_null() {
-            return -1;
+            return *STARTING_CPU_ID;
         }
-        unsafe { *addr_of!((*ptr).cpu_id) as isize }
+        unsafe { *addr_of!((*ptr).cpu_id) }
     }
 
     pub fn activate_kernel_page_table(&self) {
