@@ -62,3 +62,8 @@ bench = false
 name = "stress"
 test = false
 bench = false
+
+[[bin]]
+name = "echo"
+test = false
+bench = false

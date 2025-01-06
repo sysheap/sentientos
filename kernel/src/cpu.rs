@@ -152,7 +152,7 @@ impl Cpu {
         unsafe { CpuRefHolder(&mut *ptr) }
     }
 
-    pub fn with_scheduler<R>(mut f: impl FnMut(&mut CpuScheduler) -> R) -> R {
+    pub fn with_scheduler<R>(f: impl FnOnce(&mut CpuScheduler) -> R) -> R {
         let mut cpu = Self::current();
         let scheduler = cpu.scheduler_mut();
         f(scheduler)
