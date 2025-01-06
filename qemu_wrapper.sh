@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --gdb          Let qemu listen on :1234 for gdb connections"
-            echo "  --log          Log qemu events to /tmp/yaos.log"
+            echo "  --log          Log qemu events to /tmp/sentientos.log"
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net          Enable network card"
             echo "  -h, --help     Show this help message"
@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --log)
-            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/yaos.log"
+            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/sentientos.log"
             shift
             ;;
         --net)

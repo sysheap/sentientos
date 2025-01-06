@@ -1,5 +1,5 @@
-# YaOS (Yet another Operating System)
-[![ci](https://github.com/hieronymusma/yaos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hieronymusma/yaos/actions/workflows/ci.yml)  
+# SentientOS
+[![ci](https://github.com/sysheap/sentientos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sysheap/sentientos/actions/workflows/ci.yml)  
 This projects makes my dream come true - write my own operating system. I'm doing this mostly for fun, so don't expect a fully-fledged operating system on basis of the RISC-V architecture.
 Exactly like [SerenityOS](https://github.com/SerenityOS/serenity) this project doesn't use third-party runtime dependencies. If third-party dependencies are used, then only for the Build.
 

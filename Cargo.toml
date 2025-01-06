@@ -8,8 +8,8 @@ default-members = ["kernel"]
 resolver = "2"
 
 [workspace.package]
-description = "Yet another Operating System (YaOS)"
-authors = ["Maurice Hieronymus <yaos@ilovebinary.com>"]
+description = "SentientOS"
+authors = ["Maurice Hieronymus <mhi@mailbox.org>"]
 version = "0.1.0"
 
 [profile.release]
