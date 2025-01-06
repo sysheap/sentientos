@@ -9,12 +9,14 @@ use super::{read_asserter::ReadAsserter, PROMPT};
 
 pub struct QemuOptions {
     add_network_card: bool,
+    use_smp: bool,
 }
 
 impl Default for QemuOptions {
     fn default() -> Self {
         Self {
             add_network_card: false,
+            use_smp: true,
         }
     }
 }
@@ -24,10 +26,17 @@ impl QemuOptions {
         self.add_network_card = value;
         self
     }
+    pub fn use_smp(mut self, value: bool) -> Self {
+        self.use_smp = value;
+        self
+    }
 
     fn apply(self, command: &mut Command) {
         if self.add_network_card {
             command.arg("--net");
+        }
+        if self.use_smp {
+            command.arg("--smp");
         }
     }
 }

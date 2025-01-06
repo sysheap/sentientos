@@ -3,7 +3,7 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
     net::sockets::SharedAssignedSocket,
-    processes::loader::{self, LoadedElf, STACK_END},
+    processes::loader::{self, LoadedElf, STACK_END, STACK_START},
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -99,16 +99,17 @@ impl Process {
 
         let mut page_table = RootPageTableHolder::new_with_kernel_mapping();
 
-        page_table.map_userspace(
+        page_table.map(
             STACK_END,
             stack_addr.get(),
             PAGE_SIZE,
             crate::memory::page_tables::XWRMode::ReadWrite,
+            false,
             "Stack".to_string(),
         );
 
         let mut register_state = TrapFrame::zero();
-        register_state[Register::sp] = stack_addr.get();
+        register_state[Register::sp] = STACK_START;
 
         Arc::new(Mutex::new(Self {
             name: "powersave".to_string(),

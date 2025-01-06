@@ -3,8 +3,14 @@ use serial_test::file_serial;
 use crate::infra::qemu::{QemuInstance, QemuOptions};
 
 #[tokio::test]
-async fn boot() -> anyhow::Result<()> {
+async fn boot_smp() -> anyhow::Result<()> {
     QemuInstance::start().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn boot_single_core() -> anyhow::Result<()> {
+    QemuInstance::start_with(QemuOptions::default().use_smp(false)).await?;
     Ok(())
 }
 
@@ -19,7 +25,8 @@ async fn boot_with_network() -> anyhow::Result<()> {
 async fn shutdown() -> anyhow::Result<()> {
     let mut sentientos = QemuInstance::start().await?;
 
-    sentientos.run_prog_waiting_for("exit", "shutting down system")
+    sentientos
+        .run_prog_waiting_for("exit", "shutting down system")
         .await?;
 
     assert!(sentientos.wait_for_qemu_to_exit().await?.success());

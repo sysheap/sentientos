@@ -2,14 +2,14 @@
 use crate::{println, test::qemu_exit::wait_for_the_end};
 use core::{
     panic::PanicInfo,
-    sync::atomic::{AtomicBool, AtomicU8},
+    sync::atomic::{AtomicIsize, AtomicU8},
 };
 
 #[cfg(test)]
 use crate::test::qemu_exit::exit_failure;
 
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
-static CPU_ENTERED_PANIC: AtomicBool = AtomicBool::new(false);
+static CPU_ENTERED_PANIC: AtomicIsize = AtomicIsize::new(-1);
 
 #[cfg(not(miri))]
 #[panic_handler]
@@ -22,12 +22,15 @@ fn panic(info: &PanicInfo) -> ! {
         crate::Cpu::disable_global_interrupts();
     }
 
+    let cpu_id = Cpu::cpu_id() as isize;
+
     // Check if we are the first cpu encountering a panic
     if CPU_ENTERED_PANIC
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+        .compare_exchange(-1, cpu_id, Ordering::SeqCst, Ordering::Relaxed)
         .is_err()
+        && CPU_ENTERED_PANIC.load(Ordering::Relaxed) != cpu_id
     {
-        // Suspend here if we're not the first cpu to encounter the panic.
+        // Suspend here because panic happened on another cpu
         wfi_loop();
     }
 
