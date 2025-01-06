@@ -55,7 +55,7 @@ fn parse_command_and_execute(mut command: String) {
 
             sys_execute_arg_clear();
 
-            for arg in split.iter().skip(1) {
+            for arg in split.iter().skip(1).filter(|arg| !arg.trim().is_empty()) {
                 sys_execute_add_arg(arg).expect("Succeed");
             }
 
