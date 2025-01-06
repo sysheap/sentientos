@@ -85,7 +85,7 @@ impl CpuScheduler {
         self.queue_current_process_back();
 
         process_table::THE.with_lock(|mut pt| {
-            let highest_pid = pt.get_highest_pid_without(&["yash"]);
+            let highest_pid = pt.get_highest_pid_without(&["sesh"]);
 
             if let Some(pid) = highest_pid {
                 pt.kill(pid);

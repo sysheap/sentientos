@@ -54,6 +54,6 @@ test = false
 bench = false
 
 [[bin]]
-name = "yash"
+name = "sesh"
 test = false
 bench = false

@@ -11,7 +11,7 @@ extern crate userspace;
 #[unsafe(no_mangle)]
 fn main() {
     println!();
-    println!("### YaSH - Yet another Shell ###");
+    println!("### SeSH - Sentient Shell ###");
     println!("Type 'help' for a list of available commands.");
     loop {
         print!("$ ");

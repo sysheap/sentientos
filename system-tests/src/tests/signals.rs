@@ -9,27 +9,29 @@ use crate::infra::{
 #[file_serial]
 #[tokio::test]
 async fn should_exit_program() -> anyhow::Result<()> {
-    let mut yaos = QemuInstance::start_with(QemuOptions::default().add_network_card(true)).await?;
+    let mut sentientos =
+        QemuInstance::start_with(QemuOptions::default().add_network_card(true)).await?;
 
-    yaos.run_prog_waiting_for("udp", "Listening on 1234")
+    sentientos
+        .run_prog_waiting_for("udp", "Listening on 1234")
         .await?;
 
-    yaos.stdin().write_all(&[0x03]).await?;
+    sentientos.stdin().write_all(&[0x03]).await?;
 
-    yaos.stdout().assert_read_until(PROMPT).await;
-    let output = yaos.run_prog("prog1").await?;
+    sentientos.stdout().assert_read_until(PROMPT).await;
+    let output = sentientos.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
 
     Ok(())
 }
 
 #[tokio::test]
-async fn should_not_exit_yash() -> anyhow::Result<()> {
-    let mut yaos = QemuInstance::start().await?;
+async fn should_not_exit_sesh() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
 
-    yaos.stdin().write_all(&[0x03]).await?;
+    sentientos.stdin().write_all(&[0x03]).await?;
 
-    let output = yaos.run_prog("prog1").await?;
+    let output = sentientos.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
 
     Ok(())

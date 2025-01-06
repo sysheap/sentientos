@@ -70,11 +70,13 @@ impl QemuInstance {
 
         let mut stdout = ReadAsserter::new(stdout);
 
-        stdout.assert_read_until("Hello World from YaOS!").await;
+        stdout
+            .assert_read_until("Hello World from SentientOS!")
+            .await;
         stdout.assert_read_until("kernel_init done!").await;
         stdout.assert_read_until("init process started").await;
         stdout
-            .assert_read_until("### YaSH - Yet another Shell ###")
+            .assert_read_until("### SeSH - Sentient Shell ###")
             .await;
         stdout.assert_read_until(PROMPT).await;
 
