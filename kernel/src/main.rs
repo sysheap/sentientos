@@ -134,9 +134,9 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         net::assign_network_device(network_device);
     }
 
-    start_other_harts(hart_id, num_cpus);
+    info!("kernel_init done! Starting other harts");
 
-    info!("kernel_init done! Enabling interrupts");
+    start_other_harts(hart_id, num_cpus);
 
     prepare_for_scheduling();
 }
@@ -163,7 +163,6 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
             continue;
         }
 
-        info!("Starting cpu {cpu_id}");
         let cpu_struct = Cpu::init(cpu_id);
         sbi::extensions::hart_state_extension::start_hart(
             cpu_id,
