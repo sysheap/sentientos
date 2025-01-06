@@ -58,6 +58,7 @@ pub struct Process {
     in_kernel_mode: bool,
     notify_on_die: BTreeSet<Pid>,
     waiting_on_syscall: Option<TypeId>,
+    sys_exec_args: Vec<String>,
 }
 
 impl Debug for Process {
@@ -125,11 +126,24 @@ impl Process {
             in_kernel_mode: true,
             notify_on_die: BTreeSet::new(),
             waiting_on_syscall: None,
+            sys_exec_args: Vec::new(),
         }))
     }
 
     pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Pid> {
         self.notify_on_die.iter()
+    }
+
+    pub fn add_sys_exec_arg(&mut self, arg: String) {
+        self.sys_exec_args.push(arg.to_string());
+    }
+
+    pub fn clear_sys_exec_arg(&mut self) {
+        self.sys_exec_args.clear();
+    }
+
+    pub fn get_sys_exec_args(&self) -> &Vec<String> {
+        &self.sys_exec_args
     }
 
     pub fn mmap_pages(&mut self, number_of_pages: usize) -> *mut u8 {
@@ -249,6 +263,7 @@ impl Process {
             in_kernel_mode: false,
             notify_on_die: BTreeSet::new(),
             waiting_on_syscall: None,
+            sys_exec_args: Vec::new(),
         }
     }
 
@@ -269,6 +284,10 @@ impl Process {
         descriptor: UDPDescriptor,
     ) -> Option<&mut SharedAssignedSocket> {
         self.open_udp_sockets.get_mut(&descriptor)
+    }
+
+    pub(crate) fn set_sys_exec_args(&mut self, args: Vec<String>) {
+        self.sys_exec_args = args;
     }
 }
 
