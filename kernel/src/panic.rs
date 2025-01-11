@@ -34,15 +34,16 @@ fn panic(info: &PanicInfo) -> ! {
         wfi_loop();
     }
 
-    let cpu = unsafe { Cpu::current_nevertheless() };
-
     println!("");
     println!("KERNEL Panic Occured on cpu {}!", Cpu::cpu_id());
     println!("Message: {}", info.message());
     if let Some(location) = info.location() {
         println!("Location: {}", location);
     }
-    println!("Kernel Page Tables {}", cpu.kernel_page_table());
+    let kernel_page_tables = Cpu::maybe_kernel_page_tables();
+    if let Some(kernel_page_tables) = kernel_page_tables {
+        println!("Kernel Page Tables {kernel_page_tables}");
+    }
     abort_if_double_panic();
     crate::debugging::backtrace::print();
     crate::debugging::dump_current_state();
