@@ -91,7 +91,7 @@ impl KernelSyscalls for SyscallHandler {
         debug!("Exit process with status: {}\n", *status);
     }
 
-    fn sys_execute(&mut self, name: UserspaceArgument<&str>) -> Result<u64, SysExecuteError> {
+    fn sys_execute<'a>(&mut self, name: UserspaceArgument<&str>) -> Result<u64, SysExecuteError> {
         let name = name.validate(self)?;
 
         let args = self.current_process.lock().get_sys_exec_args().clone();

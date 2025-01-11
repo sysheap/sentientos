@@ -1,6 +1,6 @@
 macro_rules! syscalls {
     ($($name:ident$(<$lt:lifetime>)?($($arg_name:ident: $arg_ty:ty),*) -> $ret:ty);* $(;)?) => {
-        use $crate::syscalls::syscall_argument::SyscallArgument;
+        use $crate::syscalls::syscall_argument::{SyscallArgument, SyscallTempStorage};
         $(
             #[allow(non_camel_case_types)]
             #[derive(Debug)]
@@ -11,8 +11,10 @@ macro_rules! syscalls {
             }
 
             pub fn $name$(<$lt>)?($($arg_name: $arg_ty),*) -> $ret {
-                let mut arguments = ${concat($name, Argument)} {
-                  $($arg_name: $arg_name.convert(),)*
+                #[allow(unused_mut)]
+                let mut temp_storage = SyscallTempStorage::default();
+                let arguments = ${concat($name, Argument)} {
+                  $($arg_name: $arg_name.convert(&mut temp_storage),)*
                 };
                 let mut ret = core::mem::MaybeUninit::<$ret>::uninit();
                 let successful: usize;
@@ -20,7 +22,7 @@ macro_rules! syscalls {
                     core::arch::asm!(
                         "ecall",
                         in("a0") ${index()},
-                        in("a1") &mut arguments,
+                        in("a1") &arguments,
                         in("a2") &mut ret,
                         lateout("a0") successful,
                     );
@@ -56,10 +58,11 @@ macro_rules! syscalls {
                     match nr {
                         $(${index()} => {
                             let arg_ptr = $crate::unwrap_or_return!(self.validate_and_translate_pointer(arg as *mut ${concat($name, Argument)}), SyscallStatus::InvalidArgPtr);
+
                             let ret_ptr = $crate::unwrap_or_return!(self.validate_and_translate_pointer(ret as *mut core::mem::MaybeUninit::<$ret>), SyscallStatus::InvalidRetPtr);
                             // SAFETY: We just validated the pointers
                             let (arg_ref, ret_ref) = unsafe {
-                                (&mut *arg_ptr, &mut *ret_ptr)
+                                (&*arg_ptr, &mut *ret_ptr)
                             };
                             ret_ref.write(self.$name($(Self::ArgWrapper::new(arg_ref.$arg_name)),*));
                             $crate::syscalls::SyscallStatus::Success
