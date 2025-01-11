@@ -3,16 +3,18 @@ use core::ops::{Deref, DerefMut};
 use common::{
     constructable::Constructable,
     net::UDPDescriptor,
-    numbers::Number,
     pointer::{FatPointer, Pointer},
     syscalls::{syscall_argument::SyscallArgument, SysSocketError, ValidationError},
     unwrap_or_return,
 };
 
+use alloc::vec::Vec;
+
 use crate::net::sockets::SharedAssignedSocket;
 
 use super::handler::SyscallHandler;
 
+#[derive(Debug)]
 pub struct UserspaceArgument<T: SyscallArgument> {
     inner: T::Converted,
 }
@@ -54,10 +56,10 @@ impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
     }
 }
 
-impl<'a, T: Number> Validatable<&'a [T]> for UserspaceArgument<&'a [T]> {
+impl<'a> Validatable<&'a [u8]> for UserspaceArgument<&'a [u8]> {
     type Error = ValidationError;
 
-    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a [T], Self::Error> {
+    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a [u8], Self::Error> {
         let ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
 
         // SAFETY: we validated the pointer above
@@ -65,14 +67,42 @@ impl<'a, T: Number> Validatable<&'a [T]> for UserspaceArgument<&'a [T]> {
     }
 }
 
-impl<'a, T: Number> Validatable<&'a mut [T]> for UserspaceArgument<&'a mut [T]> {
+impl<'a> Validatable<&'a mut [u8]> for UserspaceArgument<&'a mut [u8]> {
     type Error = ValidationError;
 
-    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a mut [T], Self::Error> {
+    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a mut [u8], Self::Error> {
         let ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
 
         // SAFETY: we validated the pointer above
         unsafe { Ok(core::slice::from_raw_parts_mut(ptr, self.inner.len())) }
+    }
+}
+
+impl<'a> Validatable<Vec<&'a str>> for UserspaceArgument<&'a [&'a str]> {
+    type Error = ValidationError;
+
+    fn validate(self, handler: &mut SyscallHandler) -> Result<Vec<&'a str>, Self::Error> {
+        // If we have zero length the pointer is not even allocated
+        if self.inner.len() == 0 {
+            return Ok(Vec::new());
+        }
+
+        let outer_slice_ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
+
+        // SAFETY: we validated the pointer above
+        let outer_slice = unsafe { core::slice::from_raw_parts(outer_slice_ptr, self.inner.len()) };
+
+        let mut result = Vec::with_capacity(outer_slice.len());
+
+        for fat_ptr in outer_slice {
+            let ptr = validate_and_translate_slice_ptr(*fat_ptr, handler)?;
+            // SAFETY: We just validated the pointer above
+            unsafe {
+                result.push(core::str::from_raw_parts(ptr, fat_ptr.len()));
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -87,7 +117,7 @@ fn validate_and_translate_slice_ptr<PTR: Pointer>(
         .current_process()
         .with_lock(|p| {
             let pt = p.get_page_table();
-            if !pt.is_valid_userspace_fat_ptr(ptr, len, false) {
+            if !pt.is_valid_userspace_fat_ptr(ptr, len, PTR::WRITABLE) {
                 return None;
             }
             pt.translate_userspace_address_to_physical_address(ptr)
