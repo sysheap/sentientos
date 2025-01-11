@@ -166,9 +166,14 @@ impl Cpu {
         Self::with_scheduler(|s| f(s.get_current_process().lock()))
     }
 
-    pub unsafe fn current_nevertheless() -> CpuRefHolder {
-        let ptr = Self::get_per_cpu_data();
-        unsafe { CpuRefHolder(&mut *ptr) }
+    pub fn maybe_kernel_page_tables() -> Option<&'static RootPageTableHolder> {
+        let ptr = Self::read_sscratch() as *mut Self;
+        if ptr.is_null() || !ptr.is_aligned() {
+            return None;
+        }
+        // SAFETY: We validate above that the kernel is save
+        // Furthermore we are returning a static value.
+        unsafe { Some(&(*ptr).kernel_page_tables) }
     }
 
     pub fn cpu_id() -> usize {
@@ -181,10 +186,6 @@ impl Cpu {
 
     pub fn activate_kernel_page_table(&self) {
         self.kernel_page_tables.activate_page_table();
-    }
-
-    pub fn kernel_page_table(&self) -> &RootPageTableHolder {
-        &self.kernel_page_tables
     }
 
     pub fn scheduler(&self) -> &CpuScheduler {
