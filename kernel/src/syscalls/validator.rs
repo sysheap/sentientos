@@ -3,9 +3,9 @@ use core::ops::{Deref, DerefMut};
 use common::{
     constructable::Constructable,
     net::UDPDescriptor,
+    numbers::Number,
     pointer::{FatPointer, Pointer},
-    ref_conversion::RefToPointer,
-    syscalls::{SysSocketError, ValidationError},
+    syscalls::{syscall_argument::SyscallArgument, SysSocketError, ValidationError},
     unwrap_or_return,
 };
 
@@ -13,17 +13,13 @@ use crate::net::sockets::SharedAssignedSocket;
 
 use super::handler::SyscallHandler;
 
-pub struct UserspaceArgument<T: RefToPointer<T>> {
-    inner: T::Out,
+pub struct UserspaceArgument<T: SyscallArgument> {
+    inner: T::Converted,
 }
 
-impl<T: RefToPointer<T>> Constructable<T> for UserspaceArgument<T> {
-    fn new(inner: T) -> Self {
-        // References are invalid before we did the ptr translation
-        // Therefore, replace &T with *const T and &mut T with *mut T
-        UserspaceArgument {
-            inner: inner.to_pointer_if_ref(),
-        }
+impl<T: SyscallArgument> Constructable<T::Converted> for UserspaceArgument<T> {
+    fn new(inner: T::Converted) -> Self {
+        UserspaceArgument { inner }
     }
 }
 
@@ -47,33 +43,56 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
     }
 }
 
-/// I know this is really unreadable. However, I like to learn the power of
-/// the type system and traits.
-/// What this impl does is basically implement validation for all RefToPointer
-/// where Out is an FatPointer.
-impl<Ptr: Pointer, T: RefToPointer<T, Out = FatPointer<Ptr>>> Validatable<T>
-    for UserspaceArgument<T>
-{
+impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {
     type Error = ValidationError;
 
-    fn validate(self, handler: &mut SyscallHandler) -> Result<T, Self::Error> {
-        let start = self.inner.ptr();
-        let len = self.inner.len();
-        let ptr = handler.current_process().with_lock(|p| {
+    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a str, Self::Error> {
+        let ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
+
+        // SAFETY: we validated the pointer above
+        unsafe { Ok(core::str::from_raw_parts(ptr, self.inner.len())) }
+    }
+}
+
+impl<'a, T: Number> Validatable<&'a [T]> for UserspaceArgument<&'a [T]> {
+    type Error = ValidationError;
+
+    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a [T], Self::Error> {
+        let ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
+
+        // SAFETY: we validated the pointer above
+        unsafe { Ok(core::slice::from_raw_parts(ptr, self.inner.len())) }
+    }
+}
+
+impl<'a, T: Number> Validatable<&'a mut [T]> for UserspaceArgument<&'a mut [T]> {
+    type Error = ValidationError;
+
+    fn validate(self, handler: &mut SyscallHandler) -> Result<&'a mut [T], Self::Error> {
+        let ptr = validate_and_translate_slice_ptr(self.inner, handler)?;
+
+        // SAFETY: we validated the pointer above
+        unsafe { Ok(core::slice::from_raw_parts_mut(ptr, self.inner.len())) }
+    }
+}
+
+fn validate_and_translate_slice_ptr<PTR: Pointer>(
+    fat_pointer: FatPointer<PTR>,
+    handler: &mut SyscallHandler,
+) -> Result<PTR, ValidationError> {
+    let ptr = fat_pointer.ptr();
+    let len = fat_pointer.len();
+
+    handler
+        .current_process()
+        .with_lock(|p| {
             let pt = p.get_page_table();
-            if !pt.is_valid_userspace_fat_ptr(start, len, false) {
+            if !pt.is_valid_userspace_fat_ptr(ptr, len, false) {
                 return None;
             }
-            pt.translate_userspace_address_to_physical_address(start)
-        });
-
-        if let Some(ptr) = ptr {
-            // SAFETY: We validated the pointer above
-            unsafe { Ok(T::to_ref_if_pointer(FatPointer::new(ptr, len))) }
-        } else {
-            Err(ValidationError::InvalidPtr)
-        }
-    }
+            pt.translate_userspace_address_to_physical_address(ptr)
+        })
+        .ok_or(ValidationError::InvalidPtr)
 }
 
 macro_rules! simple_type {

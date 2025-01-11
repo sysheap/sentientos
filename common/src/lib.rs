@@ -18,6 +18,5 @@ pub mod mutex;
 pub mod net;
 pub mod numbers;
 pub mod pointer;
-pub mod ref_conversion;
 pub mod syscalls;
 pub mod util;
