@@ -13,7 +13,12 @@ fn main() {
         let mut buf = [0u8; 1024];
         let len = sys_execute_get_arg(index, &mut buf).expect("Could not read arg");
         let s = core::str::from_utf8(&buf[0..len]).expect("Argument must be utf8");
-        print!("{s} ");
+
+        if index < args - 1 {
+            print!("{s} ");
+        } else {
+            print!("{s}");
+        }
     }
     println!("");
 }
