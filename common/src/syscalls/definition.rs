@@ -66,9 +66,7 @@ syscalls!(
     sys_read_input() -> Option<u8>;
     sys_read_input_wait() -> u8;
     sys_exit(status: isize) -> ();
-    sys_execute<'a>(name: &'a str) -> Result<u64, SysExecuteError>;
-    sys_execute_add_arg<'a>(arg: &'a str) -> Result<(), ValidationError>;
-    sys_execute_arg_clear() -> ();
+    sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<u64, SysExecuteError>;
     sys_execute_number_of_args() -> usize;
     sys_execute_get_arg<'a>(index: usize, buffer: &'a mut [u8]) -> Result<usize, SysArgError>;
     sys_wait(pid: u64) -> Result<(), SysWaitError>;

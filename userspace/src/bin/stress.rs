@@ -16,7 +16,7 @@ fn main() {
     println!("Starting loop {INSTANCES} times");
     let mut pids = Vec::with_capacity(INSTANCES);
     for _ in 0..INSTANCES {
-        let pid = sys_execute("loop").expect("Process must be successfully startable");
+        let pid = sys_execute("loop", &[]).expect("Process must be successfully startable");
         pids.push(pid);
     }
 

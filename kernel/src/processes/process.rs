@@ -134,14 +134,6 @@ impl Process {
         self.notify_on_die.iter()
     }
 
-    pub fn add_sys_exec_arg(&mut self, arg: String) {
-        self.sys_exec_args.push(arg.to_string());
-    }
-
-    pub fn clear_sys_exec_arg(&mut self) {
-        self.sys_exec_args.clear();
-    }
-
     pub fn get_sys_exec_args(&self) -> &Vec<String> {
         &self.sys_exec_args
     }

@@ -5,9 +5,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use common::syscalls::{
-    sys_execute, sys_execute_add_arg, sys_execute_arg_clear, sys_exit, sys_print_programs, sys_wait,
-};
+use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
 use userspace::{print, println, util::read_line};
 
 extern crate alloc;
@@ -51,15 +49,13 @@ fn parse_command_and_execute(mut command: String) {
             }
 
             // Process arguments
-            let split: Vec<&str> = command.split(' ').collect();
+            let mut split = command.split(' ');
 
-            sys_execute_arg_clear();
+            let prog_name = split.next().unwrap_or(&command);
 
-            for arg in split.iter().skip(1).filter(|arg| !arg.trim().is_empty()) {
-                sys_execute_add_arg(arg).expect("Succeed");
-            }
+            let args: Vec<&str> = split.filter(|arg| !arg.trim().is_empty()).collect();
 
-            let execute_result = sys_execute(split[0]);
+            let execute_result = sys_execute(prog_name, &args);
             match execute_result {
                 Ok(pid) => {
                     if !background {

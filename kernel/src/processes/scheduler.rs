@@ -1,7 +1,7 @@
 use common::unwrap_or_return;
 use core::mem::offset_of;
 
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::ToString, sync::Arc};
 use common::syscalls::trap_frame::TrapFrame;
 
 use crate::{
@@ -95,11 +95,12 @@ impl CpuScheduler {
         self.schedule();
     }
 
-    pub fn start_program(&mut self, name: &str, args: Vec<String>) -> Option<Pid> {
+    pub fn start_program(&mut self, name: &str, args: &[&str]) -> Option<Pid> {
         for (prog_name, elf) in PROGRAMS {
             if name == *prog_name {
                 let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
                 let mut process = Process::from_elf(&elf, prog_name);
+                let args = args.iter().map(|arg| arg.to_string()).collect();
                 process.set_sys_exec_args(args);
                 let pid = process.get_pid();
                 process_table::THE.lock().add_process(process);
