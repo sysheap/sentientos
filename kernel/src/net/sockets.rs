@@ -176,7 +176,7 @@ mod tests {
         open_sockets.put_data(FROM1, PORT1, PORT1, &port1_data);
 
         assert!(
-            &assigned_port1.lock().buffer == &port1_data,
+            assigned_port1.lock().buffer == port1_data,
             "Data must be delivered properly."
         );
         assert!(

@@ -64,7 +64,7 @@ impl Uart {
         // open the "divisor latch" by writing 1 into the Divisor Latch Access Bit
         // (DLAB), which is bit index 7 of the Line Control Register (LCR) which
         // is at base_address + 3.
-        lcr.write(lcr_value | 1 << 7);
+        lcr.write(lcr_value | (1 << 7));
 
         let mut dll: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS);
         let mut dlm: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);

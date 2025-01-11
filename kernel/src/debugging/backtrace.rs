@@ -404,7 +404,7 @@ mod tests {
                         break;
                     }
                     Err(BacktraceNextError::CouldNotGetFde(address)) => {
-                        own_addr.push_back(address as usize);
+                        own_addr.push_back(address);
                         break;
                     }
                 }

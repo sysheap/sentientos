@@ -499,7 +499,7 @@ impl RootPageTableHolder {
 
         let page_table_address_shifted = page_table_address >> 12;
 
-        8 << 60 | (page_table_address_shifted & 0xfffffffffff)
+        (8 << 60) | (page_table_address_shifted & 0xfffffffffff)
     }
 
     pub fn activate_page_table(&self) {

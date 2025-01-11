@@ -80,7 +80,7 @@ impl IpV4Header {
 
         while count > 1 {
             // We still have big endian byte order!
-            sum += (bytes[addr + 1] as u16 | (bytes[addr] as u16) << 8) as u32;
+            sum += (bytes[addr + 1] as u16 | ((bytes[addr] as u16) << 8)) as u32;
             addr += 2;
             count -= 2;
         }

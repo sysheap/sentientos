@@ -248,6 +248,6 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
 fn pci_address(starting_address: usize, bus: u8, device: u8, function: u8) -> usize {
     assert!(device < 32);
     assert!(function < 8);
-    let offset = (bus as usize) << 20 | (device as usize) << 15 | (function as usize) << 12;
+    let offset = ((bus as usize) << 20) | ((device as usize) << 15) | ((function as usize) << 12);
     starting_address + offset
 }
