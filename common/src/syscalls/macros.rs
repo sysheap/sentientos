@@ -1,17 +1,18 @@
 macro_rules! syscalls {
     ($($name:ident$(<$lt:lifetime>)?($($arg_name:ident: $arg_ty:ty),*) -> $ret:ty);* $(;)?) => {
+        use $crate::syscalls::syscall_argument::SyscallArgument;
         $(
             #[allow(non_camel_case_types)]
             #[derive(Debug)]
             struct ${concat($name, Argument)}$(<$lt>)? {
                 $(
-                    pub $arg_name: $arg_ty,
+                    pub $arg_name: <$arg_ty as SyscallArgument>::Converted,
                 )*
             }
 
             pub fn $name$(<$lt>)?($($arg_name: $arg_ty),*) -> $ret {
                 let mut arguments = ${concat($name, Argument)} {
-                  $($arg_name,)*
+                  $($arg_name: $arg_name.convert(),)*
                 };
                 let mut ret = core::mem::MaybeUninit::<$ret>::uninit();
                 let successful: usize;
@@ -39,11 +40,10 @@ macro_rules! syscalls {
         pub mod kernel {
             use super::*;
             use $crate::constructable::Constructable;
-            use $crate::ref_conversion::RefToPointer;
 
             pub trait KernelSyscalls {
 
-                type ArgWrapper<T: RefToPointer<T>>: $crate::constructable::Constructable<T>;
+                type ArgWrapper<T: SyscallArgument>: $crate::constructable::Constructable<T::Converted>;
 
                 // Syscall functions
                 $(fn $name$(<$lt>)?(&mut self, $($arg_name: Self::ArgWrapper<$arg_ty>),*) -> $ret;)*

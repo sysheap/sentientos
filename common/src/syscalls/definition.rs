@@ -27,7 +27,6 @@ pub enum SysArgError {
     ValidationError(ValidationError),
     SpaceTooSmall,
 }
-
 #[derive(Debug)]
 #[repr(usize)]
 pub enum SysSocketError {
