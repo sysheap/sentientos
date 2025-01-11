@@ -320,8 +320,7 @@ mod test {
 
     fn alloc<T>(heap: &MutexHeap<TestAllocator>) -> *mut T {
         let layout = core::alloc::Layout::new::<T>();
-        let ptr = unsafe { heap.alloc(layout) as *mut T };
-        ptr
+        unsafe { heap.alloc(layout) as *mut T }
     }
 
     fn dealloc<T>(heap: &MutexHeap<TestAllocator>, ptr: *mut T) {

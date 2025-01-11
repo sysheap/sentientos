@@ -223,8 +223,6 @@ mod tests {
         mmio.a3().b3().write(6);
         mmio.a4().write(7);
 
-        drop(mmio);
-
         let read_value = unsafe { value.get().read_unaligned() };
         unsafe {
             assert_eq!(core::ptr::addr_of!(read_value.a1).read_unaligned(), 0);
@@ -250,8 +248,6 @@ mod tests {
         assert_eq!(mmio.read(), 42);
 
         mmio.write(128);
-
-        drop(mmio);
 
         assert_eq!(*value.get_mut(), 128);
     }

@@ -22,7 +22,7 @@ pub const VIRTIO_PCI_CAP_SHARED_MEMORY_CFG: u8 = 8;
 pub const VIRTIO_PCI_CAP_VENDOR_CFG: u8 = 9;
 
 mmio_struct! {
-    #[repr(packed)]
+    #[repr(C, packed)]
     struct virtio_pci_cap {
         cap_vndr: u8,     /* Generic PCI field: PCI_CAP_ID_VNDR */
         cap_next: u8,     /* Generic PCI field: next ptr. */

@@ -214,9 +214,9 @@ mod tests {
     #[test_case]
     fn get_bit() {
         let value: u64 = 0b1101101;
-        assert_eq!(super::get_bit(value, 0), true);
-        assert_eq!(super::get_bit(value, 1), false);
-        assert_eq!(super::get_bit(value, 2), true);
+        assert!(super::get_bit(value, 0));
+        assert!(!super::get_bit(value, 1));
+        assert!(super::get_bit(value, 2));
     }
 
     #[test_case]

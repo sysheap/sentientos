@@ -405,9 +405,9 @@ mod tests {
         assert!(entries.next().is_none());
     }
 
-    fn assert_same_instructions<'a>(
+    fn assert_same_instructions(
         fde: &ParsedFDE,
-        mut control_instructions: CallFrameInstructionIter<EndianSlice<'a, LittleEndian>>,
+        mut control_instructions: CallFrameInstructionIter<EndianSlice<'_, LittleEndian>>,
     ) {
         let mut insts = fde.instructions.iter();
         while let Some(control_inst) = control_instructions.next().unwrap() {

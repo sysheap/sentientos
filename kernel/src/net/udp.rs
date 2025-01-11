@@ -59,7 +59,7 @@ impl UdpHeader {
         };
 
         let mut ip_header = IpV4Header {
-            version_and_ihl: BigEndian::from_little_endian(4 << 4 | 5), // ip version v4 and header length 5 * 4byte
+            version_and_ihl: BigEndian::from_little_endian((4 << 4) | 5), // ip version v4 and header length 5 * 4byte
             tos: BigEndian::from_little_endian(0),
             total_packet_length: BigEndian::from_little_endian(
                 u16::try_from(IpV4Header::HEADER_SIZE + Self::UDP_HEADER_SIZE + data.len())
@@ -159,7 +159,7 @@ impl UdpHeader {
             let mut count = data.len();
 
             while count > 1 {
-                sum += ((data[addr] as u16) << 8 | (data[addr + 1] as u16)) as u32;
+                sum += (((data[addr] as u16) << 8) | (data[addr + 1] as u16)) as u32;
                 if sum & 0x80000000 != 0 {
                     sum = (sum & 0xffff) | (sum >> 16);
                 }
