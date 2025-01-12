@@ -1,8 +1,7 @@
 use common::{
+    errors::SysSocketError,
     net::UDPDescriptor,
-    syscalls::{
-        sys_open_udp_socket, sys_read_udp_socket, sys_write_back_udp_socket, SysSocketError,
-    },
+    syscalls::{sys_open_udp_socket, sys_read_udp_socket, sys_write_back_udp_socket},
 };
 
 pub struct UdpSocket(UDPDescriptor);

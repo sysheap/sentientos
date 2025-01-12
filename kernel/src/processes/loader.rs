@@ -1,24 +1,61 @@
 use alloc::{string::ToString, vec::Vec};
+use common::errors::LoaderError;
 
 use crate::{
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::minimum_amount_of_pages,
+        util::{copy_slice, minimum_amount_of_pages},
     },
-    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
+    memory::{
+        page::{Pages, PinnedHeapPages},
+        page_tables::RootPageTableHolder,
+        PAGE_SIZE,
+    },
 };
 
-pub const STACK_END: usize = 0xfffffffffffff000;
-pub const STACK_START: usize = STACK_END + (PAGE_SIZE - 1);
+pub const STACK_START: usize = usize::MAX;
+pub const STACK_END: usize = STACK_START - PAGE_SIZE + 1;
 
 #[derive(Debug)]
 pub struct LoadedElf {
     pub entry_address: usize,
     pub page_tables: RootPageTableHolder,
     pub allocated_pages: Vec<PinnedHeapPages>,
+    pub args_start: usize,
 }
 
-pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
+fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize, LoaderError> {
+    let mut total_bytes = name.len() + args.iter().map(|arg| arg.len()).sum::<usize>();
+    // add zero bytes into account (name, number of args, zero-byte terminator)
+    total_bytes += 1 + args.len() + 1;
+
+    let stack_size = stack.len();
+
+    if total_bytes >= stack_size {
+        return Err(LoaderError::StackToSmall);
+    }
+
+    let mut offset = stack_size - total_bytes;
+
+    copy_slice(name.as_bytes(), &mut stack[offset..]);
+    offset += name.len() + 1;
+
+    for arg in args {
+        copy_slice(arg.as_bytes(), &mut stack[offset..]);
+        offset += arg.len() + 1;
+    }
+
+    assert_eq!(
+        stack[offset..].len(),
+        1,
+        "We should only have one byte left"
+    );
+
+    // We want to point into the arguments
+    Ok(STACK_START - total_bytes + 1)
+}
+
+pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
     let mut page_tables = RootPageTableHolder::new_with_kernel_mapping();
 
     let elf_header = elf_file.get_header();
@@ -26,6 +63,9 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
 
     // Map 4KB stack
     let mut stack = PinnedHeapPages::new(1);
+
+    let args_start = set_up_arguments(stack.as_u8_slice(), name, args)?;
+
     let stack_addr = stack.addr();
     allocated_pages.push(stack);
 
@@ -64,9 +104,10 @@ pub fn load_elf(elf_file: &ElfFile) -> LoadedElf {
         );
     }
 
-    LoadedElf {
+    Ok(LoadedElf {
         entry_address: elf_header.entry_point as usize,
         page_tables,
         allocated_pages,
-    }
+        args_start,
+    })
 }

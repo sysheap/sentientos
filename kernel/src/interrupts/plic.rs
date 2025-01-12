@@ -1,9 +1,6 @@
-use common::mutex::Mutex;
+use common::{mutex::Mutex, runtime_initialized::RuntimeInitializedData};
 
-use crate::{
-    info,
-    klibc::{runtime_initialized::RuntimeInitializedData, MMIO},
-};
+use crate::{info, klibc::MMIO};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x1000_0000;

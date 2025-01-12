@@ -7,10 +7,10 @@ use core::{
     ptr::addr_of,
 };
 
-use common::mutex::MutexGuard;
+use common::{mutex::MutexGuard, runtime_initialized::RuntimeInitializedData};
 
 use crate::{
-    klibc::{runtime_initialized::RuntimeInitializedData, sizes::KiB},
+    klibc::sizes::KiB,
     memory::page_tables::RootPageTableHolder,
     processes::{
         process::Process,

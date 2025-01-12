@@ -1,10 +1,8 @@
 use common::{
+    errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
     net::UDPDescriptor,
     pointer::Pointer,
-    syscalls::{
-        kernel::KernelSyscalls, syscall_argument::SyscallArgument, SysArgError, SysExecuteError,
-        SysSocketError, SysWaitError, SyscallStatus, ValidationError,
-    },
+    syscalls::{kernel::KernelSyscalls, syscall_argument::SyscallArgument, SyscallStatus},
     unwrap_or_return,
 };
 
@@ -13,7 +11,6 @@ use crate::{
     cpu::Cpu,
     debug,
     io::stdin_buf::STDIN_BUFFER,
-    klibc::util::copy_slice,
     net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
     print, println,
     processes::{process::Pid, process_table::ProcessRef},
@@ -97,11 +94,8 @@ impl KernelSyscalls for SyscallHandler {
         let name = name.validate(self)?;
         let args = args.validate(self)?;
 
-        if let Some(pid) = Cpu::with_scheduler(|s| s.start_program(name, &args)) {
-            Ok(pid)
-        } else {
-            Err(SysExecuteError::InvalidProgram)
-        }
+        let pid = Cpu::with_scheduler(|s| s.start_program(name, &args))?;
+        Ok(pid)
     }
 
     fn sys_wait(&mut self, pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
@@ -186,32 +180,6 @@ impl KernelSyscalls for SyscallHandler {
                 None
             );
             Some(physical_address)
-        })
-    }
-
-    fn sys_execute_number_of_args(&mut self) -> usize {
-        self.current_process.lock().get_sys_exec_args().len()
-    }
-
-    fn sys_execute_get_arg(
-        &mut self,
-        index: Self::ArgWrapper<usize>,
-        buffer: Self::ArgWrapper<&mut [u8]>,
-    ) -> Result<usize, SysArgError> {
-        let buffer = buffer.validate(self)?;
-        self.current_process.with_lock(|p| {
-            let argument = p.get_sys_exec_args().get(*index);
-            if let Some(argument) = argument {
-                let len = argument.len();
-                if buffer.len() < len {
-                    Err(SysArgError::SpaceTooSmall)
-                } else {
-                    copy_slice(argument.as_bytes(), buffer);
-                    Ok(len)
-                }
-            } else {
-                Err(SysArgError::InvalidIndex)
-            }
         })
     }
 }
