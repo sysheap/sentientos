@@ -3,6 +3,7 @@ use crate::{print, println};
 mod array_vec;
 mod leb128;
 mod mutex;
+mod runtime_initialized;
 
 pub mod qemu_exit;
 

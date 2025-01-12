@@ -39,7 +39,7 @@ impl Page {
     }
 }
 
-trait Pages {
+pub trait Pages {
     fn as_u8_slice(&mut self) -> &mut [u8];
 }
 

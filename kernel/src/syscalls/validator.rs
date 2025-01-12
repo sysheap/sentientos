@@ -2,9 +2,10 @@ use core::ops::{Deref, DerefMut};
 
 use common::{
     constructable::Constructable,
+    errors::{SysSocketError, ValidationError},
     net::UDPDescriptor,
     pointer::{FatPointer, Pointer},
-    syscalls::{syscall_argument::SyscallArgument, SysSocketError, ValidationError},
+    syscalls::syscall_argument::SyscallArgument,
     unwrap_or_return,
 };
 

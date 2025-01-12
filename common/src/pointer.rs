@@ -16,7 +16,7 @@ impl<T> Pointer for *const T {
     }
 
     fn as_pointer(ptr: usize) -> Self {
-        ptr as *const T
+        core::ptr::with_exposed_provenance(ptr)
     }
 }
 

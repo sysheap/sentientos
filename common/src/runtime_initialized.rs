@@ -8,6 +8,7 @@ pub struct RuntimeInitializedData<T> {
 unsafe impl<T> Sync for RuntimeInitializedData<T> {}
 
 impl<T> RuntimeInitializedData<T> {
+    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
             initialized: AtomicBool::new(false),
@@ -25,6 +26,10 @@ impl<T> RuntimeInitializedData<T> {
         unsafe {
             self.data.get().write(MaybeUninit::new(value));
         }
+    }
+
+    pub fn initialized(&self) -> &AtomicBool {
+        &self.initialized
     }
 }
 

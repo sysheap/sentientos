@@ -1,7 +1,7 @@
-use common::unwrap_or_return;
+use common::{errors::SchedulerError, unwrap_or_return};
 use core::mem::offset_of;
 
-use alloc::{string::ToString, sync::Arc};
+use alloc::sync::Arc;
 use common::syscalls::trap_frame::TrapFrame;
 
 use crate::{
@@ -95,19 +95,17 @@ impl CpuScheduler {
         self.schedule();
     }
 
-    pub fn start_program(&mut self, name: &str, args: &[&str]) -> Option<Pid> {
+    pub fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Pid, SchedulerError> {
         for (prog_name, elf) in PROGRAMS {
             if name == *prog_name {
                 let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
-                let mut process = Process::from_elf(&elf, prog_name);
-                let args = args.iter().map(|arg| arg.to_string()).collect();
-                process.set_sys_exec_args(args);
+                let process = Process::from_elf(&elf, prog_name, args)?;
                 let pid = process.get_pid();
                 process_table::THE.lock().add_process(process);
-                return Some(pid);
+                return Ok(pid);
             }
         }
-        None
+        Err(SchedulerError::InvalidProgramName)
     }
 
     fn queue_current_process_back(&mut self) -> Pid {

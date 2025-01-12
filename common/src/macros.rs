@@ -67,3 +67,14 @@ macro_rules! scalar_enum {
         }
     }
 }
+
+#[macro_export]
+macro_rules! impl_from_to {
+    ($from:ident,$to:ty) => {
+        impl From<$from> for $to {
+            fn from(value: $from) -> Self {
+                Self::$from(value)
+            }
+        }
+    };
+}

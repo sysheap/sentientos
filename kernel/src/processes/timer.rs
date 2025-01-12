@@ -1,7 +1,5 @@
-use crate::{
-    cpu::Cpu, debug, device_tree, klibc::runtime_initialized::RuntimeInitializedData, sbi,
-};
-use common::big_endian::BigEndian;
+use crate::{cpu::Cpu, debug, device_tree, sbi};
+use common::{big_endian::BigEndian, runtime_initialized::RuntimeInitializedData};
 use core::arch::asm;
 
 pub const CLINT_BASE: usize = 0x2000000;
