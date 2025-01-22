@@ -43,6 +43,10 @@ impl<T> Mutex<T> {
         MutexGuard { mutex: self }
     }
 
+    pub fn into_inner(self) -> T {
+        self.data.into_inner()
+    }
+
     #[doc(hidden)]
     pub fn get_locked(&self) -> &AtomicBool {
         &self.locked

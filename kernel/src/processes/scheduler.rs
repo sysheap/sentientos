@@ -100,7 +100,7 @@ impl CpuScheduler {
             if name == *prog_name {
                 let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
                 let process = Process::from_elf(&elf, prog_name, args)?;
-                let pid = process.get_pid();
+                let pid = process.lock().get_pid();
                 process_table::THE.lock().add_process(process);
                 return Ok(pid);
             }
