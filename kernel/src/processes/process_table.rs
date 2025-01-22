@@ -30,9 +30,9 @@ impl ProcessTable {
         }
     }
 
-    pub fn add_process(&mut self, process: Process) {
-        self.processes
-            .insert(process.get_pid(), Arc::new(Mutex::new(process)));
+    pub fn add_process(&mut self, process: ProcessRef) {
+        let pid = process.lock().get_pid();
+        self.processes.insert(pid, process);
     }
 
     pub fn is_empty(&self) -> bool {
