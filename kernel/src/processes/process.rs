@@ -36,13 +36,13 @@ pub enum ProcessState {
     Waiting,
 }
 
-fn get_next_pid() -> Pid {
+fn get_next_id() -> u64 {
     // PIDs will start from 1
     // 0 is reserved for the never process which will be never scheduled
     static PID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
-    Pid(next_pid)
+    next_pid
 }
 
 pub struct Process {
@@ -264,7 +264,7 @@ impl Process {
 
         Ok(Self::new(
             name,
-            get_next_pid(),
+            Pid(get_next_id()),
             register_state,
             page_table,
             entry_address,
