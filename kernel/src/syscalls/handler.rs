@@ -1,7 +1,7 @@
 use common::{
     errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
     net::UDPDescriptor,
-    pid::Pid,
+    pid::{Pid, Tid},
     pointer::Pointer,
     syscalls::{kernel::KernelSyscalls, syscall_argument::SyscallArgument, SyscallStatus},
     unwrap_or_return,
@@ -14,7 +14,10 @@ use crate::{
     io::stdin_buf::STDIN_BUFFER,
     net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
     print, println,
-    processes::process_table::ProcessRef,
+    processes::{
+        process::{ProcessRef, POWERSAVE_TID},
+        thread::ThreadRef,
+    },
 };
 
 use super::validator::{UserspaceArgument, Validatable};
@@ -22,17 +25,21 @@ use super::validator::{UserspaceArgument, Validatable};
 pub(super) struct SyscallHandler {
     process_exit: bool,
     current_process: ProcessRef,
-    current_pid: Pid,
+    current_thread: ThreadRef,
+    current_tid: Tid,
 }
 
 impl SyscallHandler {
     fn new() -> Self {
-        let current_process = Cpu::with_scheduler(|s| s.get_current_process().clone());
-        let current_pid = current_process.lock().get_pid();
+        let current_thread = Cpu::with_scheduler(|s| s.get_current_thread().clone());
+        let current_tid = current_thread.lock().get_tid();
+
+        let current_process = current_thread.lock().process();
         Self {
             process_exit: false,
             current_process,
-            current_pid,
+            current_thread,
+            current_tid,
         }
     }
 
@@ -50,9 +57,11 @@ impl KernelSyscalls for SyscallHandler {
         }
         println!("");
     }
+
     fn sys_panic(&mut self) {
         panic!("Userspace triggered kernel panic");
     }
+
     fn sys_write(&mut self, s: UserspaceArgument<&str>) -> Result<(), ValidationError> {
         let s = s.validate(self)?;
         print!("{s}");
@@ -63,13 +72,14 @@ impl KernelSyscalls for SyscallHandler {
         let mut stdin = STDIN_BUFFER.lock();
         stdin.pop()
     }
+
     fn sys_read_input_wait(&mut self) -> u8 {
         let input = STDIN_BUFFER.lock().pop();
         if let Some(input) = input {
             input
         } else {
-            STDIN_BUFFER.lock().register_wakeup(self.current_pid);
-            self.current_process.lock().set_waiting_on_syscall::<u8>();
+            STDIN_BUFFER.lock().register_wakeup(self.current_tid);
+            self.current_thread.lock().set_waiting_on_syscall::<u8>();
             0
         }
     }
@@ -77,12 +87,16 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
         // We don't want to overwrite the next process trap frame
         self.process_exit = true;
-        Cpu::with_scheduler(|s| {
-            s.kill_current_process();
-            self.current_process = s.get_current_process().clone();
-        });
 
-        self.current_pid = self.current_process.lock().get_pid();
+        Cpu::with_scheduler(|s| {
+            // It is important to clean up the last references to the previous process
+            // Otherwise the thread arc is still hanging around and will be schedule next
+            self.current_process = s.powersave_process();
+            self.current_thread = s.powersave_thread().clone();
+            self.current_tid = POWERSAVE_TID;
+
+            s.kill_current_process();
+        });
 
         debug!("Exit process with status: {}\n", *status);
     }
@@ -100,7 +114,7 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_wait(&mut self, pid: UserspaceArgument<Pid>) -> Result<(), SysWaitError> {
-        if Cpu::with_scheduler(|s| s.let_current_process_wait_for(*pid)) {
+        if Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*pid)) {
             Ok(())
         } else {
             Err(SysWaitError::InvalidPid)

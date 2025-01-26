@@ -14,25 +14,31 @@ use crate::{
 };
 
 use super::{
-    process::{ProcessState, POWERSAVE_PID},
-    process_table::{self, ProcessRef},
+    process::{ProcessRef, POWERSAVE_TID},
+    process_table::{self},
+    thread::{ThreadRef, ThreadState},
 };
 
 pub const TRAP_FRAME_OFFSET: usize = offset_of!(CpuScheduler, trap_frame);
 
 pub struct CpuScheduler {
     trap_frame: TrapFrame,
-    current_process: ProcessRef,
+    current_thread: ThreadRef,
+    powersave_thread: ThreadRef,
+    // This keeps the powersave process alive
+    #[allow(dead_code)]
     powersave_process: ProcessRef,
 }
 
 impl CpuScheduler {
     pub fn new() -> Self {
         let powersave_process = Process::create_powersave_process();
+        let powersave_thread = powersave_process.with_lock(|p| p.main_thread().clone());
 
         Self {
             trap_frame: TrapFrame::zero(),
-            current_process: powersave_process.clone(),
+            current_thread: powersave_thread.clone(),
+            powersave_thread,
             powersave_process,
         }
     }
@@ -45,12 +51,16 @@ impl CpuScheduler {
         &mut self.trap_frame
     }
 
-    pub fn get_current_process(&self) -> &ProcessRef {
-        &self.current_process
+    pub fn get_current_thread(&self) -> &ThreadRef {
+        &self.current_thread
+    }
+
+    pub fn get_current_process(&self) -> ProcessRef {
+        self.current_thread.lock().process()
     }
 
     pub fn is_current_process_energy_saver(&self) -> bool {
-        Arc::ptr_eq(&self.current_process, &self.powersave_process)
+        Arc::ptr_eq(&self.current_thread, &self.powersave_thread)
     }
 
     pub fn schedule(&mut self) {
@@ -60,23 +70,32 @@ impl CpuScheduler {
     }
 
     pub fn kill_current_process(&mut self) {
-        let pid = self.current_process.lock().get_pid();
+        let pid = self.current_thread.lock().process().with_lock(|p| {
+            // TODO: Kill other threads first
+            assert_eq!(
+                p.threads_len(),
+                1,
+                "We currently don't support to kill other threads"
+            );
+
+            assert!(Arc::ptr_eq(&self.current_thread, &p.main_thread()));
+
+            p.get_pid()
+        });
+
         self.queue_current_process_back();
         process_table::THE.lock().kill(pid);
         self.schedule();
     }
 
-    pub fn let_current_process_wait_for(&self, pid: Pid) -> bool {
+    pub fn let_current_thread_wait_for(&self, pid: Pid) -> bool {
         let wait_for_process =
             unwrap_or_return!(process_table::THE.lock().get_process(pid).cloned(), false);
 
-        let mut current_process = self.current_process.lock();
-
-        current_process.set_state(ProcessState::Waiting);
-
-        wait_for_process
-            .lock()
-            .add_notify_on_die(current_process.get_pid());
+        self.current_thread.with_lock(|mut t| {
+            t.set_state(ThreadState::Waiting);
+            wait_for_process.lock().add_notify_on_die(t.get_tid());
+        });
 
         true
     }
@@ -108,62 +127,67 @@ impl CpuScheduler {
         Err(SchedulerError::InvalidProgramName)
     }
 
-    fn queue_current_process_back(&mut self) -> Pid {
-        if self.current_process.lock().get_pid() == POWERSAVE_PID {
-            return POWERSAVE_PID;
+    pub fn powersave_process(&self) -> ProcessRef {
+        self.powersave_process.clone()
+    }
+
+    pub fn powersave_thread(&self) -> ThreadRef {
+        self.powersave_thread.clone()
+    }
+
+    fn queue_current_process_back(&mut self) {
+        if self.current_thread.lock().get_tid() == POWERSAVE_TID {
+            debug!("Current thread is already powersave thread - don't queuing back");
+            return;
         }
-        self.swap_current_with_powersave().with_lock(|mut p| {
-            match p.get_state() {
-                ProcessState::Running => p.set_state(ProcessState::Runnable),
-                ProcessState::Waiting => {}
-                ProcessState::Runnable => panic!("Inavlid process state."),
+        self.swap_current_with_powersave().with_lock(|mut t| {
+            match t.get_state() {
+                ThreadState::Running => t.set_state(ThreadState::Runnable),
+                ThreadState::Waiting => {}
+                ThreadState::Runnable => panic!("Inavlid process state."),
             }
 
-            p.set_program_counter(Cpu::read_sepc());
-            p.set_in_kernel_mode(Cpu::is_in_kernel_mode());
-            p.set_register_state(&self.trap_frame);
-            let pid = p.get_pid();
-            debug!("Unscheduling PID={} NAME={}", pid, p.get_name());
-            pid
-        })
+            t.set_program_counter(Cpu::read_sepc());
+            t.set_in_kernel_mode(Cpu::is_in_kernel_mode());
+            t.set_register_state(&self.trap_frame);
+
+            debug!("Saved thread {} back", *t);
+        });
     }
 
     fn prepare_next_process(&mut self) {
-        let old_pid = self.queue_current_process_back();
+        self.queue_current_process_back();
 
-        process_table::THE.with_lock(|pt| {
+        process_table::THE.with_lock(|mut pt| {
             if pt.is_empty() {
                 info!("No more processes to schedule, shutting down system");
                 qemu_exit::exit_success();
             }
-            let next_runnable = pt
-                .next_runnable(old_pid)
-                .unwrap_or(self.powersave_process.clone());
 
-            self.current_process = next_runnable;
-            self.current_process.lock().set_state(ProcessState::Running);
+            debug!("Getting next runnable process");
+
+            // next_runnable already sets the state to ThreadState::Running
+            let next_runnable = pt.next_runnable().unwrap_or(self.powersave_thread.clone());
+
+            debug!("Next runnable is {}", *next_runnable.lock());
+
+            self.current_thread = next_runnable;
         });
 
-        self.set_cpu_reg_for_current_process();
+        self.set_cpu_reg_for_current_thread();
     }
 
-    fn set_cpu_reg_for_current_process(&mut self) {
-        self.current_process.with_lock(|p| {
-            let pc = p.get_program_counter();
+    fn set_cpu_reg_for_current_thread(&mut self) {
+        self.current_thread.with_lock(|t| {
+            let pc = t.get_program_counter();
 
-            self.trap_frame = *p.get_register_state();
+            self.trap_frame = *t.get_register_state();
             Cpu::write_sepc(pc);
-            Cpu::set_ret_to_kernel_mode(p.get_in_kernel_mode());
-
-            debug!(
-                "CPU set to PID={} NAME={} pc={pc:#x}",
-                p.get_pid(),
-                p.get_name()
-            );
+            Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
         });
     }
 
-    fn swap_current_with_powersave(&mut self) -> ProcessRef {
-        core::mem::replace(&mut self.current_process, self.powersave_process.clone())
+    fn swap_current_with_powersave(&mut self) -> ThreadRef {
+        core::mem::replace(&mut self.current_thread, self.powersave_thread.clone())
     }
 }

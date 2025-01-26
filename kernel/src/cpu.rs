@@ -14,8 +14,8 @@ use crate::{
     memory::page_tables::RootPageTableHolder,
     processes::{
         process::Process,
-        process_table::ProcessRef,
         scheduler::{self, CpuScheduler},
+        thread::ThreadRef,
     },
 };
 
@@ -158,8 +158,8 @@ impl Cpu {
         f(scheduler)
     }
 
-    pub fn current_process() -> ProcessRef {
-        Self::with_scheduler(|s| s.get_current_process().clone())
+    pub fn current_thread() -> ThreadRef {
+        Self::with_scheduler(|s| s.get_current_thread().clone())
     }
 
     pub fn with_current_process<R>(mut f: impl FnMut(MutexGuard<'_, Process>) -> R) -> R {

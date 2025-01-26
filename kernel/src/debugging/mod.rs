@@ -21,12 +21,7 @@ pub fn dump_current_state() {
     );
 
     process_table::THE.lock().dump();
-    Cpu::current_process().with_lock(|p| {
-        info!(
-            "Current Process: PID={} NAME={} STATE={:?}",
-            p.get_pid(),
-            p.get_name(),
-            p.get_state()
-        );
+    Cpu::current_thread().with_lock(|t| {
+        info!("Current Thread: {}", *t);
     });
 }
