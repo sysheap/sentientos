@@ -11,6 +11,7 @@ clippy:
     cd userspace && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
     cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --no-deps -- -D warnings
+    cargo clippy --tests
 
 clean:
     rm -f kernel/compiled_userspace/*
