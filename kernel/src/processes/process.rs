@@ -38,7 +38,7 @@ pub enum ProcessState {
 
 fn get_next_id() -> u64 {
     // PIDs will start from 1
-    // 0 is reserved for the never process which will be never scheduled
+    // 0 is reserved for the powersave process
     static PID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
