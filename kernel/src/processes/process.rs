@@ -8,33 +8,31 @@ use crate::{
 use alloc::{
     collections::{BTreeMap, BTreeSet},
     string::{String, ToString},
-    sync::Arc,
+    sync::{Arc, Weak},
     vec::Vec,
 };
 use common::{
     errors::LoaderError,
     mutex::Mutex,
     net::UDPDescriptor,
-    pid::Pid,
+    pid::{Pid, Tid},
     syscalls::trap_frame::{Register, TrapFrame},
     util::align_down,
 };
 use core::{
-    any::TypeId,
     fmt::Debug,
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use super::thread::{Thread, ThreadRef};
+
 pub const POWERSAVE_PID: Pid = Pid(0);
+pub const POWERSAVE_TID: Tid = Tid(0);
 
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessState {
-    Running,
-    Runnable,
-    Waiting,
-}
+pub type ProcessRef = Arc<Mutex<Process>>;
+pub type ProcessWeakRef = Weak<Mutex<Process>>;
 
 fn get_next_id() -> u64 {
     // PIDs will start from 1
@@ -46,19 +44,15 @@ fn get_next_id() -> u64 {
 }
 
 pub struct Process {
-    name: String,
+    name: Arc<String>,
     pid: Pid,
-    register_state: TrapFrame,
     page_table: RootPageTableHolder,
-    program_counter: usize,
     allocated_pages: Vec<PinnedHeapPages>,
-    state: ProcessState,
     free_mmap_address: usize,
     next_free_descriptor: u64,
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
-    in_kernel_mode: bool,
-    notify_on_die: BTreeSet<Pid>,
-    waiting_on_syscall: Option<TypeId>,
+    notify_on_die: BTreeSet<Tid>,
+    threads: BTreeMap<Tid, ThreadRef>,
 }
 
 impl Debug for Process {
@@ -67,20 +61,14 @@ impl Debug for Process {
             f,
             "Process [
             PID: {},
-            Registers: {:?},
             Page Table: {:?},
-            Program Counter: {:#x},
             Number of allocated pages: {},
-            State: {:?},
-            In kernel mode: {}
+            Threads: {:?}
         ]",
             self.pid,
-            self.register_state,
             self.page_table,
-            self.program_counter,
             self.allocated_pages.len(),
-            self.state,
-            self.in_kernel_mode
+            self.threads,
         )
     }
 }
@@ -95,21 +83,33 @@ impl Process {
         allocated_pages: Vec<PinnedHeapPages>,
         in_kernel_mode: bool,
     ) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
-            name: name.into(),
+        let name = Arc::new(name.into());
+        let process = Arc::new(Mutex::new(Self {
+            name: name.clone(),
             pid,
-            register_state,
             page_table,
-            program_counter,
             allocated_pages,
-            state: ProcessState::Runnable,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             next_free_descriptor: 0,
             open_udp_sockets: BTreeMap::new(),
-            in_kernel_mode,
             notify_on_die: BTreeSet::new(),
-            waiting_on_syscall: None,
-        }))
+            threads: BTreeMap::new(),
+        }));
+
+        let main_thread_tid = Tid(pid.0);
+        let main_thread = Thread::new(
+            main_thread_tid,
+            pid,
+            name,
+            register_state,
+            program_counter,
+            in_kernel_mode,
+            Arc::downgrade(&process),
+        );
+
+        process.lock().threads.insert(main_thread_tid, main_thread);
+
+        process
     }
 
     pub fn create_powersave_process() -> Arc<Mutex<Self>> {
@@ -149,7 +149,15 @@ impl Process {
         )
     }
 
-    pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Pid> {
+    pub fn threads(&self) -> impl Iterator<Item = &ThreadRef> {
+        self.threads.values()
+    }
+
+    pub fn threads_len(&self) -> usize {
+        self.threads.len()
+    }
+
+    pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Tid> {
         self.notify_on_die.iter()
     }
 
@@ -168,32 +176,8 @@ impl Process {
         ptr
     }
 
-    pub fn add_notify_on_die(&mut self, pid: Pid) {
-        self.notify_on_die.insert(pid);
-    }
-
-    pub fn get_register_state(&self) -> &TrapFrame {
-        &self.register_state
-    }
-
-    pub fn set_register_state(&mut self, register_state: &TrapFrame) {
-        self.register_state = *register_state;
-    }
-
-    pub fn get_program_counter(&self) -> usize {
-        self.program_counter
-    }
-
-    pub fn set_program_counter(&mut self, program_counter: usize) {
-        self.program_counter = program_counter;
-    }
-
-    pub fn get_state(&self) -> ProcessState {
-        self.state
-    }
-
-    pub fn set_state(&mut self, state: ProcessState) {
-        self.state = state;
+    pub fn add_notify_on_die(&mut self, tid: Tid) {
+        self.notify_on_die.insert(tid);
     }
 
     pub fn get_page_table(&self) -> &RootPageTableHolder {
@@ -208,40 +192,11 @@ impl Process {
         self.pid
     }
 
-    pub fn set_in_kernel_mode(&mut self, in_kernel_mode: bool) {
-        self.in_kernel_mode = in_kernel_mode;
-    }
-
-    pub fn get_in_kernel_mode(&self) -> bool {
-        self.in_kernel_mode
-    }
-
-    pub fn set_waiting_on_syscall<RetType: 'static>(&mut self) {
-        self.state = ProcessState::Waiting;
-        self.waiting_on_syscall = Some(core::any::TypeId::of::<RetType>());
-    }
-
-    pub fn resume_on_syscall<RetType: 'static>(&mut self, return_value: RetType) {
-        assert_eq!(
-            self.waiting_on_syscall,
-            Some(core::any::TypeId::of::<RetType>()),
-            "resume return type is different than expected"
-        );
-        let ptr = self.register_state[Register::a2] as *mut RetType;
-        assert!(!ptr.is_null() && ptr.is_aligned());
-        assert!(self.page_table.is_valid_userspace_ptr(ptr, true));
-        let kernel_ptr = self
-            .page_table
-            .translate_userspace_address_to_physical_address(ptr)
-            .expect("Return pointer must be valid");
-
-        // SAFETY: We assured safety in the above checks
-        unsafe {
-            kernel_ptr.write(return_value);
-        }
-
-        self.waiting_on_syscall = None;
-        self.state = ProcessState::Runnable;
+    pub fn main_thread(&self) -> ThreadRef {
+        self.threads
+            .get(&Tid(self.pid.0))
+            .cloned()
+            .expect("Main thread must always exist")
     }
 
     pub fn from_elf(
@@ -293,6 +248,16 @@ impl Process {
     }
 }
 
+impl core::fmt::Display for Process {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "pid={} name={}", self.pid, self.name)?;
+        for thread in self.threads.values() {
+            writeln!(f, "\t{}", *thread.lock())?;
+        }
+        Ok(())
+    }
+}
+
 impl Drop for Process {
     fn drop(&mut self) {
         debug!(
@@ -304,7 +269,7 @@ impl Drop for Process {
 
 #[cfg(test)]
 mod tests {
-    use common::syscalls::trap_frame::Register;
+    use common::{pid::Tid, syscalls::trap_frame::Register};
 
     use crate::{
         autogenerated::userspace_programs::PROG1, klibc::elf::ElfFile, memory::PAGE_SIZE,
@@ -325,10 +290,15 @@ mod tests {
     fn create_process_from_elf_with_args() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
         let process_ref = Process::from_elf(&elf, "prog1", &["arg1", "arg2"]).unwrap();
-        let process = Arc::into_inner(process_ref).unwrap().into_inner();
+        let mut process = Arc::into_inner(process_ref).unwrap().into_inner();
+        let pid = process.pid;
+        let main_thread = Arc::into_inner(process.threads.remove(&Tid(pid.0)).unwrap())
+            .unwrap()
+            .into_inner();
 
         // a0 points to the start of the arguments
-        let mut arg_ptr = core::ptr::without_provenance(process.register_state[Register::a0]);
+        let mut arg_ptr =
+            core::ptr::without_provenance(main_thread.get_register_state()[Register::a0]);
 
         // Translate userspace ptr to kernel pointer
         arg_ptr = process

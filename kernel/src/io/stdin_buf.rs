@@ -1,15 +1,16 @@
 use crate::{
     cpu::Cpu,
+    debug,
     processes::{process_table, timer},
 };
 use alloc::collections::{BTreeSet, VecDeque};
-use common::{mutex::Mutex, pid::Pid};
+use common::{mutex::Mutex, pid::Tid};
 
 pub static STDIN_BUFFER: Mutex<StdinBuffer> = Mutex::new(StdinBuffer::new());
 
 pub struct StdinBuffer {
     data: VecDeque<u8>,
-    wakeup_queue: BTreeSet<Pid>,
+    wakeup_queue: BTreeSet<Tid>,
 }
 
 impl StdinBuffer {
@@ -20,23 +21,26 @@ impl StdinBuffer {
         }
     }
 
-    pub fn register_wakeup(&mut self, pid: Pid) {
-        self.wakeup_queue.insert(pid);
+    pub fn register_wakeup(&mut self, tid: Tid) {
+        self.wakeup_queue.insert(tid);
     }
 
     pub fn push(&mut self, byte: u8) {
         let notified = !self.wakeup_queue.is_empty();
+        debug!("Waking up following tids={:?}", self.wakeup_queue);
         process_table::THE.with_lock(|pt| {
-            for pid in &self.wakeup_queue {
-                if let Some(process) = pt.get_process(*pid) {
-                    process.with_lock(|mut p| {
-                        p.resume_on_syscall(byte);
+            for tid in &self.wakeup_queue {
+                if let Some(thread) = pt.get_thread(*tid) {
+                    thread.with_lock(|mut t| {
+                        debug!("Resume on syscall set on thread={}", *t);
+                        t.resume_on_syscall(byte);
                     })
                 }
             }
         });
         Cpu::with_scheduler(|s| {
             if notified && s.is_current_process_energy_saver() {
+                debug!("notified process and current process is energy saver");
                 s.schedule();
             }
         });

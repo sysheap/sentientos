@@ -4,7 +4,7 @@ use crate::{
     debug,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
-    processes::process::ProcessState,
+    processes::thread::ThreadState,
     syscalls::{self},
 };
 use common::syscalls::trap_frame::Register;
@@ -64,7 +64,7 @@ fn handle_syscall() {
     }
 
     // In case our current process was set to waiting state we need to reschedule
-    if scheduler.get_current_process().lock().get_state() == ProcessState::Waiting {
+    if scheduler.get_current_thread().lock().get_state() == ThreadState::Waiting {
         scheduler.schedule();
     }
 }
