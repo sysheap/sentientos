@@ -1,6 +1,7 @@
 use common::{
     errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
     net::UDPDescriptor,
+    pid::Pid,
     pointer::Pointer,
     syscalls::{kernel::KernelSyscalls, syscall_argument::SyscallArgument, SyscallStatus},
     unwrap_or_return,
@@ -13,7 +14,7 @@ use crate::{
     io::stdin_buf::STDIN_BUFFER,
     net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
     print, println,
-    processes::{process::Pid, process_table::ProcessRef},
+    processes::process_table::ProcessRef,
 };
 
 use super::validator::{UserspaceArgument, Validatable};
@@ -90,7 +91,7 @@ impl KernelSyscalls for SyscallHandler {
         &mut self,
         name: UserspaceArgument<&str>,
         args: UserspaceArgument<&'a [&'a str]>,
-    ) -> Result<u64, SysExecuteError> {
+    ) -> Result<Pid, SysExecuteError> {
         let name = name.validate(self)?;
         let args = args.validate(self)?;
 
@@ -98,7 +99,7 @@ impl KernelSyscalls for SyscallHandler {
         Ok(pid)
     }
 
-    fn sys_wait(&mut self, pid: UserspaceArgument<u64>) -> Result<(), SysWaitError> {
+    fn sys_wait(&mut self, pid: UserspaceArgument<Pid>) -> Result<(), SysWaitError> {
         if Cpu::with_scheduler(|s| s.let_current_process_wait_for(*pid)) {
             Ok(())
         } else {

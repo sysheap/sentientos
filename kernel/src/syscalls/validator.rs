@@ -4,6 +4,7 @@ use common::{
     constructable::Constructable,
     errors::{SysSocketError, ValidationError},
     net::UDPDescriptor,
+    pid::Pid,
     pointer::{FatPointer, Pointer},
     syscalls::syscall_argument::SyscallArgument,
     unwrap_or_return,
@@ -157,3 +158,5 @@ simple_type!(i16);
 simple_type!(i32);
 simple_type!(i64);
 simple_type!(isize);
+
+simple_type!(Pid);

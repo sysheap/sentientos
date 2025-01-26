@@ -18,6 +18,7 @@ pub mod macros;
 pub mod mutex;
 pub mod net;
 pub mod numbers;
+pub mod pid;
 pub mod pointer;
 pub mod runtime_initialized;
 pub mod syscalls;
