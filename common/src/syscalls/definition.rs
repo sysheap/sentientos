@@ -1,6 +1,7 @@
 use crate::{
     errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
     net::UDPDescriptor,
+    pid::Pid,
     scalar_enum,
 };
 
@@ -22,8 +23,8 @@ syscalls!(
     sys_read_input() -> Option<u8>;
     sys_read_input_wait() -> u8;
     sys_exit(status: isize) -> ();
-    sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<u64, SysExecuteError>;
-    sys_wait(pid: u64) -> Result<(), SysWaitError>;
+    sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<Pid, SysExecuteError>;
+    sys_wait(pid: Pid) -> Result<(), SysWaitError>;
     sys_mmap_pages(number_of_pages: usize) -> *mut u8;
     sys_open_udp_socket(port: u16) -> Result<UDPDescriptor, SysSocketError>;
     sys_write_back_udp_socket<'a>(descriptor: UDPDescriptor, buffer: &'a [u8]) -> Result<usize, SysSocketError>;

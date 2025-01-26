@@ -15,6 +15,7 @@ use common::{
     errors::LoaderError,
     mutex::Mutex,
     net::UDPDescriptor,
+    pid::Pid,
     syscalls::trap_frame::{Register, TrapFrame},
     util::align_down,
 };
@@ -24,9 +25,7 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-pub type Pid = u64;
-
-pub const POWERSAVE_PID: Pid = 0;
+pub const POWERSAVE_PID: Pid = Pid(0);
 
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
@@ -43,7 +42,7 @@ fn get_next_pid() -> Pid {
     static PID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_pid = PID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_pid, u64::MAX, "We ran out of process pids");
-    next_pid
+    Pid(next_pid)
 }
 
 pub struct Process {

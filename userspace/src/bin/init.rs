@@ -12,6 +12,6 @@ fn main() {
     println!("starting shell");
     let shell_name = "sesh";
     let shell_pid = sys_execute(shell_name, &[]).unwrap();
-    sys_wait(shell_pid as u64).unwrap();
+    sys_wait(shell_pid).unwrap();
     println!("Initial shell has exited...");
 }

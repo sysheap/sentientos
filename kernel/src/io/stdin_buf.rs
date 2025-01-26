@@ -1,9 +1,9 @@
 use crate::{
     cpu::Cpu,
-    processes::{process::Pid, process_table, timer},
+    processes::{process_table, timer},
 };
 use alloc::collections::{BTreeSet, VecDeque};
-use common::mutex::Mutex;
+use common::{mutex::Mutex, pid::Pid};
 
 pub static STDIN_BUFFER: Mutex<StdinBuffer> = Mutex::new(StdinBuffer::new());
 

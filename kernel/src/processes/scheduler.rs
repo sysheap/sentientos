@@ -1,4 +1,4 @@
-use common::{errors::SchedulerError, unwrap_or_return};
+use common::{errors::SchedulerError, pid::Pid, unwrap_or_return};
 use core::mem::offset_of;
 
 use alloc::sync::Arc;
@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    process::{Pid, ProcessState, POWERSAVE_PID},
+    process::{ProcessState, POWERSAVE_PID},
     process_table::{self, ProcessRef},
 };
 
