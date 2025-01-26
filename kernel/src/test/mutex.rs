@@ -9,12 +9,12 @@ mod tests {
     #[test_case]
     fn with_lock() {
         let mutex = Mutex::new(42);
-        assert_eq!(mutex.get_locked().load(Ordering::Acquire), false);
+        assert!(!mutex.get_locked().load(Ordering::Acquire));
         let result = mutex.with_lock(|mut d| {
             *d = 45;
             *d
         });
-        assert_eq!(mutex.get_locked().load(Ordering::Acquire), false);
+        assert!(!mutex.get_locked().load(Ordering::Acquire));
         unsafe {
             assert_eq!(*mutex.get_data().get(), 45);
         }
@@ -24,19 +24,19 @@ mod tests {
     #[test_case]
     fn check_lock_and_unlock() {
         let mutex = Mutex::new(42);
-        assert_eq!(mutex.get_locked().load(Ordering::Acquire), false);
+        assert!(!mutex.get_locked().load(Ordering::Acquire));
         {
             let mut locked = mutex.lock();
-            assert_eq!(mutex.get_locked().load(Ordering::Acquire), true);
+            assert!(mutex.get_locked().load(Ordering::Acquire));
             *locked = 1;
         }
-        assert_eq!(mutex.get_locked().load(Ordering::Acquire), false);
+        assert!(!mutex.get_locked().load(Ordering::Acquire));
         unsafe {
             assert_eq!(*mutex.get_data().get(), 1);
         }
         let mut locked = mutex.lock();
         *locked = 42;
-        assert_eq!(mutex.get_locked().load(Ordering::Acquire), true);
+        assert!(mutex.get_locked().load(Ordering::Acquire));
         unsafe {
             assert_eq!(*mutex.get_data().get(), 42);
         }
