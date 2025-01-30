@@ -112,6 +112,10 @@ impl Process {
         process
     }
 
+    pub fn remove_thread(&mut self, tid: Tid) {
+        self.threads.remove(&tid);
+    }
+
     pub fn create_powersave_process() -> Arc<Mutex<Self>> {
         extern "C" {
             fn powersave();

@@ -16,6 +16,7 @@ pub enum ThreadState {
     Running,
     Runnable,
     Waiting,
+    Dying,
 }
 
 #[derive(Debug)]
@@ -72,6 +73,10 @@ impl Thread {
 
     pub fn get_tid(&self) -> Tid {
         self.tid
+    }
+
+    pub fn get_pid(&self) -> Pid {
+        self.pid
     }
 
     pub fn get_register_state(&self) -> &TrapFrame {
