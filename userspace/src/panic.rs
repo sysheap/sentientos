@@ -1,6 +1,6 @@
 use core::panic::PanicInfo;
 
-use common::syscalls::sys_exit;
+use common::syscalls::sys_exit_thread;
 
 use crate::println;
 
@@ -13,6 +13,6 @@ pub fn panic(info: &PanicInfo) -> ! {
         println!("Location: {}", location);
     }
 
-    sys_exit(-1);
+    sys_exit_thread(-1);
     loop {}
 }

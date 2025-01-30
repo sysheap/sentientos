@@ -1,4 +1,4 @@
-use common::syscalls::sys_exit;
+use common::syscalls::sys_exit_thread;
 
 use crate::args;
 
@@ -12,7 +12,7 @@ pub extern "C" fn _start(args: *const u8) -> ! {
     unsafe {
         main();
     }
-    sys_exit(0);
+    sys_exit_thread(0);
     #[allow(clippy::empty_loop)]
     loop {}
 }

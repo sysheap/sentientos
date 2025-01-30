@@ -84,7 +84,7 @@ impl KernelSyscalls for SyscallHandler {
         }
     }
 
-    fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
+    fn sys_exit_thread(&mut self, status: UserspaceArgument<isize>) {
         // We don't want to overwrite the next process trap frame
         self.process_exit = true;
 
