@@ -22,7 +22,7 @@ syscalls!(
     sys_write<'a>(s: &'a str) -> Result<(), ValidationError>;
     sys_read_input() -> Option<u8>;
     sys_read_input_wait() -> u8;
-    sys_exit(status: isize) -> ();
+    sys_exit_thread(status: isize) -> ();
     sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<Pid, SysExecuteError>;
     sys_wait(pid: Pid) -> Result<(), SysWaitError>;
     sys_mmap_pages(number_of_pages: usize) -> *mut u8;

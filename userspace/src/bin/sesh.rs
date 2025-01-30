@@ -5,7 +5,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
+use common::syscalls::{sys_execute, sys_exit_thread, sys_print_programs, sys_wait};
 use userspace::{print, println, util::read_line};
 
 extern crate alloc;
@@ -30,7 +30,7 @@ fn parse_command_and_execute(mut command: String) {
         "" => {}
         "exit" | "q" => {
             println!("Exiting...");
-            sys_exit(0);
+            sys_exit_thread(0);
         }
         "help" => {
             println!("Available commands:");
