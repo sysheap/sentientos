@@ -95,7 +95,7 @@ impl KernelSyscalls for SyscallHandler {
             self.current_thread = s.powersave_thread().clone();
             self.current_tid = POWERSAVE_TID;
 
-            s.kill_current_process();
+            s.kill_current_thread();
         });
 
         debug!("Exit process with status: {}\n", *status);

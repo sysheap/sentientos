@@ -1,7 +1,7 @@
 use common::{errors::SchedulerError, pid::Pid, unwrap_or_return};
 use core::mem::offset_of;
 
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 use common::syscalls::trap_frame::TrapFrame;
 
 use crate::{
@@ -69,22 +69,38 @@ impl CpuScheduler {
         timer::set_timer(10);
     }
 
-    pub fn kill_current_process(&mut self) {
-        let pid = self.current_thread.lock().process().with_lock(|p| {
-            // TODO: Kill other threads first
-            assert_eq!(
-                p.threads_len(),
-                1,
-                "We currently don't support to kill other threads"
-            );
+    pub fn kill_current_thread(&mut self) {
+        let mut last_one_cleans_up = false;
+        let pid = self.current_thread.with_lock(|mut t| {
+            t.set_state(ThreadState::Dying);
+            t.process().with_lock(|mut p| {
+                p.remove_thread(t.get_tid());
 
-            assert!(Arc::ptr_eq(&self.current_thread, &p.main_thread()));
+                // We set all the other threads to go die
+                if t.get_tid().0 == p.get_pid().0 {
+                    let mut tids_to_kill = Vec::with_capacity(p.threads_len());
+                    for thread in p.threads() {
+                        thread.with_lock(|mut t| {
+                            if t.get_state() != ThreadState::Running {
+                                tids_to_kill.push(t.get_tid());
+                            }
+                            t.set_state(ThreadState::Dying);
+                        });
+                    }
+                    for tid in tids_to_kill {
+                        p.remove_thread(tid);
+                    }
+                }
 
-            p.get_pid()
+                last_one_cleans_up = p.threads_len() == 0;
+            });
+            t.get_pid()
         });
 
         self.queue_current_process_back();
-        process_table::THE.lock().kill(pid);
+        if last_one_cleans_up {
+            process_table::THE.lock().kill(pid);
+        }
         self.schedule();
     }
 
@@ -103,15 +119,17 @@ impl CpuScheduler {
     pub fn send_ctrl_c(&mut self) {
         self.queue_current_process_back();
 
-        process_table::THE.with_lock(|mut pt| {
-            let highest_pid = pt.get_highest_pid_without(&["sesh"]);
-
-            if let Some(pid) = highest_pid {
-                pt.kill(pid);
-            }
+        let process_to_kill = process_table::THE.with_lock(|pt| {
+            pt.get_highest_pid_without(&["sesh"])
+                .and_then(|pid| pt.get_process(pid).cloned())
         });
 
-        self.schedule();
+        if let Some(process_to_kill) = process_to_kill {
+            self.current_thread = process_to_kill.lock().main_thread();
+            self.kill_current_thread();
+        } else {
+            self.schedule();
+        }
     }
 
     pub fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Pid, SchedulerError> {
@@ -145,6 +163,11 @@ impl CpuScheduler {
                 ThreadState::Running => t.set_state(ThreadState::Runnable),
                 ThreadState::Waiting => {}
                 ThreadState::Runnable => panic!("Inavlid process state."),
+                ThreadState::Dying => {
+                    // Delete dying thread
+                    t.process().lock().remove_thread(t.get_tid());
+                    return;
+                }
             }
 
             t.set_program_counter(Cpu::read_sepc());

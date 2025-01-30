@@ -83,7 +83,13 @@ impl ProcessTable {
         );
         debug!("Removing pid={pid} from process table");
         if let Some(process) = self.processes.remove(&pid) {
-            for pid in process.lock().get_notifies_on_die() {
+            let process = process.lock();
+            assert_eq!(
+                process.threads_len(),
+                0,
+                "Attempt to kill a process with alive threads"
+            );
+            for pid in process.get_notifies_on_die() {
                 self.wake_process_up(*pid);
             }
         }
