@@ -104,6 +104,12 @@ impl QemuInstance {
         &mut self.stdin
     }
 
+    pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String> {
+        self.stdin().write_all(&[0x03]).await?;
+        self.stdout().assert_read_until(PROMPT).await;
+        Ok(String::new())
+    }
+
     pub async fn wait_for_qemu_to_exit(mut self) -> anyhow::Result<ExitStatus> {
         // Ensure stdin is closed so the child isn't stuck waiting on
         // input while the parent is waiting for it to exit.
