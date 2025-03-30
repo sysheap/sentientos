@@ -1,8 +1,8 @@
 build: build-cargo patch-symbols
 
 patch-symbols:
-    riscv64-linux-gnu-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
-    riscv64-linux-gnu-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
+    riscv64-unknown-elf-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-unknown-elf-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
     cargo build --release
@@ -49,7 +49,7 @@ debugf FUNC: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"'\; attach
 
 disassm: build
-    riscv64-linux-gnu-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
+    riscv64-unknown-elf-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
 
 addr2line ADDR:
-    riscv64-linux-gnu-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
+    riscv64-unknown-elf-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
