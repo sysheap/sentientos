@@ -36,7 +36,7 @@ To run the operating system you need to have the following tools installed:
 - just
 - nextest
 - qemu-system-riscv64
-- binutils-riscv64-linux-gnu
+- binutils-riscv64-unknown-elf
 
 To install them on Ubuntu you can execute the following commands
 
