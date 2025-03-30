@@ -1,10 +1,7 @@
 use serial_test::file_serial;
 use tokio::io::AsyncWriteExt;
 
-use crate::infra::{
-    qemu::{QemuInstance, QemuOptions},
-    PROMPT,
-};
+use crate::infra::qemu::{QemuInstance, QemuOptions};
 
 #[file_serial]
 #[tokio::test]
@@ -16,9 +13,8 @@ async fn should_exit_program() -> anyhow::Result<()> {
         .run_prog_waiting_for("udp", "Listening on 1234")
         .await?;
 
-    sentientos.stdin().write_all(&[0x03]).await?;
+    sentientos.ctrl_c_and_assert_prompt().await?;
 
-    sentientos.stdout().assert_read_until(PROMPT).await;
     let output = sentientos.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
 
