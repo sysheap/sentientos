@@ -2,6 +2,7 @@ use alloc::{string::ToString, vec::Vec};
 use common::errors::LoaderError;
 
 use crate::{
+    debug,
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
         util::{copy_slice, minimum_amount_of_pages},
@@ -14,7 +15,11 @@ use crate::{
 };
 
 pub const STACK_START: usize = usize::MAX;
-pub const STACK_END: usize = STACK_START - PAGE_SIZE + 1;
+
+pub const STACK_SIZE_PAGES: usize = 4;
+pub const STACK_SIZE: usize = PAGE_SIZE * STACK_SIZE_PAGES;
+
+pub const STACK_END: usize = STACK_START - STACK_SIZE + 1;
 
 #[derive(Debug)]
 pub struct LoadedElf {
@@ -62,17 +67,19 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let mut allocated_pages = Vec::new();
 
     // Map 4KB stack
-    let mut stack = PinnedHeapPages::new(1);
+    let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
 
     let args_start = set_up_arguments(stack.as_u8_slice(), name, args)?;
 
     let stack_addr = stack.addr();
     allocated_pages.push(stack);
 
+    debug!("before mapping stack: stack_start={STACK_START:#x} stack_size={STACK_SIZE:#x} stack_end={STACK_END:#x}");
+
     page_tables.map_userspace(
         STACK_END,
         stack_addr.get(),
-        PAGE_SIZE,
+        STACK_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
         "Stack".to_string(),
     );

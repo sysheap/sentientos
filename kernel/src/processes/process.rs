@@ -3,7 +3,7 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
     net::sockets::SharedAssignedSocket,
-    processes::loader::{self, LoadedElf, STACK_END, STACK_START},
+    processes::loader::{self, LoadedElf, STACK_END, STACK_SIZE, STACK_SIZE_PAGES, STACK_START},
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -120,7 +120,7 @@ impl Process {
         let mut allocated_pages = Vec::with_capacity(1);
 
         // Map 4KB stack
-        let mut stack = PinnedHeapPages::new(1);
+        let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
         let stack_addr = stack.addr();
         allocated_pages.push(stack);
 
@@ -129,7 +129,7 @@ impl Process {
         page_table.map(
             STACK_END,
             stack_addr.get(),
-            PAGE_SIZE,
+            STACK_SIZE,
             crate::memory::page_tables::XWRMode::ReadWrite,
             false,
             "Stack".to_string(),
