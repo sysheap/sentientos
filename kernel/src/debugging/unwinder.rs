@@ -6,6 +6,7 @@ use common::array_vec::ArrayVec;
 pub struct Unwinder<'a> {
     fde: &'a ParsedFDE<'a>,
     rows: ArrayVec<Row, 128>, // 128 should be enough I guess - otherwise we can increase it
+    row_stack: ArrayVec<Row, 16>,
 }
 
 impl<'a> Unwinder<'a> {
@@ -15,6 +16,7 @@ impl<'a> Unwinder<'a> {
         let mut self_ = Self {
             fde,
             rows: ArrayVec::default(),
+            row_stack: ArrayVec::default(),
         };
 
         self_
@@ -105,6 +107,20 @@ impl<'a> Unwinder<'a> {
                 Instruction::DefCfaOffset { offset } => {
                     debug!("DefCfaOffset(offset={})", *offset);
                     current_row.cfa_offset = *offset as i64;
+                }
+                Instruction::RemeberState => {
+                    self.row_stack
+                        .push(current_row.clone())
+                        .expect("There must be enough space on the row stack.");
+                }
+                Instruction::RestoreState => {
+                    let row = self
+                        .row_stack
+                        .pop()
+                        .expect("There must be a row on the stack.");
+                    let start_address = row.start_address;
+                    current_row = row;
+                    current_row.start_address = start_address;
                 }
                 Instruction::Nop => {}
             }

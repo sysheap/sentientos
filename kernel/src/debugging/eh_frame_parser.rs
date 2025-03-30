@@ -300,6 +300,8 @@ impl<'a> EhFrameIterator<'a> {
                 let delta = instructions.consume_sized_type::<u32>()?;
                 Some(Instruction::AdvanceLoc { delta })
             }
+            consts::DW_CFA_REMEMBER_STATE => Some(Instruction::RemeberState),
+            consts::DW_CFA_RESTORE_STATE => Some(Instruction::RestoreState),
             _ => panic!("Instruction {:#x} no implemented.", instruction),
         }
     }
@@ -317,6 +319,8 @@ mod consts {
     pub const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
     pub const DW_CFA_ADVANCE_LOC2: u8 = 0x03;
     pub const DW_CFA_ADVANCE_LOC4: u8 = 0x04;
+    pub const DW_CFA_REMEMBER_STATE: u8 = 0x0a;
+    pub const DW_CFA_RESTORE_STATE: u8 = 0x0b;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -326,6 +330,8 @@ pub enum Instruction {
     Restore { register: u16 },
     DefCfa { register: u16, offset: u64 },
     DefCfaOffset { offset: u64 },
+    RemeberState,
+    RestoreState,
     Nop,
 }
 
@@ -447,6 +453,12 @@ mod tests {
                 }
                 Instruction::DefCfaOffset { offset: offset_ } => {
                     matches!(self, CallFrameInstruction::DefCfaOffset { offset } if offset == offset_)
+                }
+                Instruction::RemeberState => {
+                    matches!(self, CallFrameInstruction::RememberState)
+                }
+                Instruction::RestoreState => {
+                    matches!(self, CallFrameInstruction::RestoreState)
                 }
                 Instruction::Nop => matches!(self, CallFrameInstruction::Nop),
             }
