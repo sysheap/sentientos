@@ -139,6 +139,13 @@ impl Cpu {
         ptr
     }
 
+    pub unsafe fn reset_current_cpu_alive() {
+        let ptr = Self::get_per_cpu_data();
+        // SAFETY: The pointer points to a static and is therefore always valid.
+        let mutable_reference_alive = unsafe { &(*ptr).mutable_reference_alive };
+        mutable_reference_alive.set(false);
+    }
+
     pub fn current() -> CpuRefHolder {
         let ptr = Self::get_per_cpu_data();
         // SAFETY: The pointer points to a static and is therefore always valid.

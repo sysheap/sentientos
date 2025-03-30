@@ -46,6 +46,11 @@ fn panic(info: &PanicInfo) -> ! {
     }
     abort_if_double_panic();
     crate::debugging::backtrace::print();
+
+    unsafe {
+        Cpu::reset_current_cpu_alive();
+    }
+
     crate::debugging::dump_current_state();
 
     println!("Time to attach gdb ;) use 'just attach'");
