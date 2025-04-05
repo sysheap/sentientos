@@ -31,20 +31,20 @@ TODO
 ## How do I run it?
 This project contains a nix develop shell which includes all the tools to build the operating system.
 ```bash
-  # Install nix
-  sh <(curl -L https://nixos.org/nix/install) --daemon
-  # Enable nix-command and flakes
-  echo -e '\nexperimental-features = nix-command flakes\n' | sudo tee -a /etc/nix/nix.conf
-  # Restart nix daemon
-  sudo systemctl restart nix-daemon
-  # Install direnv
-  sudo apt install direnv
-  # Add direnv hook to your shell
-  # see https://direnv.net/docs/hook.html for other shells than bash
-  echo -e 'eval "$(direnv hook bash)"\n' >> ~/.bashrc
-  # Got to the SentienOS repository
-  direnv allow
-  # Re-enter the repository and all the dependencies should be pulled by nix
+# Install nix
+sh <(curl -L https://nixos.org/nix/install) --daemon
+# Enable nix-command and flakes
+echo -e '\nexperimental-features = nix-command flakes\n' | sudo tee -a /etc/nix/nix.conf
+# Restart nix daemon
+sudo systemctl restart nix-daemon
+# Install direnv
+sudo apt install direnv
+# Add direnv hook to your shell
+# see https://direnv.net/docs/hook.html for other shells than bash
+echo -e 'eval "$(direnv hook bash)"\n' >> ~/.bashrc
+# Got to the SentienOS repository
+direnv allow
+# Re-enter the repository and all the dependencies should be pulled by nix
 ```
 
 To run the operating system execute
