@@ -21,7 +21,7 @@ pub trait BufferExtension {
 impl BufferExtension for [u8] {
     fn interpret_as<T>(&self) -> &T {
         unsafe {
-            assert!(self.len() == core::mem::size_of::<T>());
+            assert!(self.len() >= core::mem::size_of::<T>());
             let ptr: *const T = self.as_ptr() as *const T;
             assert!(
                 ptr.is_aligned(),

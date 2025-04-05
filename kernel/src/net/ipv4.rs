@@ -44,7 +44,7 @@ impl IpV4Header {
 
         let (ipv4_header, rest) = data.split_as::<IpV4Header>();
 
-        assert!(ipv4_header.total_packet_length.get() as usize == data.len());
+        assert!(ipv4_header.total_packet_length.get() as usize <= data.len());
 
         assert!(
             ipv4_header.flags_and_offset.get() & 0b100 == 0,
