@@ -50,6 +50,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: prepare
         uses: ./.github/actions/prepare
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cache/miri
+            target/
+          key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
       - name: Run miri
         run: just miri
 
@@ -59,34 +69,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: prepare
         uses: ./.github/actions/prepare
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cache/miri
+            target/
+          key: ${{ runner.os }}-system-tests-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
       - name: Build
         run: just system-test
-
-
-  # This job allows to view the cache content as a job artifacte
-  # Github doesn't allow to view the cache directly
-  # cache-analysis:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/cache@v4
-  #       id: cache-id
-  #       with:
-  #         path: ${{ runner.temp }}/ci-cache
-  #         key: ${{ runner.os }}-${{ hashFiles('.github/workflows/setup.sh', 'Cargo.lock', 'system-tests/Cargo.lock', 'rust-toolchain', '.github/actions/prepare/action.yml')}}
-  #     # Unfortunately the artifact doesn't allow colons ':' in filenames
-  #     # Therefore, just replace them
-  #     - name: Replace colon file names
-  #       run: |
-  #         cd ${{ runner.temp }}/ci-cache
-  #         find . -name '*:*' -type f | while read -r file; do
-  #           mv "$file" "$(echo $file | sed 's/:/-/g')"
-  #         done
-  #     - name: upload artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         path: ${{ runner.temp }}/ci-cache
-  #         include-hidden-files: true
-      # # Use this to access the github runner via ssh
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
