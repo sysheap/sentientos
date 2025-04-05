@@ -1,8 +1,8 @@
 build: build-cargo patch-symbols
 
 patch-symbols:
-    riscv64-unknown-elf-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
-    riscv64-unknown-elf-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
+    riscv64-none-elf-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-none-elf-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
     cargo build --release
@@ -19,7 +19,8 @@ clean:
     rm -rf target-userspace
     cargo clean
 
-debugReleaseCommand := "cargo run --release -- --wait"
+debugReleaseCommand := 'cargo run --release -- --wait'
+gdb := 'gdb -iex "add-auto-load-safe-path ."'
 
 run: build
     cargo run --release
@@ -40,16 +41,16 @@ fetch-deps:
     cargo fetch --manifest-path ./system-tests/Cargo.toml
 
 attach:
-    gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"
+    {{gdb}} -ex "target remote :1234" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel
 
 debug: build
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234"' \; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel' \; attach
 
 debugf FUNC: build
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'gdb-multiarch $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c"'\; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel'\; attach
 
 disassm: build
-    riscv64-unknown-elf-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
+    riscv64-none-elf-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
 
 addr2line ADDR:
-    riscv64-unknown-elf-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
+    riscv64-none-elf-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
