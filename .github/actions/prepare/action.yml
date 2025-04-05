@@ -2,19 +2,10 @@ name: prepare
 runs:
   using: "composite"
   steps:     
-    - uses: actions/cache@v4
-      id: cache-id
+    - uses: nixbuild/nix-quick-install-action@v30
+    - uses: nix-community/cache-nix-action@v6
       with:
-        path: ${{ runner.temp }}/ci-cache
-        key: ${{ runner.os }}-${{ hashFiles('.github/workflows/setup.sh', 'Cargo.lock', 'system-tests/Cargo.lock', 'rust-toolchain', '.github/actions/prepare/action.yml')}}
-    - uses: airvzxf/cache-anything-new-action@v1.0.1
-      with:
-        script: 'setup.sh'
-        is_cached: ${{ steps.cache-id.outputs.cache-hit }}
-        cache: ${{ runner.temp }}/ci-cache
-        exclude: '/boot /data /dev /mnt /proc /run /sys /var/crash /var/lib/fwupd /var/cache'
-    # The cache doesn't keep the permissions I guess
-    # Let's fix that
-    - name: fix home ownership
-      shell: bash
-      run: sudo chown -R runner:runner /home/runner/
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-
+        gc-max-store-size-linux: 1G
+    - uses: nicknovitski/nix-develop@v1
