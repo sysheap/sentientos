@@ -5,3 +5,4 @@
 /src/kernel/network.pcap
 /.gdb_history
 /symbols
+/.direnv
