@@ -12,7 +12,7 @@ use common::{
 
 use alloc::vec::Vec;
 
-use crate::net::sockets::SharedAssignedSocket;
+use crate::{debug, net::sockets::SharedAssignedSocket};
 
 use super::handler::SyscallHandler;
 
@@ -120,6 +120,10 @@ fn validate_and_translate_slice_ptr<PTR: Pointer>(
         .with_lock(|p| {
             let pt = p.get_page_table();
             if !pt.is_valid_userspace_fat_ptr(ptr, len, PTR::WRITABLE) {
+                debug!(
+                    "ptr={ptr:p}, len={len} for writable={} not valid",
+                    PTR::WRITABLE
+                );
                 return None;
             }
             pt.translate_userspace_address_to_physical_address(ptr)

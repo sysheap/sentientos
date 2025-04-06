@@ -27,6 +27,7 @@
           nativeBuildInputs = with pkgs; [
             rustToolchain
             pkgsCross.riscv64-embedded.buildPackages.binutils
+            pkgsCross.riscv64-embedded.buildPackages.gccWithoutTargetLibc
             just
           ];
         in

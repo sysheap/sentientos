@@ -5,6 +5,7 @@ patch-symbols:
     riscv64-none-elf-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
+    cargo build --release --lib --manifest-path userspace/Cargo.toml
     cargo build --release
 
 clippy:
