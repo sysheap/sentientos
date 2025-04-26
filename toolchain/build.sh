@@ -24,16 +24,22 @@ clone_repositories () {
 build_binutils () {
   echo "Build binutils"
 
-  mkdir -p binutils-build
-  cd binutils-build
+  if [ ! -d "binutils-build" ]; then
+    mkdir -p binutils-build
+    cd binutils-build
 
-  ../binutils/configure \
-    --prefix="$(pwd)/../binutils-bin" \
-    --target="$TARGET" \
-    --with-sysroot="$SYSROOT" \
-    --disable-gdb \
-    --disable-nls \
-    --disable-werror
+    ../binutils/configure \
+      --prefix="$(pwd)/../bin" \
+      --target="$TARGET" \
+      --with-sysroot="$SYSROOT" \
+      --disable-gdb \
+      --disable-nls \
+      --disable-werror
+
+    cd ../
+  fi
+
+  cd binutils-build
 
   make -j$(nproc)
   make install
@@ -47,17 +53,23 @@ build_gcc () {
   # The $PREFIX/bin dir _must_ be in the PATH. We did that above.
   which -- $TARGET-as || (echo $TARGET-as is not in the PATH && false)
 
-  mkdir -p gcc-build
-  cd gcc-build
+  if [ ! -d "gcc-build" ]; then
+    mkdir -p gcc-build
+    cd gcc-build
 
-  ../gcc/configure \
-    --prefix="$(pwd)/../gcc-bin" \
-    --target="$TARGET" \
-    --with-sysroot="$SYSROOT" \
-    --disable-nls \
-    --enable-languages=c \
-    --with-as="$(pwd)/../binutils-bin/bin/${TARGET}-as" \
-    --with-ld="$(pwd)/../binutils-bin/bin/${TARGET}-ld"
+    ../gcc/configure \
+      --prefix="$(pwd)/../bin" \
+      --target="$TARGET" \
+      --with-sysroot="$SYSROOT" \
+      --disable-nls \
+      --enable-languages=c \
+      --with-as="$(pwd)/../bin/bin/${TARGET}-as" \
+      --with-ld="$(pwd)/../bin/bin/${TARGET}-ld"
+
+    cd ../
+  fi
+
+  cd gcc-build
 
   make -j$(nproc) all-gcc all-target-libgcc
   make install-gcc install-target-libgcc

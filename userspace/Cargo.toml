@@ -15,6 +15,7 @@ common = { path = "../common" }
 # have to specify that individually for every file. But because userspace will
 # change anyways in the future, let's leave like that for now.
 [lib]
+crate-type = ["lib", "staticlib"]
 test = false
 bench = false
 

@@ -7,6 +7,7 @@ mod args;
 mod heap;
 pub mod net;
 mod panic;
+pub mod posix;
 pub mod print;
 pub mod util;
 

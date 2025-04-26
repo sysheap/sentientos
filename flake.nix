@@ -53,7 +53,7 @@
 
           hardeningDisable = [ "format" ];
           shellHook = ''
-            export PATH="$(pwd)/toolchain/binutils-bin/bin:$(pwd)/toolchain/gcc-bin/bin:$PATH";
+            export PATH="$(pwd)/toolchain/bin/bin:$PATH";
           '';
         };
       }
