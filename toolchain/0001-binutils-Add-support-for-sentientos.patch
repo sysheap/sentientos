@@ -1,0 +1,26 @@
+From 7d99e0e1dda65013752c60d4d2b2afaa753b51b3 Mon Sep 17 00:00:00 2001
+From: Maurice Hieronymus <mhi@mailbox.org>
+Date: Fri, 25 Apr 2025 22:33:32 +0200
+Subject: [PATCH] binutils: Add support for sentientos
+
+---
+ config.sub | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/config.sub b/config.sub
+index 4aaae46f..87ab4365 100755
+--- a/config.sub
++++ b/config.sub
+@@ -2149,7 +2149,8 @@ case $os in
+ 	| xenix* \
+ 	| xray* \
+ 	| zephyr* \
+-	| zvmoe* )
++	| zvmoe* \
++	| sentientos* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+-- 
+2.47.2
+
