@@ -103,7 +103,11 @@ pub fn parse() -> Option<PCIInformation> {
     let mut ranges_property = node.get_property("ranges")?;
 
     while !ranges_property.empty() {
-        assert_eq!(node.address_cells, Some(3), "pci addresses must be described by 3 u32 values: the bitfield and then the acutal address");
+        assert_eq!(
+            node.address_cells,
+            Some(3),
+            "pci addresses must be described by 3 u32 values: the bitfield and then the acutal address"
+        );
         let pci_bitfield = ranges_property
             .consume_sized_type::<BigEndian<u32>>()?
             .get();

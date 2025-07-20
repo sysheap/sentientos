@@ -39,8 +39,7 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 
         writeln!(
             userspace_programs,
-            "pub static {}: &[u8] = include_bytes_align_as!(u64, \"../../compiled_userspace/{}\");",
-            file_name, original_file_name
+            "pub static {file_name}: &[u8] = include_bytes_align_as!(u64, \"../../compiled_userspace/{original_file_name}\");"
         )?;
     }
 
@@ -52,8 +51,7 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
     for (original_file_name, file_name) in programs {
         write!(
             userspace_programs,
-            "(\"{}\", {}),",
-            original_file_name, file_name
+            "(\"{original_file_name}\", {file_name}),"
         )?;
     }
     write!(userspace_programs, "];")?;

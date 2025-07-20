@@ -20,7 +20,7 @@ pub fn init() {
     CLOCKS_PER_SEC.initialize(clocks_per_sec);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();

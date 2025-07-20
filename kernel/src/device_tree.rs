@@ -96,7 +96,7 @@ impl DeviceTree {
         }
     }
 
-    pub fn root_node(&self) -> Node {
+    pub fn root_node(&self) -> Node<'_> {
         let offset = self.header().off_dt_struct.get();
         let start = self.offset_from_header(offset as usize);
         debug!("Structure Block Start: {:p}", start);

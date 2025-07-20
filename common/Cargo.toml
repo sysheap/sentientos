@@ -1,6 +1,6 @@
 [package]
 name = "common"
-edition = "2021"
+edition = "2024"
 description.workspace = true
 authors.workspace = true
 version.workspace = true

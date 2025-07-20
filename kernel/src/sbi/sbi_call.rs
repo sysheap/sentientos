@@ -37,8 +37,7 @@ impl SbiRet {
     pub fn assert_success(&self) {
         assert!(
             self.error == SbiError::SBI_SUCCESS,
-            "SBI call failed: {:?}",
-            self
+            "SBI call failed: {self:?}"
         );
     }
 

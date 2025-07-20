@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    process::{ProcessRef, POWERSAVE_TID},
+    process::{POWERSAVE_TID, ProcessRef},
     process_table::{self},
     thread::{ThreadRef, ThreadState},
 };

@@ -347,9 +347,9 @@ mod tests {
     };
     use elf::ElfBytes;
     use gimli::{
-        constants, BaseAddresses, CallFrameInstruction, CallFrameInstructionIter,
-        CommonInformationEntry, EhFrame, EndianSlice, FrameDescriptionEntry, LittleEndian,
-        ReaderOffset, StoreOnHeap, UnwindContext, UnwindSection, UnwindTableRow,
+        BaseAddresses, CallFrameInstruction, CallFrameInstructionIter, CommonInformationEntry,
+        EhFrame, EndianSlice, FrameDescriptionEntry, LittleEndian, ReaderOffset, StoreOnHeap,
+        UnwindContext, UnwindSection, UnwindTableRow, constants,
     };
 
     const KERNEL_ELF_TEST_BINARY: &[u8] = include_bytes!("../test/test_data/elf/kernel");

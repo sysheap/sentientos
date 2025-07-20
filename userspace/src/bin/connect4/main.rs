@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(let_chains)]
 
 // The main logic (minimax with alpha-beta pruning as well as the score function) was mostly implemented by ChatGPT.
 // I don't regard that as cheating because I'm not super interested in algorithms. However, what I manually want to do
@@ -15,7 +14,7 @@ use userspace::{print, println, util::read_line};
 extern crate alloc;
 extern crate userspace;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     println!("Welcome to connect four!");
     print!("Choose the search depth: ");
@@ -63,8 +62,7 @@ fn human(board: &mut GameBoard) {
     loop {
         let line = read_line();
         if let Ok(column) = line.parse::<u8>()
-            && column >= 1
-            && column <= 7
+            && (1..=7).contains(&column)
             && board.put(Player::H, column - 1).is_ok()
         {
             break;

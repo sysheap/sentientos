@@ -1,4 +1,4 @@
-use super::trap_cause::{exception::ENVIRONMENT_CALL_FROM_U_MODE, InterruptCause};
+use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE};
 use crate::{
     cpu::Cpu,
     debug,
@@ -10,17 +10,17 @@ use crate::{
 use common::syscalls::trap_frame::Register;
 use core::panic;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn get_process_satp_value() -> usize {
     Cpu::with_current_process(|p| p.get_page_table().get_satp_value_from_page_tables())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn handle_timer_interrupt() {
     Cpu::with_scheduler(|s| s.schedule());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn handle_external_interrupt() {
     debug!("External interrupt occurred!");
     let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
@@ -90,7 +90,7 @@ fn handle_unhandled_exception() {
     panic!("{}", message);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn handle_exception() {
     let cause = InterruptCause::from_scause();
     match cause.get_exception_code() {
@@ -99,7 +99,7 @@ extern "C" fn handle_exception() {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn handle_unimplemented() {
     let sepc = Cpu::read_sepc();
     let cause = InterruptCause::from_scause();

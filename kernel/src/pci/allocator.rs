@@ -80,11 +80,11 @@ mod tests {
         let _ = allocator.allocate(3).unwrap();
         let allocation = allocator.allocate(4096).unwrap();
         assert!(
-            allocation.cpu_address % 4096 == 0,
+            allocation.cpu_address.is_multiple_of(4096),
             "cpu address must be properly aligned"
         );
         assert!(
-            allocation.pci_address % 4096 == 0,
+            allocation.pci_address.is_multiple_of(4096),
             "pci address must be properly aligned"
         );
     }

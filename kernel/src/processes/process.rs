@@ -1,7 +1,7 @@
 use crate::{
     debug,
     klibc::elf::ElfFile,
-    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder, PAGE_SIZE},
+    memory::{PAGE_SIZE, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     net::sockets::SharedAssignedSocket,
     processes::loader::{self, LoadedElf, STACK_END, STACK_SIZE, STACK_SIZE_PAGES, STACK_START},
 };
@@ -113,7 +113,7 @@ impl Process {
     }
 
     pub fn create_powersave_process() -> Arc<Mutex<Self>> {
-        extern "C" {
+        unsafe extern "C" {
             fn powersave();
         }
 

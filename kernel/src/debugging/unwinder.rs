@@ -151,7 +151,7 @@ impl core::fmt::Display for Row {
             .filter(|&&r| r != RegisterRule::None)
             .enumerate()
         {
-            writeln!(f, "\t{} {:?}", index, rule)?;
+            writeln!(f, "\t{index} {rule:?}")?;
         }
 
         writeln!(f, "]")
