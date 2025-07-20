@@ -2,14 +2,14 @@ use core::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
     mem::{align_of, size_of},
-    ptr::{null_mut, NonNull},
+    ptr::{NonNull, null_mut},
 };
 
 use common::{mutex::Mutex, util::align_up};
 
 use crate::{assert::static_assert_size, klibc::util::minimum_amount_of_pages};
 
-use super::{page_allocator::PageAllocator, PAGE_SIZE};
+use super::{PAGE_SIZE, page_allocator::PageAllocator};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -81,7 +81,7 @@ impl FreeBlock {
 
         assert!(data_size >= Self::DATA_ALIGNMENT, "FreeBlock too small");
         assert!(
-            data_size % Self::DATA_ALIGNMENT == 0,
+            data_size.is_multiple_of(Self::DATA_ALIGNMENT),
             "FreeBlock not aligned (data_size={data_size})"
         );
 
@@ -97,13 +97,21 @@ impl FreeBlock {
     ) -> NonNull<FreeBlock> {
         let block = unsafe { block_ptr.as_mut() };
         assert!(block.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
-        assert!(requested_size.total_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(
+            requested_size
+                .total_size()
+                .is_multiple_of(Self::DATA_ALIGNMENT)
+        );
 
         let remaining_size = block.size.get_remaining_size(requested_size);
 
         let new_block = unsafe { block_ptr.byte_add(requested_size.total_size()) };
 
-        assert!(remaining_size.total_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(
+            remaining_size
+                .total_size()
+                .is_multiple_of(Self::DATA_ALIGNMENT)
+        );
 
         block.size = requested_size;
 
@@ -284,7 +292,7 @@ mod test {
         alloc::GlobalAlloc,
         mem::MaybeUninit,
         ops::Range,
-        ptr::{addr_of_mut, NonNull},
+        ptr::{NonNull, addr_of_mut},
     };
 
     const HEAP_PAGES: usize = 8;

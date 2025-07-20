@@ -7,7 +7,7 @@ pub fn lookup(vendor_id: u16, device_id: u16) -> Option<String> {
     let mut vendor = "";
     // Look for vendor
     for line in lines.by_ref() {
-        if line.starts_with(format!("{:04x}", vendor_id).as_str()) {
+        if line.starts_with(format!("{vendor_id:04x}").as_str()) {
             vendor = &line[6..];
             break;
         }
@@ -19,9 +19,9 @@ pub fn lookup(vendor_id: u16, device_id: u16) -> Option<String> {
             return None;
         }
 
-        if line.starts_with(format!("\t{:04x}", device_id).as_str()) {
+        if line.starts_with(format!("\t{device_id:04x}").as_str()) {
             let device = &line[7..];
-            return Some(format!("{} - {}", vendor, device));
+            return Some(format!("{vendor} - {device}"));
         }
     }
     None

@@ -95,7 +95,7 @@ impl DerefMut for PinnedHeapPages {
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::{page::Pages, PAGE_SIZE};
+    use crate::memory::{PAGE_SIZE, page::Pages};
 
     use super::{Page, PinnedHeapPages};
 

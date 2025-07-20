@@ -57,7 +57,10 @@ pub enum QueueError {
 impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     pub fn new(queue_size: u16, queue_index: u16) -> Self {
         assert!(queue_size == QUEUE_SIZE as u16, "Queue size must be equal");
-        assert!(queue_size % 2 == 0, "Queue size must be a power of 2");
+        assert!(
+            queue_size.is_multiple_of(2),
+            "Queue size must be a power of 2"
+        );
         let queue = VirtQueue {
             descriptor_area: Box::new(core::array::from_fn(|_| virtq_desc::default())),
             free_descriptor_indices: (0..queue_size).collect(),
@@ -69,15 +72,15 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             notify: None,
         };
         assert!(
-            queue.descriptor_area_physical_address() % 16 == 0,
+            queue.descriptor_area_physical_address().is_multiple_of(16),
             "Descriptor area not aligned"
         );
         assert!(
-            queue.driver_area_physical_address() % 2 == 0,
+            queue.driver_area_physical_address().is_multiple_of(2),
             "Driver area not aligned"
         );
         assert!(
-            queue.device_area_physical_address() % 4 == 0,
+            queue.device_area_physical_address().is_multiple_of(4),
             "Device area not aligned"
         );
 

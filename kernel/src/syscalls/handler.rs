@@ -3,7 +3,7 @@ use common::{
     net::UDPDescriptor,
     pid::{Pid, Tid},
     pointer::Pointer,
-    syscalls::{kernel::KernelSyscalls, syscall_argument::SyscallArgument, SyscallStatus},
+    syscalls::{SyscallStatus, kernel::KernelSyscalls, syscall_argument::SyscallArgument},
     unwrap_or_return,
 };
 
@@ -12,10 +12,10 @@ use crate::{
     cpu::Cpu,
     debug,
     io::stdin_buf::STDIN_BUFFER,
-    net::{udp::UdpHeader, ARP_CACHE, OPEN_UDP_SOCKETS},
+    net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
     print, println,
     processes::{
-        process::{ProcessRef, POWERSAVE_TID},
+        process::{POWERSAVE_TID, ProcessRef},
         thread::ThreadRef,
     },
 };

@@ -276,15 +276,14 @@ impl CallerSavedRegs {
             (f_data.0)(regs);
         }
 
-        #[naked]
+        #[unsafe(naked)]
         extern "C-unwind" fn dispatch<F: FnMut(&mut CallerSavedRegs)>(
             regs: &mut CallerSavedRegs,
             f_data: &mut ClosureWrapper<F>,
             f: extern "C" fn(&mut CallerSavedRegs, &mut ClosureWrapper<F>),
         ) {
-            unsafe {
-                core::arch::naked_asm!(
-                    "
+            core::arch::naked_asm!(
+                "
                      # regs is in a0
                      # f to call in a2
                      sd x1, 0x00(a0)   
@@ -312,8 +311,7 @@ impl CallerSavedRegs {
                      addi sp, sp, 0x08
                      ret
                     "
-                )
-            }
+            )
         }
     }
 }
@@ -369,7 +367,7 @@ mod tests {
     use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CallerSavedRegs};
     use alloc::collections::VecDeque;
     use core::ffi::c_void;
-    use unwinding::abi::{UnwindContext, UnwindReasonCode, _Unwind_Backtrace, _Unwind_GetIP};
+    use unwinding::abi::{_Unwind_Backtrace, _Unwind_GetIP, UnwindContext, UnwindReasonCode};
 
     #[test_case]
     fn backtrace() {

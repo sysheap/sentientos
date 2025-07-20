@@ -8,9 +8,9 @@ use crate::{
         util::{copy_slice, minimum_amount_of_pages},
     },
     memory::{
+        PAGE_SIZE,
         page::{Pages, PinnedHeapPages},
         page_tables::RootPageTableHolder,
-        PAGE_SIZE,
     },
 };
 
@@ -74,7 +74,9 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let stack_addr = stack.addr();
     allocated_pages.push(stack);
 
-    debug!("before mapping stack: stack_start={STACK_START:#x} stack_size={STACK_SIZE:#x} stack_end={STACK_END:#x}");
+    debug!(
+        "before mapping stack: stack_start={STACK_START:#x} stack_size={STACK_SIZE:#x} stack_end={STACK_END:#x}"
+    );
 
     page_tables.map_userspace(
         STACK_END,

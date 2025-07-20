@@ -134,7 +134,7 @@ impl PCIDevice {
     }
 
     const CAPABILITIES_LIST_BIT: u16 = 1 << 4;
-    pub fn capabilities(&self) -> PciCapabilityIter {
+    pub fn capabilities(&self) -> PciCapabilityIter<'_> {
         if self.configuration_space.status_register().read() & Self::CAPABILITIES_LIST_BIT == 0 {
             PciCapabilityIter {
                 pci_device: self,

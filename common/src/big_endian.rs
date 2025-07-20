@@ -39,6 +39,6 @@ impl<T: Number> Debug for BigEndian<T> {
 
 impl<T: Number> Display for BigEndian<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }

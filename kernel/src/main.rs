@@ -7,15 +7,12 @@
 #![cfg_attr(test, allow(unused_imports))]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
-#![feature(let_chains)]
 #![feature(vec_into_raw_parts)]
 #![feature(assert_matches)]
 #![feature(map_try_insert)]
-#![feature(naked_functions)]
 #![feature(new_range_api)]
 #![feature(ptr_metadata)]
 #![feature(macro_metavar_expr_concat)]
-#![feature(generic_arg_infer)]
 #![feature(str_from_raw_parts)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -141,7 +138,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     prepare_for_scheduling();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn prepare_for_scheduling() -> ! {
     // Enable all interrupts
     Cpu::write_sie(usize::MAX);
@@ -155,7 +152,7 @@ pub extern "C" fn prepare_for_scheduling() -> ! {
 }
 
 fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
-    extern "C" {
+    unsafe extern "C" {
         fn start_hart();
     }
     for cpu_id in 0..number_of_cpus {

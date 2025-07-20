@@ -86,7 +86,7 @@ unsafe impl Send for RootPageTableHolder {}
 impl Debug for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let page_table = self.table();
-        write!(f, "RootPageTableHolder({:p})", page_table)
+        write!(f, "RootPageTableHolder({page_table:p})")
     }
 }
 
@@ -94,7 +94,7 @@ impl Display for RootPageTableHolder {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "Pagetables at {:p}", self.root_table)?;
         for mapping in &self.already_mapped {
-            writeln!(f, "{}", mapping)?;
+            writeln!(f, "{mapping}")?;
         }
         Ok(())
     }

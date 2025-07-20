@@ -7,7 +7,7 @@ use core::{
     marker::PhantomData,
     mem::{align_of, size_of},
     ops::{Deref, DerefMut, Range},
-    ptr::{null_mut, NonNull},
+    ptr::{NonNull, null_mut},
 };
 
 use common::{mutex::Mutex, syscalls::sys_mmap_pages};
@@ -139,7 +139,7 @@ impl FreeBlock {
 
         assert!(data_size >= Self::DATA_ALIGNMENT, "FreeBlock too small");
         assert!(
-            data_size % Self::DATA_ALIGNMENT == 0,
+            data_size.is_multiple_of(Self::DATA_ALIGNMENT),
             "FreeBlock not aligned (data_size={data_size})"
         );
 
@@ -155,13 +155,21 @@ impl FreeBlock {
     ) -> NonNull<FreeBlock> {
         let block = unsafe { block_ptr.as_mut() };
         assert!(block.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
-        assert!(requested_size.total_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(
+            requested_size
+                .total_size()
+                .is_multiple_of(Self::DATA_ALIGNMENT)
+        );
 
         let remaining_size = block.size.get_remaining_size(requested_size);
 
         let new_block = unsafe { block_ptr.byte_add(requested_size.total_size()) };
 
-        assert!(remaining_size.total_size() % Self::DATA_ALIGNMENT == 0);
+        assert!(
+            remaining_size
+                .total_size()
+                .is_multiple_of(Self::DATA_ALIGNMENT)
+        );
 
         block.size = requested_size;
 

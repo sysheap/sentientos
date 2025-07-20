@@ -7,12 +7,12 @@ use crate::{
     debug,
     klibc::util::{BufferExtension, ByteInterpretable},
     net::{
-        ethernet::{EtherTypes, EthernetHeader},
         ARP_CACHE,
+        ethernet::{EtherTypes, EthernetHeader},
     },
 };
 
-use super::{current_mac_address, mac::MacAddress, IP_ADDR};
+use super::{IP_ADDR, current_mac_address, mac::MacAddress};
 
 const ARP_REQUEST: u16 = 1;
 const ARP_RESPONSE: u16 = 2;

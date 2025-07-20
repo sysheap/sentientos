@@ -29,7 +29,7 @@ impl<T> Mutex<T> {
         f(lock)
     }
 
-    pub fn lock(&self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
         if self.disarmed.load(Ordering::SeqCst) {
             return MutexGuard { mutex: self };
         }

@@ -5,13 +5,17 @@ mod tests {
     #[test_case]
     fn check_initialized_value() {
         let runtime_init = RuntimeInitializedData::<u8>::new();
-        assert!(!runtime_init
-            .initialized()
-            .load(core::sync::atomic::Ordering::SeqCst));
+        assert!(
+            !runtime_init
+                .initialized()
+                .load(core::sync::atomic::Ordering::SeqCst)
+        );
         runtime_init.initialize(42);
-        assert!(runtime_init
-            .initialized()
-            .load(core::sync::atomic::Ordering::SeqCst));
+        assert!(
+            runtime_init
+                .initialized()
+                .load(core::sync::atomic::Ordering::SeqCst)
+        );
     }
 
     #[test_case]

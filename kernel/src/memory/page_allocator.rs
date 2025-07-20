@@ -5,7 +5,7 @@ use core::{
     fmt::Debug,
     mem::MaybeUninit,
     ops::Range,
-    ptr::{null_mut, NonNull},
+    ptr::{NonNull, null_mut},
 };
 
 #[repr(u8)]
@@ -64,7 +64,7 @@ impl<'a> MetadataPageAllocator<'a> {
 
         let (_begin, heap, _end) = unsafe { heap.align_to_mut::<MaybeUninit<Page>>() };
         assert!(metadata.len() <= heap.len());
-        assert!(heap[0].as_ptr() as usize % PAGE_SIZE == 0);
+        assert!((heap[0].as_ptr() as usize).is_multiple_of(PAGE_SIZE));
 
         let size_metadata = core::mem::size_of_val(metadata);
         let size_heap = core::mem::size_of_val(heap);
@@ -210,13 +210,13 @@ pub trait PageAllocator {
 
 #[cfg(test)]
 mod tests {
-    use super::{MetadataPageAllocator, Page, PAGE_SIZE};
+    use super::{MetadataPageAllocator, PAGE_SIZE, Page};
     use crate::memory::page_allocator::PageStatus;
     use common::mutex::Mutex;
     use core::{
         mem::MaybeUninit,
         ops::Range,
-        ptr::{addr_of, addr_of_mut, NonNull},
+        ptr::{NonNull, addr_of, addr_of_mut},
     };
 
     const MEMORY_PATTERN: u8 = 0x42;
@@ -249,11 +249,13 @@ mod tests {
     #[test_case]
     fn clean_start() {
         init_allocator(false, &[]);
-        assert!(PAGE_ALLOC
-            .lock()
-            .metadata
-            .iter()
-            .all(|s| *s == PageStatus::FirstUse));
+        assert!(
+            PAGE_ALLOC
+                .lock()
+                .metadata
+                .iter()
+                .all(|s| *s == PageStatus::FirstUse)
+        );
     }
 
     #[test_case]
@@ -264,9 +266,11 @@ mod tests {
         assert!(alloc(1).is_none());
         let allocator = PAGE_ALLOC.lock();
         let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
-        assert!(all_metadata_except_last
-            .iter()
-            .all(|s| *s == PageStatus::Used));
+        assert!(
+            all_metadata_except_last
+                .iter()
+                .all(|s| *s == PageStatus::Used)
+        );
         assert_eq!(*last, PageStatus::Last);
     }
 
@@ -293,17 +297,21 @@ mod tests {
         init_allocator(false, &[]);
         let page1 = alloc(1).unwrap();
         assert_eq!(PAGE_ALLOC.lock().metadata[0], PageStatus::Last);
-        assert!(PAGE_ALLOC.lock().metadata[1..]
-            .iter()
-            .all(|s| *s == PageStatus::FirstUse));
+        assert!(
+            PAGE_ALLOC.lock().metadata[1..]
+                .iter()
+                .all(|s| *s == PageStatus::FirstUse)
+        );
         let page2 = alloc(2).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..3],
             [PageStatus::Last, PageStatus::Used, PageStatus::Last]
         );
-        assert!(PAGE_ALLOC.lock().metadata[3..]
-            .iter()
-            .all(|s| *s == PageStatus::FirstUse));
+        assert!(
+            PAGE_ALLOC.lock().metadata[3..]
+                .iter()
+                .all(|s| *s == PageStatus::FirstUse)
+        );
         let page3 = alloc(3).unwrap();
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
@@ -316,9 +324,11 @@ mod tests {
                 PageStatus::Last
             ]
         );
-        assert!(PAGE_ALLOC.lock().metadata[6..]
-            .iter()
-            .all(|s| *s == PageStatus::FirstUse),);
+        assert!(
+            PAGE_ALLOC.lock().metadata[6..]
+                .iter()
+                .all(|s| *s == PageStatus::FirstUse),
+        );
         dealloc(page2);
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],

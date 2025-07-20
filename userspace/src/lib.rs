@@ -10,4 +10,4 @@ mod panic;
 pub mod print;
 pub mod util;
 
-pub use args::{args, Args};
+pub use args::{Args, args};

@@ -1,7 +1,7 @@
 use core::net::Ipv4Addr;
 
 use alloc::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{BTreeMap, btree_map::Entry},
     sync::{Arc, Weak},
     vec::Vec,
 };
