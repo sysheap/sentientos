@@ -4,4 +4,9 @@
 /gcc
 /gcc-build
 
+/newlib-cygwin
+/newlib-build
+
 /bin
+
+/sysroot

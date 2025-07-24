@@ -1,6 +1,8 @@
 #![no_std]
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![feature(linkage)]
+#![feature(c_size_t)]
 
 mod _start;
 mod args;

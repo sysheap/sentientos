@@ -40,10 +40,14 @@
           isl
         ];
         nativeBuildInputs = with pkgs; [
+          autoconf269
+          automake115x
           rustToolchain
           just
           bash
           gnumake
+          # pkgsCross.riscv64-embedded.buildPackages.gcc
+          # pkgsCross.riscv64-embedded.buildPackages.binutils
         ];
       in
       with pkgs;

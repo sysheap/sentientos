@@ -1,8 +1,8 @@
 build: build-cargo patch-symbols
 
 patch-symbols:
-    riscv64-unknown-sentientos-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
-    riscv64-unknown-sentientos-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
+    riscv64-none-sentientos-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-none-sentientos-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
     cargo build --release --lib --manifest-path userspace/Cargo.toml

@@ -1,0 +1,54 @@
+From 883237b74a9bd0e8740b7beeb8ae119cc7256c23 Mon Sep 17 00:00:00 2001
+From: Maurice Hieronymus <mhi@mailbox.org>
+Date: Fri, 25 Jul 2025 17:16:58 +0200
+Subject: [PATCH] newlib: Add sentientos as target
+
+---
+ config.sub               | 2 +-
+ newlib/configure.host    | 4 ++++
+ newlib/libc/acinclude.m4 | 1 +
+ 3 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/config.sub b/config.sub
+index 38f3d03..1efc93a 100755
+--- a/config.sub
++++ b/config.sub
+@@ -1749,7 +1749,7 @@ case $os in
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+-	     | fiwix* )
++	     | fiwix* | sentientos* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+diff --git a/newlib/configure.host b/newlib/configure.host
+index ff2e512..ee72f17 100644
+--- a/newlib/configure.host
++++ b/newlib/configure.host
+@@ -442,6 +442,10 @@ case "${host}" in
+ 	posix_dir=posix
+ 	unix_dir=unix
+ 	;;
++  *-*-sentientos*)
++	sys_dir=sentientos
++	have_crt0="no"
++	;;
+   *-*-tirtos*)
+ 	sys_dir=tirtos
+ 	have_crt0="no"
+diff --git a/newlib/libc/acinclude.m4 b/newlib/libc/acinclude.m4
+index 52a6c57..59af833 100644
+--- a/newlib/libc/acinclude.m4
++++ b/newlib/libc/acinclude.m4
+@@ -24,6 +24,7 @@ m4_foreach_w([SYS_DIR], [
+   tic80 tirtos
+   w65
+   z8ksim
++  sentientos
+ ], [AM_CONDITIONAL([HAVE_LIBC_SYS_]m4_toupper(SYS_DIR)[_DIR], test "${sys_dir}" = SYS_DIR)])
+ 
+ AC_TYPE_LONG_DOUBLE
+-- 
+2.49.0
+

@@ -1,8 +1,8 @@
 CompileFlags:
   Add: 
-    - --target=riscv64-unknown-sentientos
+    - --target=riscv64-none-sentientos
     - --sysroot=/home/sysheap/src/sentientos/toolchain/sysroot
     - -isystem/home/sysheap/src/sentientos/toolchain/sysroot/usr/include
     - -isystem/home/sysheap/src/sentientos/toolchain/sysroot/include
   BuiltinHeaders: Ignore
-  Compiler: riscv64-unknown-sentientos-gcc
+  Compiler: riscv64-none-sentientos-gcc

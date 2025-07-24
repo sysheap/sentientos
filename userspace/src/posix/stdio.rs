@@ -1,29 +1,37 @@
-use core::ffi::CStr;
+use core::{
+    ffi::{c_int, c_size_t, c_ssize_t, c_void},
+    ptr::slice_from_raw_parts,
+    str,
+};
 
-use crate::println;
+use common::syscalls::sys_exit;
 
-const EOF: core::ffi::c_int = -1;
+use crate::print;
 
+// _ssize_t _write (int __fd, const void *__buf, size_t __nbyte);
 #[unsafe(no_mangle)]
-pub extern "C" fn puts(str: *const core::ffi::c_char) -> core::ffi::c_int {
-    let s = c_char_to_str(str);
-    if let Some(s) = s {
-        println!("{s}\n");
-        s.len() as i32
-    } else {
-        EOF
+pub extern "C" fn _write(fd: c_int, buf: *const c_void, nbyte: c_size_t) -> c_ssize_t {
+    if buf.is_null() {
+        return -1;
     }
+    let length = match c_ssize_t::try_from(nbyte) {
+        Ok(length) => length,
+        Err(_) => {
+            return -1;
+        }
+    };
+    let slice = slice_from_raw_parts(buf as *const u8, nbyte);
+    let string = unsafe { str::from_utf8(&*slice) };
+
+    match string {
+        Ok(s) => print!("{s}"),
+        Err(_) => return -1,
+    };
+    length
 }
 
-fn c_char_to_str(c_str: *const core::ffi::c_char) -> Option<&'static str> {
-    if c_str.is_null() {
-        return None;
-    }
-
-    // SAFETY: We're assuming the C string is valid and null-terminated.
-    unsafe {
-        CStr::from_ptr(c_str)
-            .to_str() // Converts to a Rust &str
-            .ok() // Returns `Some(&str)` or `None` in case of invalid UTF-8
-    }
+#[unsafe(no_mangle)]
+pub extern "C" fn _exit(status: c_int) -> ! {
+    sys_exit(status as isize);
+    panic!();
 }
