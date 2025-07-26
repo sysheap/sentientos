@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -46,14 +46,15 @@
           just
           bash
           gnumake
-          # pkgsCross.riscv64-embedded.buildPackages.gcc
-          # pkgsCross.riscv64-embedded.buildPackages.binutils
         ];
       in
       with pkgs;
       {
         devShells.default = mkShell {
           inherit buildInputs nativeBuildInputs;
+
+          # Needed for bindgen
+          LIBCLANG_PATH = "${lib.getLib llvmPackages.libclang}/lib";
 
           hardeningDisable = [ "format" ];
           shellHook = ''

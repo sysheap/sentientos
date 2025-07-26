@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "common",
-    "kernel",
-    "userspace",
+    "common", "kernel", "newlib-bindings", "userspace",
 ]
 default-members = ["kernel"]
 resolver = "2"

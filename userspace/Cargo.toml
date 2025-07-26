@@ -8,6 +8,7 @@ description.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+newlib-bindings = { path = "../newlib-bindings" }
 common = { path = "../common" }
 
 # Without theese the rust-analyzer would try to build the crate with tests enabled
