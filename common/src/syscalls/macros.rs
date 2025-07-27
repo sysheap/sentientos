@@ -21,7 +21,7 @@ macro_rules! syscalls {
                 unsafe {
                     core::arch::asm!(
                         "ecall",
-                        in("a0") ${index()} | (1usize << 63),
+                        in("a7") ${index()} | (1usize << 63),
                         in("a1") &arguments,
                         in("a2") &mut ret,
                         lateout("a0") successful,

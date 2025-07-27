@@ -24,6 +24,7 @@ impl Iterator for Args {
     type Item = &'static str;
 
     fn next(&mut self) -> Option<Self::Item> {
+        return None;
         // SAFTEY: We need to trust the kernel
         let c_str = unsafe { core::ffi::CStr::from_ptr(self.current) };
         let str = c_str

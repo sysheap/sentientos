@@ -30,6 +30,13 @@ pub struct LoadedElf {
 }
 
 fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize, LoaderError> {
+    // Will complete that in the future
+    // Let's just put a argc = 0 and argv = [null] and envp
+
+    // it's alrady null initialized
+
+    return Ok(STACK_START - 24 + 1);
+
     let mut total_bytes = name.len() + args.iter().map(|arg| arg.len()).sum::<usize>();
     // add zero bytes into account (name, number of args, zero-byte terminator)
     total_bytes += 1 + args.len() + 1;

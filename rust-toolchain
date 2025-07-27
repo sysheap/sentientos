@@ -1,4 +1,4 @@
 [toolchain]
 channel = "nightly-2025-07-20"
-components = [ "rust-analyzer", "miri", "rust-src" ]
+components = [ "rust-analyzer", "miri", "rust-src", "rustfmt" ]
 targets = ["riscv64gc-unknown-none-elf"]

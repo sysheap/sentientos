@@ -2,8 +2,12 @@
 #include <unistd.h>
 
 const char *text = "Hello World!\n";
+const char *warning = "Foo!\n";
 
 int main() {
   write(STDOUT_FILENO, text, strlen(text));
+  write(STDERR_FILENO, warning, strlen(warning));
   return 0;
 }
+
+void __init_tls(size_t *aux) {}
