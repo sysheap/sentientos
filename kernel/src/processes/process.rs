@@ -17,7 +17,6 @@ use common::{
     net::UDPDescriptor,
     pid::{Pid, Tid},
     syscalls::trap_frame::{Register, TrapFrame},
-    util::align_down,
 };
 use core::{
     fmt::Debug,
@@ -215,7 +214,7 @@ impl Process {
 
         let mut register_state = TrapFrame::zero();
         register_state[Register::a0] = args_start;
-        register_state[Register::sp] = align_down(args_start - 1, 8);
+        register_state[Register::sp] = args_start;
 
         Ok(Self::new(
             name,

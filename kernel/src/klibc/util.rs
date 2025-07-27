@@ -8,11 +8,6 @@ pub const fn minimum_amount_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE
 }
 
-pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
-    assert!(dst.len() >= src.len());
-    dst[..src.len()].copy_from_slice(src);
-}
-
 pub trait BufferExtension {
     fn interpret_as<T>(&self) -> &T;
     fn split_as<T>(&self) -> (&T, &[u8]);
@@ -154,8 +149,26 @@ where
     (data >> bit_position) & (2u64.pow(number_of_bits as u32) - 1)
 }
 
+pub trait InBytes {
+    fn in_bytes(&self) -> usize;
+}
+
+impl<T> InBytes for alloc::vec::Vec<T> {
+    fn in_bytes(&self) -> usize {
+        self.len() * core::mem::size_of::<T>()
+    }
+}
+
+impl<T, const N: usize> InBytes for [T; N] {
+    fn in_bytes(&self) -> usize {
+        N * core::mem::size_of::<T>()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use common::util::copy_slice;
+
     use crate::memory::PAGE_SIZE;
 
     #[test_case]
@@ -176,7 +189,7 @@ mod tests {
     fn copy_from_slice() {
         let src = [1, 2, 3, 4, 5];
         let mut dst = [0, 0, 0, 0, 0, 0, 0];
-        super::copy_slice(&src, &mut dst);
+        copy_slice(&src, &mut dst);
         assert_eq!(dst, [1, 2, 3, 4, 5, 0, 0]);
     }
 
