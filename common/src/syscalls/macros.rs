@@ -21,7 +21,7 @@ macro_rules! syscalls {
                 unsafe {
                     core::arch::asm!(
                         "ecall",
-                        in("a0") ${index()},
+                        in("a0") ${index()} | (1usize << 63),
                         in("a1") &arguments,
                         in("a2") &mut ret,
                         lateout("a0") successful,
@@ -55,7 +55,7 @@ macro_rules! syscalls {
 
                 fn dispatch(&mut self, nr: usize, arg: usize, ret: usize) -> $crate::syscalls::SyscallStatus {
                     use $crate::syscalls::SyscallStatus;
-                    match nr {
+                    match nr & (!(1usize<<63)) {
                         $(${index()} => {
                             let arg_ptr = $crate::unwrap_or_return!(self.validate_and_translate_pointer(arg as *mut ${concat($name, Argument)}), SyscallStatus::InvalidArgPtr);
 
@@ -67,7 +67,7 @@ macro_rules! syscalls {
                             ret_ref.write(self.$name($(Self::ArgWrapper::new(arg_ref.$arg_name)),*));
                             $crate::syscalls::SyscallStatus::Success
                         })*
-                        _ => $crate::syscalls::SyscallStatus::InvalidSyscallNumber
+                        _ => panic!("Invalid syscall number {nr}")
                     }
                 }
             }
