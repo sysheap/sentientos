@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     build_userspace_programs()?;
+    build_posix_programs()?;
     generate_userspace_programs_include()?;
     Ok(())
 }
@@ -93,6 +94,20 @@ fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
     if !status.success() {
         return Err(From::from("Failed to build userspace programs"));
     }
+
+    Ok(())
+}
+
+fn build_posix_programs() -> Result<(), Box<dyn Error>> {
+    let mut command = Command::new("make");
+    command.current_dir("../posix");
+
+    let status = command.status()?;
+    if !status.success() {
+        return Err(From::from("Failed to build posix programs"));
+    }
+
+    std::fs::copy("../posix/hello", "../kernel/compiled_userspace/hello")?;
 
     Ok(())
 }
