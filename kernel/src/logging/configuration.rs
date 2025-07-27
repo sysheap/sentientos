@@ -4,6 +4,10 @@ const DONT_LOG_FOLLOWING_MODULES: &[&str] = &[
     "kernel::interrupts::trap",
     "kernel::debugging::unwinder",
     "kernel::debugging::symbols",
+    "kernel::processes::scheduler",
+    "kernel::processes::process_table",
+    "kernel::processes::timer",
+    "kernel::io::stdin_buf",
 ];
 
 // TODO: This should be made compile-time, such that this thing doesn't need to be queried at runtime.
