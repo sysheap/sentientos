@@ -1,8 +1,8 @@
 build: build-cargo patch-symbols
 
 patch-symbols:
-    riscv64-none-elf-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
-    riscv64-none-elf-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
+    riscv64-unknown-linux-musl-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
+    riscv64-unknown-linux-musl-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
 build-cargo:
     cargo build --release
