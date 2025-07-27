@@ -10,6 +10,9 @@ use newlib_bindings::{_ssize_t, impl_binding};
 
 impl_binding! {
     fn _write(fd: c_int, buf: *const c_void, nbyte: c_size_t) -> _ssize_t {
+        if fd != 1 || fd != 2 {
+            return -1;
+        }
         if buf.is_null() {
             return -1;
         }

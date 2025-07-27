@@ -76,7 +76,7 @@ build_gcc () {
 
   echo "Copy headers from newlibc"
   mkdir -p sysroot/usr/include
-  cp -r newlib-cygwin/newlib/libc/include sysroot/usr/include
+  cp -r newlib-cygwin/newlib/libc/include/ sysroot/usr/
 
   if [ ! -d gcc-build ]; then
     mkdir -p gcc-build
@@ -146,10 +146,10 @@ build_and_ln_libuserspace () {
   ln -sf ../../../../target/riscv64gc-unknown-none-elf/release/libuserspace.a sysroot/usr/lib/
 }
 
-clone_repositories
-apply_autoconf
-build_binutils
-build_gcc
+# clone_repositories
+# apply_autoconf
+# build_binutils
+# build_gcc
 build_newlib
-build_and_ln_libuserspace
-build_libstdcpp
+# build_and_ln_libuserspace
+# build_libstdcpp

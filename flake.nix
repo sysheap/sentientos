@@ -59,6 +59,14 @@
           hardeningDisable = [ "format" ];
           shellHook = ''
             export PATH="$(pwd)/toolchain/bin/bin:$PATH";
+            unset CC
+            unset CXX
+            unset AR
+            unset AS
+            unset LD
+            unset STRIP
+            unset RANLIB
+            unset NM
           '';
         };
       }

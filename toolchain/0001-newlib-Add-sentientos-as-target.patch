@@ -1,13 +1,18 @@
-From 883237b74a9bd0e8740b7beeb8ae119cc7256c23 Mon Sep 17 00:00:00 2001
+From 148f61a359c237528ab2a9103e3a637f78e46569 Mon Sep 17 00:00:00 2001
 From: Maurice Hieronymus <mhi@mailbox.org>
 Date: Fri, 25 Jul 2025 17:16:58 +0200
 Subject: [PATCH] newlib: Add sentientos as target
 
 ---
- config.sub               | 2 +-
- newlib/configure.host    | 4 ++++
- newlib/libc/acinclude.m4 | 1 +
- 3 files changed, 6 insertions(+), 1 deletion(-)
+ config.sub                              | 2 +-
+ newlib/configure.host                   | 4 ++++
+ newlib/libc/acinclude.m4                | 1 +
+ newlib/libc/sys/Makefile.inc            | 3 +++
+ newlib/libc/sys/sentientos/Makefile.inc | 0
+ newlib/libc/sys/sentientos/sys/socket.h | 5 +++++
+ 6 files changed, 14 insertions(+), 1 deletion(-)
+ create mode 100644 newlib/libc/sys/sentientos/Makefile.inc
+ create mode 100644 newlib/libc/sys/sentientos/sys/socket.h
 
 diff --git a/config.sub b/config.sub
 index 38f3d03..1efc93a 100755
@@ -49,6 +54,31 @@ index 52a6c57..59af833 100644
  ], [AM_CONDITIONAL([HAVE_LIBC_SYS_]m4_toupper(SYS_DIR)[_DIR], test "${sys_dir}" = SYS_DIR)])
  
  AC_TYPE_LONG_DOUBLE
+diff --git a/newlib/libc/sys/Makefile.inc b/newlib/libc/sys/Makefile.inc
+index 9f87589..ee76c05 100644
+--- a/newlib/libc/sys/Makefile.inc
++++ b/newlib/libc/sys/Makefile.inc
+@@ -67,3 +67,6 @@ endif
+ if HAVE_LIBC_SYS_Z8KSIM_DIR
+ include %D%/z8ksim/Makefile.inc
+ endif
++if HAVE_LIBC_SYS_Z8KSIM_DIR
++include %D%/sentientos/Makefile.inc
++endif
+diff --git a/newlib/libc/sys/sentientos/Makefile.inc b/newlib/libc/sys/sentientos/Makefile.inc
+new file mode 100644
+index 0000000..e69de29
+diff --git a/newlib/libc/sys/sentientos/sys/socket.h b/newlib/libc/sys/sentientos/sys/socket.h
+new file mode 100644
+index 0000000..93adc25
+--- /dev/null
++++ b/newlib/libc/sys/sentientos/sys/socket.h
+@@ -0,0 +1,5 @@
++#pragma once
++
++#include <sys/_types.h>
++
++typedef __socklen_t socklen_t;
 -- 
 2.49.0
 

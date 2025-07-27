@@ -36,3 +36,4 @@ stub!(symlink);
 stub!(truncate);
 stub!(_unlink);
 stub!(usleep);
+stub!(killpg);

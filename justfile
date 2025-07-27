@@ -4,9 +4,11 @@ patch-symbols:
     riscv64-none-sentientos-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
     riscv64-none-sentientos-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
-build-cargo:
-    cargo build --release --lib --manifest-path userspace/Cargo.toml
+build-cargo: lib
     cargo build --release
+
+lib:
+    cargo build --release --lib --manifest-path userspace/Cargo.toml
 
 clippy:
     cd userspace && cargo clippy -- -D warnings
