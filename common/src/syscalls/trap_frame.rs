@@ -11,40 +11,39 @@ impl Debug for TrapFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "Trap Frame[
-            x0\t(zero):\t\t0x{:x}
-            x1\t(ra):\t\t0x{:x}
-            x2\t(sp):\t\t0x{:x}
-            x3\t(gp):\t\t0x{:x}
-            x4\t(tp):\t\t0x{:x}
-            x5\t(t0):\t\t0x{:x}
-            x6\t(t1):\t\t0x{:x}
-            x7\t(t2):\t\t0x{:x}
-            x8\t(s0/fp):\t0x{:x}
-            x9\t(s1):\t\t0x{:x}
-            x10\t(a0):\t\t0x{:x}
-            x11\t(a1):\t\t0x{:x}
-            x12\t(a2):\t\t0x{:x}
-            x13\t(a3):\t\t0x{:x}
-            x14\t(a4):\t\t0x{:x}
-            x15\t(a5):\t\t0x{:x}
-            x16\t(a6):\t\t0x{:x}
-            x17\t(a7):\t\t0x{:x}
-            x18\t(s2):\t\t0x{:x}
-            x19\t(s3):\t\t0x{:x}
-            x20\t(s4):\t\t0x{:x}
-            x21\t(s5):\t\t0x{:x}
-            x22\t(s6):\t\t0x{:x}
-            x23\t(s7):\t\t0x{:x}
-            x24\t(s8):\t\t0x{:x}
-            x25\t(s9):\t\t0x{:x}
-            x26\t(s10):\t\t0x{:x}
-            x27\t(s11):\t\t0x{:x}
-            x28\t(t3):\t\t0x{:x}
-            x29\t(t4):\t\t0x{:x}
-            x30\t(t5):\t\t0x{:x}
-            x31\t(t6):\t\t0x{:x}
-            ]",
+            "Trap Frame
+x0\t(zero):\t\t0x{:x}
+x1\t(ra):\t\t0x{:x}
+x2\t(sp):\t\t0x{:x}
+x3\t(gp):\t\t0x{:x}
+x4\t(tp):\t\t0x{:x}
+x5\t(t0):\t\t0x{:x}
+x6\t(t1):\t\t0x{:x}
+x7\t(t2):\t\t0x{:x}
+x8\t(s0/fp):\t0x{:x}
+x9\t(s1):\t\t0x{:x}
+x10\t(a0):\t\t0x{:x}
+x11\t(a1):\t\t0x{:x}
+x12\t(a2):\t\t0x{:x}
+x13\t(a3):\t\t0x{:x}
+x14\t(a4):\t\t0x{:x}
+x15\t(a5):\t\t0x{:x}
+x16\t(a6):\t\t0x{:x}
+x17\t(a7):\t\t0x{:x}
+x18\t(s2):\t\t0x{:x}
+x19\t(s3):\t\t0x{:x}
+x20\t(s4):\t\t0x{:x}
+x21\t(s5):\t\t0x{:x}
+x22\t(s6):\t\t0x{:x}
+x23\t(s7):\t\t0x{:x}
+x24\t(s8):\t\t0x{:x}
+x25\t(s9):\t\t0x{:x}
+x26\t(s10):\t\t0x{:x}
+x27\t(s11):\t\t0x{:x}
+x28\t(t3):\t\t0x{:x}
+x29\t(t4):\t\t0x{:x}
+x30\t(t5):\t\t0x{:x}
+x31\t(t6):\t\t0x{:x}",
             self.registers[0],
             self.registers[1],
             self.registers[2],
