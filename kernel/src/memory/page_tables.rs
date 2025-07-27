@@ -284,7 +284,7 @@ impl RootPageTableHolder {
         let physical_end = physical_address_start.wrapping_add(size - 1);
 
         debug!(
-            "Map \t{:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
+            "Map {:#018x}-{:#018x} -> {:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
             virtual_address_start,
             virtual_end,
             physical_address_start,
