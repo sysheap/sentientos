@@ -66,8 +66,8 @@ impl PinnedHeapPages {
         Self { allocation }
     }
 
-    pub fn fill(&mut self, data: &[u8]) {
-        copy_slice(data, self.as_u8_slice());
+    pub fn fill(&mut self, data: &[u8], offset: usize) {
+        copy_slice(data, &mut self.as_u8_slice()[offset..offset + data.len()]);
     }
 
     pub fn as_mut_ptr(&mut self) -> NonNull<Page> {
@@ -115,7 +115,7 @@ mod tests {
     fn with_data() {
         let data = [1u8, 2, 3];
         let mut heap_pages = PinnedHeapPages::new(1);
-        heap_pages.fill(&data);
+        heap_pages.fill(&data, 0);
         assert_eq!(heap_pages.len(), 1);
         let heap_slice = heap_pages.as_u8_slice();
         assert_eq!(&heap_slice[..3], &data);
@@ -123,11 +123,23 @@ mod tests {
     }
 
     #[test_case]
+    fn with_offset() {
+        let data = [1u8, 2, 3];
+        let mut heap_pages = PinnedHeapPages::new(1);
+        heap_pages.fill(&data, 3);
+        assert_eq!(heap_pages.len(), 1);
+        let heap_slice = heap_pages.as_u8_slice();
+        assert_eq!(&heap_slice[..3], &[0, 0, 0]);
+        assert_eq!(&heap_slice[3..6], &data);
+        assert_eq!(&heap_slice[6..], [0; PAGE_SIZE - 6])
+    }
+
+    #[test_case]
     fn with_more_data() {
         const LENGTH: usize = PAGE_SIZE + 3;
         let data = [42u8; LENGTH];
         let mut heap_pages = PinnedHeapPages::new(2);
-        heap_pages.fill(&data);
+        heap_pages.fill(&data, 0);
         assert_eq!(heap_pages.len(), 2);
         let heap_slice = heap_pages.as_u8_slice();
         assert_eq!(&heap_slice[..LENGTH], &data);

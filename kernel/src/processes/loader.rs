@@ -95,17 +95,26 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     for program_header in loadable_program_header {
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
+
+        assert!(
+            real_size as usize >= data.len(),
+            "real size must always be greater than the actual data"
+        );
+
         let size_in_pages = minimum_amount_of_pages(real_size as usize);
 
         let mut pages = PinnedHeapPages::new(size_in_pages);
-        pages.fill(data);
+
+        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+
+        pages.fill(data, offset);
 
         let pages_addr = pages.addr();
 
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
-            program_header.virtual_address as usize,
+            program_header.virtual_address as usize - offset,
             pages_addr.get(),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),

@@ -464,7 +464,10 @@ impl RootPageTableHolder {
             let xwr = entry.get_xwr_mode();
             if !entry.get_validity()
                 || !entry.get_user_mode_accessible()
-                || !matches!(xwr, XWRMode::ReadOnly | XWRMode::ReadWrite)
+                || !matches!(
+                    xwr,
+                    XWRMode::ReadOnly | XWRMode::ReadWrite | XWRMode::ReadExecute
+                )
             {
                 return false;
             }
