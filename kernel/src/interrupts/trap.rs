@@ -1,7 +1,7 @@
 use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE};
 use crate::{
     cpu::Cpu,
-    debug,
+    debug, info,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
     processes::thread::ThreadState,
@@ -73,20 +73,27 @@ fn handle_unhandled_exception() {
     let cause = InterruptCause::from_scause();
     let stval = Cpu::read_stval();
     let sepc = Cpu::read_sepc();
-    let cpu = Cpu::current();
-    let scheduler = cpu.scheduler();
-    let message= cpu.scheduler().get_current_process().with_lock(|p| {
-        format!(
-            "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
+    let mut cpu = Cpu::current();
+    let scheduler = cpu.scheduler_mut();
+    let (message, from_userspace) = scheduler.get_current_process().with_lock(|p| {
+        let from_userspace = 
+            p.get_page_table().is_userspace_address(sepc);
+        (format!(
+            "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\n{:?}",
             cause.get_reason(),
             cause.get_exception_code(),
             stval,
             sepc,
-            p.get_page_table().is_userspace_address(sepc),
+            from_userspace,
             p.get_name(),
             scheduler.trap_frame()
-        )
+        ), from_userspace)
     });
+    if from_userspace {
+        info!("{}", message);
+        scheduler.kill_current_process();
+        return;
+    }
     panic!("{}", message);
 }
 
