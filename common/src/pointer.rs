@@ -34,7 +34,7 @@ impl<T> Pointer for *mut T {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct FatPointer<Ptr> {
+pub struct FatPointer<Ptr: Pointer> {
     ptr: Ptr,
     len: usize,
 }

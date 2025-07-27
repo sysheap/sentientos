@@ -1,0 +1,63 @@
+use core::ffi::c_int;
+
+use crate::{info, print};
+use common::{
+    constructable::Constructable,
+    pointer::FatPointer,
+    syscalls::{
+        kernel::KernelSyscalls,
+        trap_frame::{Register, TrapFrame},
+    },
+};
+
+use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
+
+const WRITE: usize = 64;
+const EXIT_GROUP: usize = 94;
+const SET_TID_ADDRESS: usize = 96;
+
+pub fn handle(trap_frame: &TrapFrame) -> isize {
+    let nr = trap_frame[Register::a7];
+    let handler = SyscallHandler::new();
+    match nr {
+        WRITE => handle_write(trap_frame, handler),
+        EXIT_GROUP => handle_exit_group(trap_frame, handler),
+        SET_TID_ADDRESS => handle_set_tid_address(trap_frame, handler),
+        _ => unimplemented!("Linux Syscall Nr {nr}"),
+    }
+}
+
+fn handle_set_tid_address(trap_frame: &TrapFrame, mut _handler: SyscallHandler) -> isize {
+    info!(
+        "Set TID to {:p} (NOT IMPLEMENTED)",
+        trap_frame[Register::a0] as *const c_int
+    );
+    0
+}
+
+fn handle_exit_group(trap_frame: &TrapFrame, mut handler: SyscallHandler) -> isize {
+    let status = trap_frame[Register::a0];
+    handler.sys_exit(UserspaceArgument::new(status as isize));
+    0
+}
+
+fn handle_write(trap_frame: &TrapFrame, mut handler: SyscallHandler) -> isize {
+    let fd = trap_frame[Register::a0];
+    let buf = trap_frame[Register::a1];
+    let len = trap_frame[Register::a2];
+
+    if fd != 1 && fd != 2 {
+        return -1;
+    }
+
+    if fd == 2 {
+        print!("ERROR: ");
+    }
+
+    let result = handler.sys_write(UserspaceArgument::new(FatPointer::new(
+        buf as *const u8,
+        len,
+    )));
+
+    if result.is_ok() { len as isize } else { -1 }
+}
