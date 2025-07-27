@@ -93,6 +93,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         .filter(|header| header.header_type == ProgramHeaderType::PT_LOAD);
 
     for program_header in loadable_program_header {
+        debug!("Load {:#X?}", program_header);
+
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
 
@@ -101,11 +103,20 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
             "real size must always be greater than the actual data"
         );
 
-        let size_in_pages = minimum_amount_of_pages(real_size as usize);
+        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+
+        let mut size_in_pages = minimum_amount_of_pages(real_size as usize);
+
+        // Take into account when we spill into the next page
+        size_in_pages += minimum_amount_of_pages(offset + real_size as usize)
+            - minimum_amount_of_pages(real_size as usize);
 
         let mut pages = PinnedHeapPages::new(size_in_pages);
 
-        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+        debug!(
+            "Allocated {size_in_pages} pages and fill at offset={offset:#X} with data.len={:#X}",
+            data.len()
+        );
 
         pages.fill(data, offset);
 
