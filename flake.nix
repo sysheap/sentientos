@@ -9,32 +9,44 @@
       };
     };
   };
-  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-        let
-          overlays = [ (import rust-overlay) ];
-          pkgs = import nixpkgs {
-            inherit system overlays;
+  outputs =
+    {
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs {
+          inherit system overlays;
+        };
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
+        riscv-toolchain = import nixpkgs {
+          localSystem = "${system}";
+          crossSystem = {
+            config = "riscv64-unknown-linux-musl";
           };
-          rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
-          buildInputs = with pkgs; [
-            qemu
-            gdb
-            cargo-nextest
-            tmux
-          ];
-          nativeBuildInputs = with pkgs; [
-            rustToolchain
-            pkgsCross.riscv64-embedded.buildPackages.binutils
-            just
-          ];
-        in
-        with pkgs;
-        {
-          devShells.default = mkShell {
-            inherit buildInputs nativeBuildInputs;
-          };
-        }
-      );
+        };
+        buildInputs = with pkgs; [
+          qemu
+          gdb
+          cargo-nextest
+          tmux
+        ];
+        nativeBuildInputs = with pkgs; [
+          rustToolchain
+          riscv-toolchain.buildPackages.gcc
+          just
+        ];
+      in
+      with pkgs;
+      {
+        devShells.default = mkShell {
+          inherit buildInputs nativeBuildInputs;
+        };
+      }
+    );
 }
