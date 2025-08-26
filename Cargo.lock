@@ -14,9 +14,9 @@ checksum = "55dd888a213fc57e957abf2aa305ee3e8a28dbe05687a251f33b637cd46b0070"
 
 [[package]]
 name = "gimli"
-version = "0.32.0"
+version = "0.32.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93563d740bc9ef04104f9ed6f86f1e3275c2cdafb95664e26584b9ca807a8ffe"
+checksum = "cd54e8795d97c9f5561c63529d98fcc0c2eed9e982deecc396797f2c04cff298"
 
 [[package]]
 name = "sentient_os"
