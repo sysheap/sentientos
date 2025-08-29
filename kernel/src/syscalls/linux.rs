@@ -1,6 +1,6 @@
 use core::ffi::c_int;
 
-use crate::{info, print};
+use crate::{cpu::Cpu, info, print};
 use common::{
     constructable::Constructable,
     pointer::FatPointer,
@@ -12,19 +12,24 @@ use common::{
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 
-const WRITE: usize = 64;
-const EXIT_GROUP: usize = 94;
-const SET_TID_ADDRESS: usize = 96;
-
 pub fn handle(trap_frame: &TrapFrame) -> isize {
     let nr = trap_frame[Register::a7];
     let handler = SyscallHandler::new();
     match nr {
-        WRITE => handle_write(trap_frame, handler),
-        EXIT_GROUP => handle_exit_group(trap_frame, handler),
-        SET_TID_ADDRESS => handle_set_tid_address(trap_frame, handler),
-        _ => unimplemented!("Linux Syscall Nr {nr}"),
+        64 => handle_write(trap_frame, handler),
+        94 => handle_exit_group(trap_frame, handler),
+        96 => handle_set_tid_address(trap_frame, handler),
+        73 => handle_ppoll_time32(),
+        _ => {
+            info!("Linux Syscall Nr {nr} at {:#x}", Cpu::read_sepc());
+            0
+        }
     }
+}
+
+fn handle_ppoll_time32() -> isize {
+    info!("PPOLL_TIME32");
+    0
 }
 
 fn handle_set_tid_address(trap_frame: &TrapFrame, mut _handler: SyscallHandler) -> isize {
