@@ -1,6 +1,3 @@
-#![no_std]
-#![no_main]
-
 // The main logic (minimax with alpha-beta pruning as well as the score function) was mostly implemented by ChatGPT.
 // I don't regard that as cheating because I'm not super interested in algorithms. However, what I manually want to do
 // is to imrpove the performance of the game by adding multicore support. However, this first requires multicore support
@@ -14,7 +11,6 @@ use userspace::{print, println, util::read_line};
 extern crate alloc;
 extern crate userspace;
 
-#[unsafe(no_mangle)]
 fn main() {
     println!("Welcome to connect four!");
     print!("Choose the search depth: ");

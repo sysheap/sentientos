@@ -6,3 +6,5 @@
 /.gdb_history
 /symbols
 /.direnv
+/.gdb_sources
+/musl
