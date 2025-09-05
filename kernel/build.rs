@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, error::Error, io::Write, path::Path, process::Command};
+use std::{collections::BTreeMap, env, error::Error, io::Write, process::Command};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");
@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    build_userspace_programs()?;
+    // build_userspace_programs()?;
     build_posix_programs()?;
     generate_userspace_programs_include()?;
     Ok(())
@@ -67,34 +67,6 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
         .arg(USERSPACE_PROGRAMS_PATH)
         .spawn()?
         .wait()?;
-
-    Ok(())
-}
-
-fn build_userspace_programs() -> Result<(), Box<dyn Error>> {
-    let compiled_userspace_path = Path::new("../kernel/compiled_userspace");
-
-    let _ = std::fs::remove_dir_all(compiled_userspace_path);
-
-    let mut command = Command::new("cargo");
-    command.current_dir("../userspace");
-
-    command.args([
-        "build",
-        "--bins",
-        "--target-dir",
-        "../../target-userspace",
-        "--artifact-dir",
-        compiled_userspace_path.to_str().unwrap(),
-        "-Z",
-        "unstable-options",
-        "--release",
-    ]);
-
-    let status = command.status()?;
-    if !status.success() {
-        return Err(From::from("Failed to build userspace programs"));
-    }
 
     Ok(())
 }

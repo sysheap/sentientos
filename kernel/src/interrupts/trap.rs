@@ -5,7 +5,7 @@ use crate::{
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
     processes::thread::ThreadState,
-    syscalls::{self, linux},
+    syscalls::{self, linux::LinuxSyscallHandler},
 };
 use common::syscalls::trap_frame::Register;
 use core::panic;
@@ -55,7 +55,8 @@ fn handle_syscall() {
         // We might need to get the current cpu again in handle_syscall
         syscalls::handle_syscall(nr, arg, ret)
     } else {
-        let result = linux::handle(&trap_frame);
+        let mut handler = LinuxSyscallHandler::new(&trap_frame);
+        let result = handler.handle();
         let mut cpu = Cpu::current();
         let scheduler = cpu.scheduler_mut();
         let trap_frame = scheduler.trap_frame_mut();

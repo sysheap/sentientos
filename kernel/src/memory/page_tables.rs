@@ -159,7 +159,10 @@ impl RootPageTableHolder {
         page_table_address == current_physical_address
     }
 
-    pub fn new_with_kernel_mapping() -> Self {
+    /// include_fixed_addresses should be set to false when mapping
+    /// userspace tables. Otherwise it collides with addresses in the userspace
+    /// binary.
+    pub fn new_with_kernel_mapping(include_fixed_addresses: bool) -> Self {
         let mut root_page_table_holder = RootPageTableHolder::empty();
 
         for mapping in LinkerInformation::all_mappings() {
@@ -185,34 +188,36 @@ impl RootPageTableHolder {
             "HEAP".to_string(),
         );
 
-        root_page_table_holder.map_identity_kernel(
-            plic::PLIC_BASE,
-            plic::PLIC_SIZE,
-            XWRMode::ReadWrite,
-            "PLIC".to_string(),
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            timer::CLINT_BASE,
-            timer::CLINT_SIZE,
-            XWRMode::ReadWrite,
-            "CLINT".to_string(),
-        );
-
-        root_page_table_holder.map_identity_kernel(
-            TEST_DEVICE_ADDRESSS,
-            PAGE_SIZE,
-            XWRMode::ReadWrite,
-            "Qemu Test Device".to_string(),
-        );
-
-        for runtime_mapping in get_runtime_mappings() {
+        if include_fixed_addresses {
             root_page_table_holder.map_identity_kernel(
-                runtime_mapping.virtual_address_start,
-                runtime_mapping.size,
-                runtime_mapping.privileges,
-                runtime_mapping.name.to_string(),
+                plic::PLIC_BASE,
+                plic::PLIC_SIZE,
+                XWRMode::ReadWrite,
+                "PLIC".to_string(),
             );
+
+            root_page_table_holder.map_identity_kernel(
+                timer::CLINT_BASE,
+                timer::CLINT_SIZE,
+                XWRMode::ReadWrite,
+                "CLINT".to_string(),
+            );
+
+            root_page_table_holder.map_identity_kernel(
+                TEST_DEVICE_ADDRESSS,
+                PAGE_SIZE,
+                XWRMode::ReadWrite,
+                "Qemu Test Device".to_string(),
+            );
+
+            for runtime_mapping in get_runtime_mappings() {
+                root_page_table_holder.map_identity_kernel(
+                    runtime_mapping.virtual_address_start,
+                    runtime_mapping.size,
+                    runtime_mapping.privileges,
+                    runtime_mapping.name.to_string(),
+                );
+            }
         }
 
         root_page_table_holder

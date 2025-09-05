@@ -24,19 +24,19 @@ impl Iterator for Args {
     type Item = &'static str;
 
     fn next(&mut self) -> Option<Self::Item> {
-        return None;
+        None
         // SAFTEY: We need to trust the kernel
-        let c_str = unsafe { core::ffi::CStr::from_ptr(self.current) };
-        let str = c_str
-            .to_str()
-            .expect("Kernel must give us only valid utf-8 chars");
+        // let c_str = unsafe { std::ffi::CStr::from_ptr(self.current) };
+        // let str = c_str
+        //     .to_str()
+        //     .expect("Kernel must give us only valid utf-8 chars");
 
-        if str.is_empty() {
-            return None;
-        }
+        // if str.is_empty() {
+        //     return None;
+        // }
 
-        self.current = unsafe { self.current.add(str.len() + 1) };
+        // self.current = unsafe { self.current.add(str.len() + 1) };
 
-        Some(str)
+        // Some(str)
     }
 }
