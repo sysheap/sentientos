@@ -60,7 +60,8 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
     addr_current_string += name.len() + 1;
     for (idx, arg) in args.iter().enumerate() {
         argv[idx + 1] = addr_current_string;
-        addr_current_string += arg.len() + 1;
+        // It could overflow on the last element, so just use wrapping_add
+        addr_current_string = addr_current_string.wrapping_add(arg.len() + 1);
     }
 
     let offset = stack.len() - total_length;
@@ -98,7 +99,7 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
 }
 
 pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
-    let mut page_tables = RootPageTableHolder::new_with_kernel_mapping();
+    let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(false);
 
     let elf_header = elf_file.get_header();
     let mut allocated_pages = Vec::new();

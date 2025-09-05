@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 QEMU_CMD="qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
-    -m 128M \
+    -m 512M \
     -nographic \
     -serial mon:stdio"
 

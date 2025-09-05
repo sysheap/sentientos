@@ -4,8 +4,11 @@ patch-symbols:
     riscv64-unknown-linux-musl-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
     riscv64-unknown-linux-musl-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
-build-cargo:
+build-cargo: build-userspace
     cargo build --release
+
+build-userspace:
+    cd userspace && cargo build --bins --target-dir ../target-userspace --artifact-dir ../kernel/compiled_userspace -Z unstable-options --release # -Z build-std=panic_abort,std
 
 clippy:
     cd userspace && cargo clippy -- -D warnings
@@ -20,7 +23,7 @@ clean:
     cargo clean
 
 debugReleaseCommand := 'cargo run --release -- --wait'
-gdb := 'gdb -iex "add-auto-load-safe-path ."'
+gdb := 'pwndbg -iex "add-auto-load-safe-path ."'
 
 run: build
     cargo run --release
@@ -45,6 +48,9 @@ attach:
 
 debug: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel' \; attach
+
+debuguf BIN FUNC: build
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/kernel/compiled_userspace/{{BIN}}'\; attach
 
 debugf FUNC: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel'\; attach

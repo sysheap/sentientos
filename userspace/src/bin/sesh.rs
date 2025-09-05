@@ -1,17 +1,13 @@
-#![no_std]
-#![no_main]
-
-use alloc::{
+use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
+use std::{
     string::{String, ToString},
     vec::Vec,
 };
-use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
 use userspace::{print, println, util::read_line};
 
 extern crate alloc;
 extern crate userspace;
 
-#[unsafe(no_mangle)]
 fn main() {
     println!();
     println!("### SeSH - Sentient Shell ###");
