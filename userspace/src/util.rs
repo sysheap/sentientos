@@ -1,8 +1,7 @@
 extern crate alloc;
 
-use alloc::string::String;
 use common::syscalls::sys_read_input_wait;
-use core::arch::asm;
+use std::{arch::asm, string::String};
 
 use crate::{print, println};
 

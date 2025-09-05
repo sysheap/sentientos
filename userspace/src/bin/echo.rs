@@ -1,14 +1,11 @@
-#![no_std]
-#![no_main]
+use std::env;
 
-use userspace::{args, print, println};
+use userspace::{print, println};
 
 extern crate userspace;
 
-#[unsafe(no_mangle)]
 fn main() {
-    let args = args();
-    for (index, arg) in args.skip(1).enumerate() {
+    for (index, arg) in env::args().skip(1).enumerate() {
         if index > 0 {
             print!(" ");
         }

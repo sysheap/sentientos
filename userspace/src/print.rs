@@ -1,4 +1,4 @@
-use core::fmt::{self, Write};
+use std::fmt::{self, Write};
 
 use common::{mutex::Mutex, syscalls::sys_write};
 

@@ -3,7 +3,7 @@ runs:
   using: "composite"
   steps:     
     - uses: nixbuild/nix-quick-install-action@v30
-    - uses: nix-community/cache-nix-action/restore@v6
+    - uses: nix-community/cache-nix-action@v6
       with:
         primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', 'rust-toolchain') }}
         restore-prefixes-first-match: nix-${{ runner.os }}-

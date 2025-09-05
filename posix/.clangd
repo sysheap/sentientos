@@ -1,2 +1,0 @@
-CompileFlags:
-  Compiler: riscv64-unknown-linux-musl-gcc

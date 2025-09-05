@@ -107,7 +107,7 @@ impl Cpu {
     pub fn init(cpu_id: usize) -> *mut Cpu {
         let kernel_stack =
             Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()) as *mut _ as *mut u8;
-        let mut page_tables = RootPageTableHolder::new_with_kernel_mapping();
+        let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(true);
 
         let stack_start_virtual = (0usize).wrapping_sub(KERNEL_STACK_SIZE);
 

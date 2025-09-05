@@ -1,7 +1,4 @@
-#![no_std]
-#![no_main]
-
-use alloc::string::String;
+// use alloc::string::String;
 use common::syscalls::sys_read_input;
 use userspace::{net::UdpSocket, print, println};
 
@@ -11,7 +8,6 @@ extern crate userspace;
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
 
-#[unsafe(no_mangle)]
 fn main() {
     println!("Hello from the udp receiver");
     println!("Listening on {PORT}");
@@ -24,7 +20,7 @@ fn main() {
         let count = socket.receive(&mut buffer);
 
         if count > 0 {
-            let text = core::str::from_utf8(&buffer[0..count]).expect("Must be valid utf8");
+            let text = std::str::from_utf8(&buffer[0..count]).expect("Must be valid utf8");
             print!("{}", text);
         }
 
