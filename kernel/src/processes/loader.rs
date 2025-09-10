@@ -1,11 +1,11 @@
 use alloc::{string::ToString, vec::Vec};
-use common::errors::LoaderError;
+use common::{errors::LoaderError, util::align_up, writable_buffer::WritableBuffer};
 
 use crate::{
     debug,
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{copy_slice, minimum_amount_of_pages},
+        util::{InBytes, minimum_amount_of_pages},
     },
     memory::{
         PAGE_SIZE,
@@ -30,38 +30,76 @@ pub struct LoadedElf {
 }
 
 fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize, LoaderError> {
-    let mut total_bytes = name.len() + args.iter().map(|arg| arg.len()).sum::<usize>();
-    // add zero bytes into account (name, number of args, zero-byte terminator)
-    total_bytes += 1 + args.len() + 1;
+    // layout:
+    // [argc, argv[0], argv[n], NULL, envp[0], envp[1], NULL, AUXV AT_NULL, NULL, name, args[0], args[1]...]
+    let argc = 1 + args.len(); // name + amount of args
+    let mut argv = vec![0usize; args.len() + 2]; // number of args plus name and null terminator
+    let envp = [0usize];
+    let auxv: [usize; 2] = [/* AT_NULL */ 0, 0];
+    let strings = [name]
+        .iter()
+        .chain(args)
+        .flat_map(|s| s.as_bytes().iter().chain(&[0]))
+        .copied()
+        .collect::<Vec<u8>>();
 
-    let stack_size = stack.len();
+    let start_of_strings_offset =
+        core::mem::size_of_val(&argc) + argv.in_bytes() + envp.in_bytes() + auxv.in_bytes();
 
-    if total_bytes >= stack_size {
+    let total_length = align_up(start_of_strings_offset + strings.in_bytes(), 8);
+
+    if total_length >= stack.len() {
         return Err(LoaderError::StackToSmall);
     }
 
-    let mut offset = stack_size - total_bytes;
+    let real_start = STACK_START - total_length + 1;
+    let mut addr_current_string = real_start + start_of_strings_offset;
 
-    copy_slice(name.as_bytes(), &mut stack[offset..]);
-    offset += name.len() + 1;
-
-    for arg in args {
-        copy_slice(arg.as_bytes(), &mut stack[offset..]);
-        offset += arg.len() + 1;
+    // Patch pointers
+    argv[0] = addr_current_string;
+    addr_current_string += name.len() + 1;
+    for (idx, arg) in args.iter().enumerate() {
+        argv[idx + 1] = addr_current_string;
+        // It could overflow on the last element, so just use wrapping_add
+        addr_current_string = addr_current_string.wrapping_add(arg.len() + 1);
     }
 
-    assert_eq!(
-        stack[offset..].len(),
-        1,
-        "We should only have one byte left"
-    );
+    let offset = stack.len() - total_length;
+
+    let mut writable_buffer = WritableBuffer::new(&mut stack[offset..]);
+
+    writable_buffer
+        .write_usize(argc)
+        .map_err(|_| LoaderError::StackToSmall)?;
+
+    for arg in argv {
+        writable_buffer
+            .write_usize(arg)
+            .map_err(|_| LoaderError::StackToSmall)?;
+    }
+
+    for env in envp {
+        writable_buffer
+            .write_usize(env)
+            .map_err(|_| LoaderError::StackToSmall)?;
+    }
+
+    for aux in auxv {
+        writable_buffer
+            .write_usize(aux)
+            .map_err(|_| LoaderError::StackToSmall)?;
+    }
+
+    writable_buffer
+        .write_slice(&strings)
+        .map_err(|_| LoaderError::StackToSmall)?;
 
     // We want to point into the arguments
-    Ok(STACK_START - total_bytes + 1)
+    Ok(STACK_START - total_length + 1)
 }
 
 pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
-    let mut page_tables = RootPageTableHolder::new_with_kernel_mapping();
+    let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(false);
 
     let elf_header = elf_file.get_header();
     let mut allocated_pages = Vec::new();
@@ -93,6 +131,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         .filter(|header| header.header_type == ProgramHeaderType::PT_LOAD);
 
     for program_header in loadable_program_header {
+        debug!("Load {:#X?}", program_header);
+
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
 
@@ -101,11 +141,20 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
             "real size must always be greater than the actual data"
         );
 
-        let size_in_pages = minimum_amount_of_pages(real_size as usize);
+        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+
+        let mut size_in_pages = minimum_amount_of_pages(real_size as usize);
+
+        // Take into account when we spill into the next page
+        size_in_pages += minimum_amount_of_pages(offset + real_size as usize)
+            - minimum_amount_of_pages(real_size as usize);
 
         let mut pages = PinnedHeapPages::new(size_in_pages);
 
-        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+        debug!(
+            "Allocated {size_in_pages} pages and fill at offset={offset:#X} with data.len={:#X}",
+            data.len()
+        );
 
         pages.fill(data, offset);
 

@@ -24,3 +24,4 @@ pub mod runtime_initialized;
 pub mod syscalls;
 pub mod util;
 pub mod weak_queue;
+pub mod writable_buffer;

@@ -31,3 +31,8 @@ impl Display for PrintMemorySizeHumanFriendly {
         write!(f, "{size:.2} TiB")
     }
 }
+
+pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
+    assert!(dst.len() >= src.len());
+    dst[..src.len()].copy_from_slice(src);
+}

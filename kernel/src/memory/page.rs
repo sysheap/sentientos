@@ -1,11 +1,10 @@
 use alloc::boxed::Box;
+use common::util::copy_slice;
 use core::{
     num::NonZeroUsize,
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-
-use crate::klibc::util::copy_slice;
 
 pub const PAGE_SIZE: usize = 4096;
 

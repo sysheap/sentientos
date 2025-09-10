@@ -1,11 +1,11 @@
 use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE};
 use crate::{
     cpu::Cpu,
-    debug,
+    debug, info,
     interrupts::plic::{self, InterruptSource},
     io::{stdin_buf::STDIN_BUFFER, uart},
     processes::thread::ThreadState,
-    syscalls::{self},
+    syscalls::{self, linux::LinuxSyscallHandler},
 };
 use common::syscalls::trap_frame::Register;
 use core::panic;
@@ -44,15 +44,26 @@ fn handle_syscall() {
     let cpu = Cpu::current();
     let scheduler = cpu.scheduler();
 
-    let trap_frame = scheduler.trap_frame();
-    let nr = trap_frame[Register::a0];
+    let trap_frame = *scheduler.trap_frame();
+    let nr = trap_frame[Register::a7];
     let arg = trap_frame[Register::a1];
     let ret = trap_frame[Register::a2];
 
-    // We might need to get the current cpu again in handle_syscall
     drop(cpu);
 
-    let ret = syscalls::handle_syscall(nr, arg, ret);
+    let ret = if (1 << 63) & nr > 0 {
+        // We might need to get the current cpu again in handle_syscall
+        syscalls::handle_syscall(nr, arg, ret)
+    } else {
+        let mut handler = LinuxSyscallHandler::new(&trap_frame);
+        let result = handler.handle();
+        let mut cpu = Cpu::current();
+        let scheduler = cpu.scheduler_mut();
+        let trap_frame = scheduler.trap_frame_mut();
+        trap_frame[Register::a0] = result as usize;
+        Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+        None
+    };
 
     let mut cpu = Cpu::current();
     let scheduler = cpu.scheduler_mut();
@@ -73,20 +84,27 @@ fn handle_unhandled_exception() {
     let cause = InterruptCause::from_scause();
     let stval = Cpu::read_stval();
     let sepc = Cpu::read_sepc();
-    let cpu = Cpu::current();
-    let scheduler = cpu.scheduler();
-    let message= cpu.scheduler().get_current_process().with_lock(|p| {
-        format!(
-            "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\nTrap Frame: {:?}",
+    let mut cpu = Cpu::current();
+    let scheduler = cpu.scheduler_mut();
+    let (message, from_userspace) = scheduler.get_current_process().with_lock(|p| {
+        let from_userspace =
+            p.get_page_table().is_userspace_address(sepc);
+        (format!(
+            "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\n{:?}",
             cause.get_reason(),
             cause.get_exception_code(),
             stval,
             sepc,
-            p.get_page_table().is_userspace_address(sepc),
+            from_userspace,
             p.get_name(),
             scheduler.trap_frame()
-        )
+        ), from_userspace)
     });
+    if from_userspace {
+        info!("{}", message);
+        scheduler.kill_current_process();
+        return;
+    }
     panic!("{}", message);
 }
 

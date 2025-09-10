@@ -8,33 +8,69 @@
         nixpkgs.follows = "nixpkgs";
       };
     };
+    pwndbg = {
+      url = "github:pwndbg/pwndbg";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
   };
-  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-        let
-          overlays = [ (import rust-overlay) ];
-          pkgs = import nixpkgs {
-            inherit system overlays;
+  outputs =
+    {
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      pwndbg,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs {
+          inherit system overlays;
+        };
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
+        riscv-toolchain = import nixpkgs {
+          localSystem = "${system}";
+          crossSystem = {
+            config = "riscv64-unknown-linux-musl";
           };
-          rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
-          buildInputs = with pkgs; [
+        };
+        musl = riscv-toolchain.musl.overrideAttrs (old: {
+          configureFlags = (builtins.filter (flag: flag != "--enable-shared") old.configureFlags) ++ [
+            "--disable-optimize"
+          ];
+          separateDebugInfo = false;
+          dontStrip = true;
+          postPatch = old.postPatch + ''
+            # copy sources to $out/src so gdb can find them
+            mkdir -p $out/src
+            cp -r ./ $out/src/
+          '';
+        });
+        musl-dev = musl.dev;
+      in
+      with pkgs;
+      {
+        devShells.default = mkShellNoCC {
+          shellHook = ''
+            ln -sf ${musl}/src musl
+          '';
+          packages = with pkgs; [
             qemu
             gdb
             cargo-nextest
             tmux
-          ];
-          nativeBuildInputs = with pkgs; [
+            pwndbg.packages.${system}.default
             rustToolchain
-            pkgsCross.riscv64-embedded.buildPackages.binutils
+            riscv-toolchain.buildPackages.binutils
+            riscv-toolchain.buildPackages.gcc
             just
+            musl
+            musl-dev
           ];
-        in
-        with pkgs;
-        {
-          devShells.default = mkShell {
-            inherit buildInputs nativeBuildInputs;
-          };
-        }
-      );
+        };
+      }
+    );
 }

@@ -24,7 +24,7 @@ pub enum Endianess {
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u8)]
-#[derive(PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 #[allow(dead_code)]
 pub enum OsAbi {
@@ -314,7 +314,7 @@ impl<'a> ElfFile<'a> {
             return Some(ElfParseErrors::UnsupportedElfVersionNumber);
         }
 
-        if header.os_abi != OsAbi::SystemV {
+        if !matches!(header.os_abi, OsAbi::SystemV | OsAbi::Linux) {
             return Some(ElfParseErrors::UnsupportedOsABI);
         }
 
