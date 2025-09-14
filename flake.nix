@@ -64,9 +64,11 @@
             just
             riscv-toolchain.buildPackages.gcc
           ];
+          buildInputs = [
+            musl-dev
+          ];
           depsTargetTarget = [
             musl
-            musl-dev
           ];
           shellHook = ''
             rm -rf musl
