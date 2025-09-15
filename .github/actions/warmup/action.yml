@@ -1,4 +1,4 @@
-name: prepare
+name: warmup
 runs:
   using: "composite"
   steps:     
@@ -6,5 +6,5 @@ runs:
     - uses: nix-community/cache-nix-action@v6
       with:
         primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', 'rust-toolchain') }}
-        restore-prefixes-first-match: nix-${{ runner.os }}-
+        restore-prefixes-all-matches: nix-${{ runner.os }}-
     - uses: nicknovitski/nix-develop@v1
