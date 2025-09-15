@@ -10,7 +10,7 @@ build-cargo: build-userspace
 build-userspace:
     cd userspace && cargo build --bins --target-dir ../target-userspace --artifact-dir ../kernel/compiled_userspace -Z unstable-options --release # -Z build-std=panic_abort,std
 
-clippy:
+clippy: build-userspace
     cd userspace && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
     cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --no-deps -- -D warnings
@@ -30,7 +30,7 @@ run: build
 
 test: unit-test system-test
 
-unit-test:
+unit-test: build-userspace
     cargo test --release
 
 system-test: build
