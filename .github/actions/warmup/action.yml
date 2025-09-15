@@ -7,5 +7,4 @@ runs:
       with:
         primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', 'rust-toolchain') }}
         restore-prefixes-first-match: nix-${{ runner.os }}-
-        gc-max-store-size-linux: 1G
     - uses: nicknovitski/nix-develop@v1
