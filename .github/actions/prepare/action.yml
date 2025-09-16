@@ -2,9 +2,10 @@ name: prepare
 runs:
   using: "composite"
   steps:     
-    - uses: nixbuild/nix-quick-install-action@v30
-    - uses: nix-community/cache-nix-action/restore@v6
+    - uses: DeterminateSystems/nix-installer-action@main
       with:
-        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock', 'rust-toolchain') }}
-        restore-prefixes-all-matches: nix-${{ runner.os }}-
+        extra-conf: |
+          extra-substituters = https://pwndbg.cachix.org
+          extra-trusted-public-keys = pwndbg.cachix.org-1:HhtIpP7j73SnuzLgobqqa8LVTng5Qi36sQtNt79cD3k=
+    - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: nicknovitski/nix-develop@v1
