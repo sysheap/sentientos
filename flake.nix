@@ -56,6 +56,9 @@
       in
       {
         devShells.default = riscv-toolchain.mkShell {
+          # Needed for bindgen
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+
           nativeBuildInputs = with pkgs; [
             qemu
             gdb
@@ -67,8 +70,9 @@
             gcc-riscv
           ];
           shellHook = ''
-            rm -rf musl
+            rm -rf musl headers/linux_headers
             ln -sf ${musl-riscv}/src musl
+            ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
           '';
         };
       }

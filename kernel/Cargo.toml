@@ -12,6 +12,7 @@ default-target = "riscv64gc-unknown-none-elf"
 
 [dependencies]
 common = { path = "../common" }
+headers = { path = "../headers" }
 
 [[bin]]
 name = "kernel"

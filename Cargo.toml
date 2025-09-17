@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "common",
+    "common", "headers",
     "kernel",
     "userspace",
 ]
