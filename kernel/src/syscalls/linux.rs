@@ -11,6 +11,7 @@ use common::{
 };
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
+use headers::syscalls::*;
 
 // TODO: This should be better organized (preferably with a syscall macro like the sentientos syscall)
 // Also argument verification is not implemented right now. Let's get first going
@@ -35,15 +36,15 @@ impl<'a> LinuxSyscallHandler<'a> {
         let arg2 = self.trap_frame[Register::a1];
         let arg3 = self.trap_frame[Register::a2];
         match nr {
-            64 => self.handle_write(arg1 as i32, arg2 as *const u8, arg3),
-            94 => self.handle_exit_group(arg1 as c_int),
-            96 => self.handle_set_tid_address(arg1 as *const c_int),
-            73 => self.handle_ppoll_time32(),
-            134 => self.handle_rt_sigaction(),
-            132 => self.handle_sigaltstack(),
-            135 => self.handle_rt_sigprocmask(),
-            130 => self.handle_tkill(),
-            214 => self.handle_brk(),
+            SYSCALL_NR_WRITE => self.handle_write(arg1 as i32, arg2 as *const u8, arg3),
+            SYSCALL_NR_EXIT_GROUP => self.handle_exit_group(arg1 as c_int),
+            SYSCALL_NR_SET_TID_ADDRESS => self.handle_set_tid_address(arg1 as *const c_int),
+            SYSCALL_NR_PPOLL => self.handle_ppoll_time32(),
+            SYSCALL_NR_RT_SIGACTION => self.handle_rt_sigaction(),
+            SYSCALL_NR_SIGALTSTACK => self.handle_sigaltstack(),
+            SYSCALL_NR_RT_SIGPROCMASK => self.handle_rt_sigprocmask(),
+            SYSCALL_NR_TKILL => self.handle_tkill(),
+            SYSCALL_NR_BRK => self.handle_brk(),
             _ => {
                 panic!("Linux Syscall Nr {nr} at {:#x}", Cpu::read_sepc());
             }

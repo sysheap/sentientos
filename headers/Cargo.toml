@@ -1,0 +1,9 @@
+[package]
+name = "headers"
+edition = "2024"
+description.workspace = true
+authors.workspace = true
+version.workspace = true
+
+[build-dependencies]
+bindgen = "0.72"
