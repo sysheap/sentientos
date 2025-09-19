@@ -3,12 +3,10 @@ runs:
   using: "composite"
   steps:     
     - uses: DeterminateSystems/nix-installer-action@main
-      with:
-        extra-conf: |
-          extra-substituters = https://pwndbg.cachix.org
-          extra-trusted-public-keys = pwndbg.cachix.org-1:HhtIpP7j73SnuzLgobqqa8LVTng5Qi36sQtNt79cD3k=
     - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: nicknovitski/nix-develop@v1
+      with:
+        arguments: ".#ci"
     - uses: actions/cache@v4
       with:
         path: |
