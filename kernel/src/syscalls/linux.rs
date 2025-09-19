@@ -1,6 +1,6 @@
 use core::ffi::c_int;
 
-use crate::{cpu::Cpu, print};
+use crate::{print, syscalls::macros::linux_syscalls};
 use common::{
     constructable::Constructable,
     pointer::FatPointer,
@@ -11,81 +11,31 @@ use common::{
 };
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
-use headers::syscalls::*;
 
-// TODO: This should be better organized (preferably with a syscall macro like the sentientos syscall)
-// Also argument verification is not implemented right now. Let's get first going
-// and then add security.
-
-pub struct LinuxSyscallHandler<'a> {
-    handler: SyscallHandler,
-    trap_frame: &'a TrapFrame,
+linux_syscalls! {
+    SYSCALL_NR_WRITE => write(fd: i32, buf: *const u8, len: usize);
+    SYSCALL_NR_EXIT_GROUP => exit_group(status: isize);
+    SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(arg1: *const c_int);
+    SYSCALL_NR_PPOLL => ppoll_time32();
+    SYSCALL_NR_RT_SIGACTION => rt_sigaction();
+    SYSCALL_NR_SIGALTSTACK => sigaltstack();
+    SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask();
 }
 
-impl<'a> LinuxSyscallHandler<'a> {
-    pub fn new(trap_frame: &'a TrapFrame) -> Self {
-        Self {
-            handler: SyscallHandler::new(),
-            trap_frame,
-        }
-    }
+pub struct LinuxSyscallHandler {
+    handler: SyscallHandler,
+}
 
-    pub fn handle(&mut self) -> isize {
-        let nr = self.trap_frame[Register::a7];
-        let arg1 = self.trap_frame[Register::a0];
-        let arg2 = self.trap_frame[Register::a1];
-        let arg3 = self.trap_frame[Register::a2];
-        match nr {
-            SYSCALL_NR_WRITE => self.handle_write(arg1 as i32, arg2 as *const u8, arg3),
-            SYSCALL_NR_EXIT_GROUP => self.handle_exit_group(arg1 as c_int),
-            SYSCALL_NR_SET_TID_ADDRESS => self.handle_set_tid_address(arg1 as *const c_int),
-            SYSCALL_NR_PPOLL => self.handle_ppoll_time32(),
-            SYSCALL_NR_RT_SIGACTION => self.handle_rt_sigaction(),
-            SYSCALL_NR_SIGALTSTACK => self.handle_sigaltstack(),
-            SYSCALL_NR_RT_SIGPROCMASK => self.handle_rt_sigprocmask(),
-            SYSCALL_NR_TKILL => self.handle_tkill(),
-            SYSCALL_NR_BRK => self.handle_brk(),
-            _ => {
-                panic!("Linux Syscall Nr {nr} at {:#x}", Cpu::read_sepc());
-            }
-        }
-    }
-
-    fn handle_tkill(&self) -> isize {
-        0
-    }
-
-    fn handle_brk(&self) -> isize {
-        0
-    }
-
-    fn handle_rt_sigprocmask(&self) -> isize {
-        0
-    }
-
-    fn handle_sigaltstack(&self) -> isize {
-        0
-    }
-
-    fn handle_rt_sigaction(&self) -> isize {
-        0
-    }
-
-    fn handle_ppoll_time32(&self) -> isize {
-        0
-    }
-
-    fn handle_set_tid_address(&self, _tidptr: *const c_int) -> isize {
-        0
-    }
-
-    fn handle_exit_group(&mut self, status: c_int) -> isize {
-        self.handler
-            .sys_exit(UserspaceArgument::new(status as isize));
-        0
-    }
-
-    fn handle_write(&mut self, fd: c_int, buf: *const u8, len: usize) -> isize {
+impl LinuxSyscalls for LinuxSyscallHandler {
+    fn write(
+        &mut self,
+        fd: LinuxUserspaceArg<i32>,
+        buf: LinuxUserspaceArg<*const u8>,
+        len: LinuxUserspaceArg<usize>,
+    ) -> isize {
+        let fd: i32 = fd.into();
+        let buf = buf.into();
+        let len = len.into();
         if fd != 1 && fd != 2 {
             return -1;
         }
@@ -99,5 +49,43 @@ impl<'a> LinuxSyscallHandler<'a> {
             .sys_write(UserspaceArgument::new(FatPointer::new(buf, len)));
 
         if result.is_ok() { len as isize } else { -1 }
+    }
+
+    fn exit_group(&mut self, status: LinuxUserspaceArg<isize>) -> isize {
+        let status: isize = status.into();
+        self.handler.sys_exit(UserspaceArgument::new(status));
+        0
+    }
+
+    fn set_tid_address(&mut self, _arg1: LinuxUserspaceArg<*const c_int>) -> isize {
+        0
+    }
+
+    fn ppoll_time32(&mut self) -> isize {
+        0
+    }
+
+    fn rt_sigaction(&mut self) -> isize {
+        0
+    }
+
+    fn sigaltstack(&mut self) -> isize {
+        0
+    }
+
+    fn rt_sigprocmask(&mut self) -> isize {
+        0
+    }
+
+    // fn tkill(&mut self) -> isize {
+    //     0
+    // }
+}
+
+impl LinuxSyscallHandler {
+    pub fn new() -> Self {
+        Self {
+            handler: SyscallHandler::new(),
+        }
     }
 }
