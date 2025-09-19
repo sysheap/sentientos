@@ -9,3 +9,13 @@ runs:
           extra-trusted-public-keys = pwndbg.cachix.org-1:HhtIpP7j73SnuzLgobqqa8LVTng5Qi36sQtNt79cD3k=
     - uses: DeterminateSystems/magic-nix-cache-action@main
     - uses: nicknovitski/nix-develop@v1
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.cache/miri
+          target/
+        key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}

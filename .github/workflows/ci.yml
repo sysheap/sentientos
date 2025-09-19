@@ -6,16 +6,8 @@ on:
   pull_request:
 
 jobs:
-  warmup-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: prepare
-        uses: ./.github/actions/prepare
-    
   build:
     runs-on: ubuntu-latest
-    needs: warmup-cache
     steps:
       - uses: actions/checkout@v5
       - name: prepare
@@ -25,7 +17,7 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    needs: build
     steps:
       - uses: actions/checkout@v5
       - name: prepare
@@ -35,7 +27,7 @@ jobs:
 
   rustfmt:
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    needs: build
     steps:
       - uses: actions/checkout@v5
       - name: prepare
@@ -47,7 +39,7 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    needs: build
     steps:
       - uses: actions/checkout@v5
       - name: prepare
@@ -57,40 +49,20 @@ jobs:
 
   miri:
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    needs: build
     steps:
       - uses: actions/checkout@v5
       - name: prepare
         uses: ./.github/actions/prepare
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cache/miri
-            target/
-          key: ${{ runner.os }}-miri-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
       - name: Run miri
         run: just miri
 
   system-tests:
     runs-on: ubuntu-latest
-    needs: warmup-cache
+    needs: build
     steps:
       - uses: actions/checkout@v5
       - name: prepare
         uses: ./.github/actions/prepare
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            ~/.cache/miri
-            target/
-          key: ${{ runner.os }}-system-tests-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
       - name: Build
         run: just system-test
