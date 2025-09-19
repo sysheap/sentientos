@@ -4,17 +4,14 @@
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     pwndbg = {
       url = "github:pwndbg/pwndbg";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
+
   outputs =
     {
       nixpkgs,
@@ -26,16 +23,14 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        overlays = [
-          (import rust-overlay)
-        ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs { inherit system overlays; };
+
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
         riscv-toolchain = pkgs.pkgsCross.riscv64-musl;
+
         musl-riscv = riscv-toolchain.musl.overrideAttrs (old: {
-          configureFlags = (builtins.filter (flag: flag != "--enable-shared") old.configureFlags) ++ [
+          configureFlags = (builtins.filter (f: f != "--enable-shared") old.configureFlags) ++ [
             "--disable-optimize"
           ];
           separateDebugInfo = false;
@@ -46,34 +41,70 @@
             cp -r ./ $out/src/
           '';
         });
-        gcc-riscv = riscv-toolchain.wrapCCWith {
-          cc = riscv-toolchain.gcc;
-          bintools = riscv-toolchain.wrapBintoolsWith {
-            bintools = riscv-toolchain.binutils;
+
+        gcc-riscv-debug = riscv-toolchain.buildPackages.wrapCCWith {
+          cc = riscv-toolchain.buildPackages.gcc;
+          bintools = riscv-toolchain.buildPackages.wrapBintoolsWith {
+            bintools = riscv-toolchain.buildPackages.binutils;
             libc = musl-riscv;
           };
         };
-      in
-      {
-        devShells.default = riscv-toolchain.mkShell {
+
+        basePackages = with pkgs; [
+          qemu
+          cargo-nextest
+          rustToolchain
+          just
+        ];
+
+        commonEnv = {
           # Needed for bindgen
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+        };
 
-          nativeBuildInputs = with pkgs; [
-            qemu
-            gdb
-            cargo-nextest
-            tmux
+        # helper to build devShells
+        mkDevShell =
+          {
+            extraInputs,
+            shellHook ? "",
+          }:
+          riscv-toolchain.mkShellNoCC (
+            commonEnv
+            // {
+              nativeBuildInputs = extraInputs ++ basePackages;
+              inherit shellHook;
+            }
+          );
+
+        hookWithMusl = ''
+          rm -rf musl headers/linux_headers
+          ln -sf ${musl-riscv}/src musl
+          ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
+        '';
+
+        hookHeadersOnly = ''
+          rm -rf headers/linux_headers
+          ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
+        '';
+      in
+      {
+        devShells.default = mkDevShell {
+          extraInputs = [
+            pkgs.gdb
+            pkgs.tmux
             pwndbg.packages.${system}.default
-            rustToolchain
-            just
-            gcc-riscv
+            gcc-riscv-debug.cc
+            gcc-riscv-debug.bintools
           ];
-          shellHook = ''
-            rm -rf musl headers/linux_headers
-            ln -sf ${musl-riscv}/src musl
-            ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
-          '';
+          shellHook = hookWithMusl;
+        };
+
+        devShells.ci = mkDevShell {
+          extraInputs = [
+            riscv-toolchain.buildPackages.gcc
+            riscv-toolchain.buildPackages.binutils
+          ];
+          shellHook = hookHeadersOnly;
         };
       }
     );
