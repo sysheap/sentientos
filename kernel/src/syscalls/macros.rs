@@ -6,7 +6,14 @@ macro_rules! linux_syscalls {
 
             fn handle(&mut self, trap_frame: &TrapFrame) -> isize {
                 let nr = trap_frame[Register::a7];
-                let args = [trap_frame[Register::a0], trap_frame[Register::a1], trap_frame[Register::a2]];
+                let args = [
+                    trap_frame[Register::a0],
+                    trap_frame[Register::a1],
+                    trap_frame[Register::a2],
+                    trap_frame[Register::a3],
+                    trap_frame[Register::a4],
+                    trap_frame[Register::a5]
+                ];
                 match nr {
                     $(headers::syscalls::$number => self.$name($(LinuxUserspaceArg::<$arg_ty>::new(args[${index()}])),*)),*,
                     syscall_nr => {

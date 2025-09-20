@@ -2,7 +2,7 @@ use std::{
     env,
     fs::File,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
 };
@@ -48,15 +48,37 @@ impl ParseCallbacks for SyscallReaderCallback {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let syscall_type_changer = SyscallReaderCallback::default();
-    let bindings = bindgen::Builder::default()
-        .header("linux_headers/include/asm/unistd.h")
+    let out_path = PathBuf::from(env::var("OUT_DIR")?);
+    generate_syscall_nr_file(&out_path)?;
+    generate_syscall_types(&out_path)?;
+    Ok(())
+}
+
+fn default_bindgen_builder() -> bindgen::Builder {
+    bindgen::Builder::default()
         .clang_arg("-Ilinux_headers/include")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .use_core()
+}
+
+fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm-generic/poll.h")
+        .header("linux_headers/include/asm-generic/signal.h")
+        .header("linux_headers/include/linux/time.h")
+        .generate()?;
+    let syscall_file_path = out_path.join("syscall_types.rs");
+    bindings.write_to_file(syscall_file_path.clone())?;
+    Ok(())
+}
+
+fn generate_syscall_nr_file(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let syscall_type_changer = SyscallReaderCallback::default();
+    let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm/unistd.h")
         .parse_callbacks(Box::new(syscall_type_changer.clone()))
         .generate()?;
 
-    let out_path = PathBuf::from(env::var("OUT_DIR")?);
     let syscall_file_path = out_path.join("syscalls.rs");
     bindings.write_to_file(syscall_file_path.clone())?;
 
@@ -88,6 +110,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg(syscall_file_path)
         .spawn()?
         .wait()?;
-
     Ok(())
 }
