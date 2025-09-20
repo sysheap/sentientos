@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{ffi::c_void, marker::PhantomData};
 
 pub struct LinuxUserspaceArg<T> {
     arg: usize,
@@ -14,23 +14,21 @@ impl<T> LinuxUserspaceArg<T> {
     }
 }
 
-impl From<LinuxUserspaceArg<i32>> for i32 {
-    fn from(val: LinuxUserspaceArg<i32>) -> Self {
-        val.arg as i32
-    }
+macro_rules! simple_validate {
+    ($ty:ty) => {
+        impl LinuxUserspaceArg<$ty> {
+            pub fn validate(self) -> $ty {
+                self.arg as $ty
+            }
+        }
+    };
 }
-impl From<LinuxUserspaceArg<usize>> for usize {
-    fn from(val: LinuxUserspaceArg<usize>) -> Self {
-        val.arg
-    }
-}
-impl From<LinuxUserspaceArg<isize>> for isize {
-    fn from(val: LinuxUserspaceArg<isize>) -> Self {
-        val.arg as isize
-    }
-}
-impl From<LinuxUserspaceArg<*const u8>> for *const u8 {
-    fn from(val: LinuxUserspaceArg<*const u8>) -> Self {
-        val.arg as *const u8
+
+simple_validate!(i32);
+simple_validate!(usize);
+
+impl LinuxUserspaceArg<*const c_void> {
+    pub fn validate(self) -> *const c_void {
+        self.arg as *const c_void
     }
 }
