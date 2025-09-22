@@ -47,10 +47,23 @@ impl ParseCallbacks for SyscallReaderCallback {
     }
 }
 
+#[derive(Debug)]
+struct ErrnoCallback;
+
+impl ParseCallbacks for ErrnoCallback {
+    fn int_macro(&self, _name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
+        Some(bindgen::callbacks::IntKind::Custom {
+            name: "isize",
+            is_signed: true,
+        })
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_path = PathBuf::from(env::var("OUT_DIR")?);
     generate_syscall_nr_file(&out_path)?;
     generate_syscall_types(&out_path)?;
+    generate_error_types(&out_path)?;
     Ok(())
 }
 
@@ -68,6 +81,16 @@ fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Err
         .header("linux_headers/include/linux/time.h")
         .generate()?;
     let syscall_file_path = out_path.join("syscall_types.rs");
+    bindings.write_to_file(syscall_file_path.clone())?;
+    Ok(())
+}
+
+fn generate_error_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm-generic/errno.h")
+        .parse_callbacks(Box::new(ErrnoCallback))
+        .generate()?;
+    let syscall_file_path = out_path.join("errno.rs");
     bindings.write_to_file(syscall_file_path.clone())?;
     Ok(())
 }

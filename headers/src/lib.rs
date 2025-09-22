@@ -8,3 +8,7 @@ pub mod syscalls {
 pub mod syscall_types {
     include!(concat!(env!("OUT_DIR"), "/syscall_types.rs"));
 }
+
+pub mod errno {
+    include!(concat!(env!("OUT_DIR"), "/errno.rs"));
+}

@@ -11,7 +11,10 @@ use common::{
 };
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
-use headers::syscall_types::{pollfd, sigaction, sigset_t, stack_t, timespec};
+use headers::{
+    errno::{EBADF, EFAULT},
+    syscall_types::{pollfd, sigaction, sigset_t, stack_t, timespec},
+};
 
 linux_syscalls! {
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
@@ -38,7 +41,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let buf = buf.validate() as *const u8;
         let count = count.validate();
         if fd != 1 && fd != 2 {
-            return -1;
+            return -EBADF;
         }
 
         if fd == 2 {
@@ -49,7 +52,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .handler
             .sys_write(UserspaceArgument::new(FatPointer::new(buf, count)));
 
-        if result.is_ok() { count as isize } else { -1 }
+        if result.is_ok() {
+            count as isize
+        } else {
+            -EFAULT
+        }
     }
 
     fn exit_group(&mut self, status: LinuxUserspaceArg<c_int>) -> isize {
