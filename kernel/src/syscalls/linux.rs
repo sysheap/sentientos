@@ -1,9 +1,8 @@
-use core::ffi::{c_int, c_uint, c_void};
+use core::ffi::{c_int, c_uint};
 
-use crate::{print, syscalls::macros::linux_syscalls};
+use crate::{print, processes::process::ProcessRef, syscalls::macros::linux_syscalls};
 use common::{
     constructable::Constructable,
-    pointer::FatPointer,
     syscalls::{
         kernel::KernelSyscalls,
         trap_frame::{Register, TrapFrame},
@@ -12,7 +11,7 @@ use common::{
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 use headers::{
-    errno::{EBADF, EFAULT},
+    errno::EBADF,
     syscall_types::{pollfd, sigaction, sigset_t, stack_t, timespec},
 };
 
@@ -23,7 +22,7 @@ linux_syscalls! {
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: *const sigset_t, oldset: *mut sigset_t, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: *const stack_t, uoss: *mut stack_t);
-    SYSCALL_NR_WRITE => write(fd: c_int, buf: *const c_void, count: usize);
+    SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
 }
 
 pub struct LinuxSyscallHandler {
@@ -34,12 +33,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     fn write(
         &mut self,
         fd: LinuxUserspaceArg<i32>,
-        buf: LinuxUserspaceArg<*const c_void>,
+        buf: LinuxUserspaceArg<*const u8>,
         count: LinuxUserspaceArg<usize>,
     ) -> isize {
         let fd: i32 = fd.validate();
-        let buf = buf.validate() as *const u8;
-        let count = count.validate();
         if fd != 1 && fd != 2 {
             return -EBADF;
         }
@@ -48,15 +45,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             print!("ERROR: ");
         }
 
-        let result = self
-            .handler
-            .sys_write(UserspaceArgument::new(FatPointer::new(buf, count)));
+        let count = count.validate();
+        let buf = match buf.validate_str(count) {
+            Ok(guard) => guard,
+            Err(err) => return err,
+        };
 
-        if result.is_ok() {
-            count as isize
-        } else {
-            -EFAULT
-        }
+        print!("{}", buf.get());
+
+        count as isize
     }
 
     fn exit_group(&mut self, status: LinuxUserspaceArg<c_int>) -> isize {
@@ -106,6 +103,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _uoss: LinuxUserspaceArg<*mut stack_t>,
     ) -> isize {
         0
+    }
+
+    fn get_process(&self) -> ProcessRef {
+        self.handler.current_process().clone()
     }
 }
 
