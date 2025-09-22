@@ -1,14 +1,21 @@
-use core::{ffi::c_void, marker::PhantomData};
+use core::marker::PhantomData;
+
+use common::{mutex::MutexGuard, unwrap_or_return};
+use headers::errno::EFAULT;
+
+use crate::processes::process::{Process, ProcessRef};
 
 pub struct LinuxUserspaceArg<T> {
     arg: usize,
+    process: ProcessRef,
     phantom: PhantomData<T>,
 }
 
 impl<T> LinuxUserspaceArg<T> {
-    pub fn new(arg: usize) -> Self {
+    pub fn new(arg: usize, process: ProcessRef) -> Self {
         Self {
             arg,
+            process,
             phantom: PhantomData,
         }
     }
@@ -27,8 +34,36 @@ macro_rules! simple_validate {
 simple_validate!(i32);
 simple_validate!(usize);
 
-impl LinuxUserspaceArg<*const c_void> {
-    pub fn validate(self) -> *const c_void {
-        self.arg as *const c_void
+/// Contains a ref into the processes address space, therefore keeps a MutexGuard
+/// to the process so the memory mapping cannot be changed.
+pub struct ProcessRefGuard<'a, T: ?Sized> {
+    reference: &'a T,
+    // Field is never used, it is only there to keep the process locked
+    _process: MutexGuard<'a, Process>,
+}
+
+impl<'a, T: ?Sized> ProcessRefGuard<'a, T> {
+    pub fn get(&self) -> &'a T {
+        self.reference
+    }
+}
+
+impl LinuxUserspaceArg<*const u8> {
+    pub fn validate_str<'a>(&'a self, len: usize) -> Result<ProcessRefGuard<'a, str>, isize> {
+        let process_guard = self.process.lock();
+        let ptr = self.process.with_lock(|p| {
+            let pt = p.get_page_table();
+            let ptr = self.arg as *const u8;
+            if !pt.is_valid_userspace_fat_ptr(ptr, len, false) {
+                return None;
+            }
+            pt.translate_userspace_address_to_physical_address(ptr)
+        });
+        let ptr = unwrap_or_return!(ptr, Err(-EFAULT));
+        let slice = unsafe { core::str::from_raw_parts(ptr, len) };
+        Ok(ProcessRefGuard {
+            reference: slice,
+            _process: process_guard,
+        })
     }
 }

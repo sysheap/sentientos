@@ -4,6 +4,8 @@ macro_rules! linux_syscalls {
         pub trait LinuxSyscalls {
             $(fn $name(&mut self, $($arg_name: LinuxUserspaceArg<$arg_ty>),*) -> isize;)*
 
+            fn get_process(&self) -> $crate::processes::process::ProcessRef;
+
             fn handle(&mut self, trap_frame: &TrapFrame) -> isize {
                 let nr = trap_frame[Register::a7];
                 let args = [
@@ -15,7 +17,7 @@ macro_rules! linux_syscalls {
                     trap_frame[Register::a5]
                 ];
                 match nr {
-                    $(headers::syscalls::$number => self.$name($(LinuxUserspaceArg::<$arg_ty>::new(args[${index()}])),*)),*,
+                    $(headers::syscalls::$number => self.$name($(LinuxUserspaceArg::<$arg_ty>::new(args[${index()}], self.get_process())),*)),*,
                     syscall_nr => {
                         let name = headers::syscalls::SYSCALL_NAMES
                             .iter()
