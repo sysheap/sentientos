@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 
 use common::{mutex::MutexGuard, unwrap_or_return};
-use headers::errno::EFAULT;
+use headers::errno::Errno;
 
 use crate::processes::process::{Process, ProcessRef};
 
@@ -49,7 +49,7 @@ impl<'a, T: ?Sized> ProcessRefGuard<'a, T> {
 }
 
 impl LinuxUserspaceArg<*const u8> {
-    pub fn validate_str<'a>(&'a self, len: usize) -> Result<ProcessRefGuard<'a, str>, isize> {
+    pub fn validate_str<'a>(&'a self, len: usize) -> Result<ProcessRefGuard<'a, str>, Errno> {
         let process_guard = self.process.lock();
         let ptr = self.process.with_lock(|p| {
             let pt = p.get_page_table();
@@ -59,7 +59,7 @@ impl LinuxUserspaceArg<*const u8> {
             }
             pt.translate_userspace_address_to_physical_address(ptr)
         });
-        let ptr = unwrap_or_return!(ptr, Err(-EFAULT));
+        let ptr = unwrap_or_return!(ptr, Err(Errno::EFAULT));
         let slice = unsafe { core::str::from_raw_parts(ptr, len) };
         Ok(ProcessRefGuard {
             reference: slice,

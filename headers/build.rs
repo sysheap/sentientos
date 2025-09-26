@@ -16,13 +16,6 @@ struct SyscallReaderCallback {
     syscalls: Arc<Mutex<Vec<String>>>,
 }
 
-impl SyscallReaderCallback {
-    fn get_syscalls(&self) -> Vec<String> {
-        let lg = self.syscalls.lock().unwrap();
-        lg.clone()
-    }
-}
-
 impl ParseCallbacks for SyscallReaderCallback {
     fn int_macro(&self, name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
         if name.starts_with(SYSCALL_PREFIX) {
@@ -47,15 +40,22 @@ impl ParseCallbacks for SyscallReaderCallback {
     }
 }
 
-#[derive(Debug)]
-struct ErrnoCallback;
+#[derive(Debug, Clone, Default)]
+struct ErrnoCallback {
+    errnos: Arc<Mutex<Vec<(String, isize)>>>,
+}
 
 impl ParseCallbacks for ErrnoCallback {
-    fn int_macro(&self, _name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
-        Some(bindgen::callbacks::IntKind::Custom {
-            name: "isize",
-            is_signed: true,
-        })
+    fn int_macro(&self, name: &str, value: i64) -> Option<bindgen::callbacks::IntKind> {
+        // Ignore duplicate definitions
+        if ["EWOULDBLOCK", "EDEADLOCK"].contains(&name) {
+            return None;
+        }
+        self.errnos
+            .lock()
+            .unwrap()
+            .push((name.into(), value as isize));
+        None
     }
 }
 
@@ -86,12 +86,31 @@ fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Err
 }
 
 fn generate_error_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let bindings = default_bindgen_builder()
+    let errno_callback = ErrnoCallback::default();
+    let _ = default_bindgen_builder()
         .header("linux_headers/include/asm-generic/errno.h")
-        .parse_callbacks(Box::new(ErrnoCallback))
+        .parse_callbacks(Box::new(errno_callback.clone()))
         .generate()?;
-    let syscall_file_path = out_path.join("errno.rs");
-    bindings.write_to_file(syscall_file_path.clone())?;
+    let errno_path = out_path.join("errno.rs");
+    let mut errno_file = File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(errno_path.clone())?;
+
+    writeln!(errno_file, "#[repr(isize)]")?;
+    writeln!(errno_file, "#[derive(Debug, PartialEq, Eq, Copy, Clone)]")?;
+    writeln!(errno_file, "pub enum Errno {{")?;
+
+    for (error, value) in errno_callback.errnos.lock().unwrap().iter() {
+        writeln!(errno_file, "{error} = {value},")?;
+    }
+
+    writeln!(errno_file, "}}")?;
+
+    drop(errno_file);
+    format_file(errno_path)?;
+
     Ok(())
 }
 
@@ -109,13 +128,14 @@ fn generate_syscall_nr_file(out_path: &Path) -> Result<(), Box<dyn std::error::E
         .append(true)
         .open(syscall_file_path.clone())?;
 
-    let syscalls = syscall_type_changer.get_syscalls();
+    let lg = syscall_type_changer.syscalls.lock().unwrap();
+
     writeln!(
         syscall_names_file,
         "pub const SYSCALL_NAMES: [(usize, &str); {}] = [",
-        syscalls.len()
+        lg.len()
     )?;
-    for name in syscalls {
+    for name in lg.iter() {
         writeln!(
             syscall_names_file,
             "(SYSCALL_NR_{}, \"{name}\"),",
@@ -126,11 +146,15 @@ fn generate_syscall_nr_file(out_path: &Path) -> Result<(), Box<dyn std::error::E
 
     drop(syscall_names_file);
 
-    // Format newly generated file
+    format_file(syscall_file_path)?;
+    Ok(())
+}
+
+fn format_file(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     Command::new("cargo")
         .arg("fmt")
         .arg("--")
-        .arg(syscall_file_path)
+        .arg(path)
         .spawn()?
         .wait()?;
     Ok(())
