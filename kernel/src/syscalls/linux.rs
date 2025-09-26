@@ -11,7 +11,7 @@ use common::{
 
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 use headers::{
-    errno::EBADF,
+    errno::Errno,
     syscall_types::{pollfd, sigaction, sigset_t, stack_t, timespec},
 };
 
@@ -35,10 +35,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         fd: LinuxUserspaceArg<i32>,
         buf: LinuxUserspaceArg<*const u8>,
         count: LinuxUserspaceArg<usize>,
-    ) -> isize {
+    ) -> Result<isize, Errno> {
         let fd: i32 = fd.validate();
         if fd != 1 && fd != 2 {
-            return -EBADF;
+            return Err(Errno::EBADF);
         }
 
         if fd == 2 {
@@ -46,25 +46,22 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
 
         let count = count.validate();
-        let buf = match buf.validate_str(count) {
-            Ok(guard) => guard,
-            Err(err) => return err,
-        };
+        let buf = buf.validate_str(count)?;
 
         print!("{}", buf.get());
 
-        count as isize
+        Ok(count as isize)
     }
 
-    fn exit_group(&mut self, status: LinuxUserspaceArg<c_int>) -> isize {
+    fn exit_group(&mut self, status: LinuxUserspaceArg<c_int>) -> Result<isize, Errno> {
         let status = status.validate();
         self.handler
             .sys_exit(UserspaceArgument::new(status as isize));
-        0
+        Ok(0)
     }
 
-    fn set_tid_address(&mut self, _tidptr: LinuxUserspaceArg<*mut c_int>) -> isize {
-        0
+    fn set_tid_address(&mut self, _tidptr: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
+        Ok(0)
     }
 
     fn ppoll(
@@ -73,8 +70,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _n: LinuxUserspaceArg<c_uint>,
         _to: LinuxUserspaceArg<*const timespec>,
         _mask: LinuxUserspaceArg<*const sigset_t>,
-    ) -> isize {
-        0
+    ) -> Result<isize, Errno> {
+        Ok(0)
     }
 
     fn rt_sigaction(
@@ -83,8 +80,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _act: LinuxUserspaceArg<*const sigaction>,
         _oact: LinuxUserspaceArg<*mut sigaction>,
         _sigsetsize: LinuxUserspaceArg<usize>,
-    ) -> isize {
-        0
+    ) -> Result<isize, Errno> {
+        Ok(0)
     }
 
     fn rt_sigprocmask(
@@ -93,16 +90,16 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _set: LinuxUserspaceArg<*const sigset_t>,
         _oldset: LinuxUserspaceArg<*mut sigset_t>,
         _sigsetsize: LinuxUserspaceArg<usize>,
-    ) -> isize {
-        0
+    ) -> Result<isize, Errno> {
+        Ok(0)
     }
 
     fn sigaltstack(
         &mut self,
         _uss: LinuxUserspaceArg<*const stack_t>,
         _uoss: LinuxUserspaceArg<*mut stack_t>,
-    ) -> isize {
-        0
+    ) -> Result<isize, Errno> {
+        Ok(0)
     }
 
     fn get_process(&self) -> ProcessRef {

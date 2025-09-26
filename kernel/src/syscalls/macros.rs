@@ -2,11 +2,11 @@ macro_rules! linux_syscalls {
     ($($number:ident => $name:ident ($($arg_name: ident: $arg_ty:ty),*);)*) => {
         use $crate::syscalls::linux_validator::LinuxUserspaceArg;
         pub trait LinuxSyscalls {
-            $(fn $name(&mut self, $($arg_name: LinuxUserspaceArg<$arg_ty>),*) -> isize;)*
+            $(fn $name(&mut self, $($arg_name: LinuxUserspaceArg<$arg_ty>),*) -> Result<isize, headers::errno::Errno>;)*
 
             fn get_process(&self) -> $crate::processes::process::ProcessRef;
 
-            fn handle(&mut self, trap_frame: &TrapFrame) -> isize {
+            fn handle(&mut self, trap_frame: &TrapFrame) -> Result<isize, headers::errno::Errno> {
                 let nr = trap_frame[Register::a7];
                 let args = [
                     trap_frame[Register::a0],

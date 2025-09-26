@@ -63,7 +63,11 @@ fn handle_syscall() {
         let mut cpu = Cpu::current();
         let scheduler = cpu.scheduler_mut();
         let trap_frame = scheduler.trap_frame_mut();
-        trap_frame[Register::a0] = result as usize;
+        let ret = match result {
+            Ok(ret) => ret,
+            Err(errno) => -(errno as isize),
+        };
+        trap_frame[Register::a0] = ret as usize;
         Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
         None
     };
