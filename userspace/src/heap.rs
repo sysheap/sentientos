@@ -2,7 +2,7 @@
  * This is a quick&dirty copy&paste from the kernel to supply a heap for the userspace.
  * Either share the code or implement it properly!
  */
-use core::{
+use std::{
     alloc::{GlobalAlloc, Layout},
     marker::PhantomData,
     mem::{align_of, size_of},
@@ -58,9 +58,9 @@ trait Pages {
 impl Pages for [Page] {
     fn as_u8_slice(&mut self) -> &mut [u8] {
         unsafe {
-            core::slice::from_raw_parts_mut(
+            std::slice::from_raw_parts_mut(
                 self.as_mut_ptr() as *mut u8,
-                core::mem::size_of_val(self),
+                std::mem::size_of_val(self),
             )
         }
     }
@@ -85,7 +85,7 @@ impl AlignedSizeWithMetadata {
     fn from_layout(layout: Layout) -> Self {
         assert!(FreeBlock::DATA_ALIGNMENT >= layout.align());
         let size = align_up(
-            core::cmp::max(layout.size(), FreeBlock::MINIMUM_SIZE),
+            std::cmp::max(layout.size(), FreeBlock::MINIMUM_SIZE),
             FreeBlock::DATA_ALIGNMENT,
         );
         Self { size }
@@ -197,7 +197,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         layout.size() >= PAGE_SIZE || layout.align() == PAGE_SIZE
     }
 
-    fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
+    fn alloc(&mut self, layout: std::alloc::Layout) -> *mut u8 {
         if self.is_page_allocator_allocation(&layout) {
             // Allocate directly from the page allocator
             let pages = minimum_amount_of_pages(layout.size());
@@ -229,7 +229,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         block.cast().as_ptr()
     }
 
-    fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
+    fn dealloc(&mut self, ptr: *mut u8, layout: std::alloc::Layout) {
         assert!(!ptr.is_null());
         if self.is_page_allocator_allocation(&layout) {
             // Deallocate directly to the page allocator
@@ -303,11 +303,11 @@ impl<Allocator: PageAllocator> MutexHeap<Allocator> {
 }
 
 unsafe impl<Allocator: PageAllocator> GlobalAlloc for MutexHeap<Allocator> {
-    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         self.inner.lock().alloc(layout)
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
         self.inner.lock().dealloc(ptr, layout)
     }
 }
