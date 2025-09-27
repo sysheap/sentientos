@@ -3,7 +3,10 @@ use core::marker::PhantomData;
 use common::{mutex::MutexGuard, unwrap_or_return};
 use headers::errno::Errno;
 
-use crate::processes::process::{Process, ProcessRef};
+use crate::processes::{
+    process::{Process, ProcessRef},
+    userspace_ptr::UserspacePtrMut,
+};
 
 pub struct LinuxUserspaceArg<T> {
     arg: usize,
@@ -65,5 +68,11 @@ impl LinuxUserspaceArg<*const u8> {
             reference: slice,
             _process: process_guard,
         })
+    }
+}
+
+impl<T> LinuxUserspaceArg<*mut T> {
+    pub fn as_userspace_ptr(&self) -> UserspacePtrMut<T> {
+        UserspacePtrMut::new(self.arg as *mut T, ProcessRef::downgrade(&self.process))
     }
 }

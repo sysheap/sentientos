@@ -60,7 +60,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn set_tid_address(&mut self, _tidptr: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
+    fn set_tid_address(&mut self, tidptr: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
+        self.handler.current_thread().with_lock(|mut t| {
+            t.set_clear_child_tid(tidptr.as_userspace_ptr());
+        });
         Ok(0)
     }
 

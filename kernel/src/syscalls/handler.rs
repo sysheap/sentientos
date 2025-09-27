@@ -46,6 +46,10 @@ impl SyscallHandler {
     pub fn current_process(&self) -> &ProcessRef {
         &self.current_process
     }
+
+    pub fn current_thread(&self) -> &ThreadRef {
+        &self.current_thread
+    }
 }
 
 impl KernelSyscalls for SyscallHandler {

@@ -4,3 +4,4 @@ pub mod process_table;
 pub mod scheduler;
 pub mod thread;
 pub mod timer;
+pub mod userspace_ptr;

@@ -83,8 +83,18 @@ impl ProcessTable {
         );
         debug!("Removing pid={pid} from process table");
         if let Some(process) = self.processes.remove(&pid) {
-            for pid in process.lock().get_notifies_on_die() {
+            let lg = process.lock();
+            for pid in lg.get_notifies_on_die() {
                 self.wake_process_up(*pid);
+            }
+            for threads in lg.threads() {
+                threads.with_lock(|t| {
+                    if let Some(clear_child_tid) = t.get_clear_child_tid() {
+                        // We don't care if the address is not mapped anymore
+                        // Since this operation should only wake up other threads
+                        let _ = clear_child_tid.write_with_process_lock(&lg, 0);
+                    }
+                });
             }
         }
     }
