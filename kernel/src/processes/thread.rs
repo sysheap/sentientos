@@ -1,11 +1,13 @@
 use alloc::{string::String, sync::Arc};
-use core::any::TypeId;
+use core::{any::TypeId, ffi::c_int};
 
 use common::{
     mutex::Mutex,
     pid::{Pid, Tid},
     syscalls::trap_frame::{Register, TrapFrame},
 };
+
+use crate::processes::userspace_ptr::UserspacePtrMut;
 
 use super::process::{ProcessRef, ProcessWeakRef};
 
@@ -29,6 +31,7 @@ pub struct Thread {
     in_kernel_mode: bool,
     waiting_on_syscall: Option<TypeId>,
     process: ProcessWeakRef,
+    clear_child_tid: Option<UserspacePtrMut<c_int>>,
 }
 
 impl core::fmt::Display for Thread {
@@ -67,11 +70,20 @@ impl Thread {
             in_kernel_mode,
             waiting_on_syscall: None,
             process,
+            clear_child_tid: None,
         }))
     }
 
     pub fn get_tid(&self) -> Tid {
         self.tid
+    }
+
+    pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtrMut<c_int>) {
+        self.clear_child_tid = Some(clear_child_tid);
+    }
+
+    pub fn get_clear_child_tid(&self) -> &Option<UserspacePtrMut<c_int>> {
+        &self.clear_child_tid
     }
 
     pub fn get_register_state(&self) -> &TrapFrame {

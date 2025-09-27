@@ -22,6 +22,7 @@ use core::{
     fmt::Debug,
     sync::atomic::{AtomicU64, Ordering},
 };
+use headers::errno::Errno;
 
 use super::thread::{Thread, ThreadRef};
 
@@ -109,6 +110,22 @@ impl Process {
         process.lock().threads.insert(main_thread_tid, main_thread);
 
         process
+    }
+
+    pub fn write_userspace_ptr<T>(&self, ptr: *mut T, value: T) -> Result<(), Errno> {
+        let pt = self.get_page_table();
+        if !pt.is_valid_userspace_ptr(ptr, true) {
+            return Err(Errno::EFAULT);
+        }
+        if let Some(kernel_ptr) = pt.translate_userspace_address_to_physical_address(ptr) {
+            // SAFETY: We just validate the pointer
+            unsafe {
+                kernel_ptr.write(value);
+            }
+            Ok(())
+        } else {
+            Err(Errno::EFAULT)
+        }
     }
 
     pub fn create_powersave_process() -> Arc<Mutex<Self>> {
