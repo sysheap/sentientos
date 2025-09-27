@@ -1,8 +1,44 @@
+pub trait NeedsUserSpaceWrapper {
+    type Wrapped;
+    fn wrap_arg(value: usize, process: ProcessRef) -> Self::Wrapped;
+}
+
+macro_rules! impl_userspace_arg {
+    ($type:ty) => {
+        impl<T> NeedsUserSpaceWrapper for $type {
+            type Wrapped = LinuxUserspaceArg<$type>;
+            fn wrap_arg(value: usize, process: ProcessRef) -> Self::Wrapped {
+                LinuxUserspaceArg::new(value, process)
+            }
+        }
+    };
+}
+
+macro_rules! impl_plain_arg {
+    ($type:ty) => {
+        impl NeedsUserSpaceWrapper for $type {
+            type Wrapped = $type;
+            fn wrap_arg(value: usize, _process: ProcessRef) -> Self::Wrapped {
+                value as $type
+            }
+        }
+    };
+}
+
+impl_userspace_arg!(*const T);
+impl_userspace_arg!(*mut T);
+impl_userspace_arg!(Option<*const T>);
+impl_userspace_arg!(Option<*mut T>);
+
+impl_plain_arg!(c_int);
+impl_plain_arg!(c_uint);
+impl_plain_arg!(usize);
+
 macro_rules! linux_syscalls {
     ($($number:ident => $name:ident ($($arg_name: ident: $arg_ty:ty),*);)*) => {
         use $crate::syscalls::linux_validator::LinuxUserspaceArg;
         pub trait LinuxSyscalls {
-            $(fn $name(&mut self, $($arg_name: LinuxUserspaceArg<$arg_ty>),*) -> Result<isize, headers::errno::Errno>;)*
+            $(fn $name(&mut self, $($arg_name: <$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped),*) -> Result<isize, headers::errno::Errno>;)*
 
             fn get_process(&self) -> $crate::processes::process::ProcessRef;
 
@@ -17,7 +53,7 @@ macro_rules! linux_syscalls {
                     trap_frame[Register::a5]
                 ];
                 match nr {
-                    $(headers::syscalls::$number => self.$name($(LinuxUserspaceArg::<$arg_ty>::new(args[${index()}], self.get_process())),*)),*,
+                    $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())),*)),*,
                     syscall_nr => {
                         let name = headers::syscalls::SYSCALL_NAMES
                             .iter()
@@ -31,4 +67,8 @@ macro_rules! linux_syscalls {
     };
 }
 
+use core::ffi::{c_int, c_uint};
+
 pub(super) use linux_syscalls;
+
+use crate::{processes::process::ProcessRef, syscalls::linux_validator::LinuxUserspaceArg};

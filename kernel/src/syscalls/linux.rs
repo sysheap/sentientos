@@ -32,20 +32,14 @@ pub struct LinuxSyscallHandler {
 impl LinuxSyscalls for LinuxSyscallHandler {
     fn write(
         &mut self,
-        fd: LinuxUserspaceArg<i32>,
+        fd: i32,
         buf: LinuxUserspaceArg<*const u8>,
-        count: LinuxUserspaceArg<usize>,
+        count: usize,
     ) -> Result<isize, Errno> {
-        let fd: i32 = fd.validate();
         if fd != 1 && fd != 2 {
             return Err(Errno::EBADF);
         }
 
-        if fd == 2 {
-            print!("ERROR: ");
-        }
-
-        let count = count.validate();
         let string = buf.validate_str(count)?;
 
         print!("{}", string);
@@ -53,8 +47,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(count as isize)
     }
 
-    fn exit_group(&mut self, status: LinuxUserspaceArg<c_int>) -> Result<isize, Errno> {
-        let status = status.validate();
+    fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
         self.handler
             .sys_exit(UserspaceArgument::new(status as isize));
         Ok(0)
@@ -70,12 +63,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     fn ppoll(
         &mut self,
         fds: LinuxUserspaceArg<*mut pollfd>,
-        n: LinuxUserspaceArg<c_uint>,
+        n: c_uint,
         to: LinuxUserspaceArg<Option<*const timespec>>,
         mask: LinuxUserspaceArg<Option<*const sigset_t>>,
     ) -> Result<isize, Errno> {
-        let n = n.validate() as usize;
-        let _fds = fds.validate_slice(n)?;
+        let _fds = fds.validate_slice(n as usize)?;
         let _to = to.validate_ptr()?;
         let _mask = mask.validate_ptr()?;
         Ok(0)
@@ -83,20 +75,20 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn rt_sigaction(
         &mut self,
-        _sig: LinuxUserspaceArg<c_int>,
+        _sig: c_int,
         _act: LinuxUserspaceArg<*const sigaction>,
         _oact: LinuxUserspaceArg<*mut sigaction>,
-        _sigsetsize: LinuxUserspaceArg<usize>,
+        _sigsetsize: usize,
     ) -> Result<isize, Errno> {
         Ok(0)
     }
 
     fn rt_sigprocmask(
         &mut self,
-        _how: LinuxUserspaceArg<c_int>,
+        _how: c_int,
         _set: LinuxUserspaceArg<*const sigset_t>,
         _oldset: LinuxUserspaceArg<*mut sigset_t>,
-        _sigsetsize: LinuxUserspaceArg<usize>,
+        _sigsetsize: usize,
     ) -> Result<isize, Errno> {
         Ok(0)
     }
