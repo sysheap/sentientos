@@ -20,20 +20,6 @@ impl<T> LinuxUserspaceArg<T> {
     }
 }
 
-macro_rules! simple_validate {
-    ($ty:ty) => {
-        impl LinuxUserspaceArg<$ty> {
-            pub fn validate(self) -> $ty {
-                self.arg as $ty
-            }
-        }
-    };
-}
-
-simple_validate!(i32);
-simple_validate!(u32);
-simple_validate!(usize);
-
 impl LinuxUserspaceArg<*const u8> {
     pub fn validate_str(&self, len: usize) -> Result<String, Errno> {
         self.process
