@@ -17,7 +17,7 @@ use headers::{
 
 linux_syscalls! {
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
-    SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: *const timespec, mask: *const sigset_t);
+    SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: *const sigset_t, oldset: *mut sigset_t, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
@@ -46,9 +46,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
 
         let count = count.validate();
-        let buf = buf.validate_str(count)?;
+        let string = buf.validate_str(count)?;
 
-        print!("{}", buf.get());
+        print!("{}", string);
 
         Ok(count as isize)
     }
@@ -62,18 +62,22 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn set_tid_address(&mut self, tidptr: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
         self.handler.current_thread().with_lock(|mut t| {
-            t.set_clear_child_tid(tidptr.as_userspace_ptr());
+            t.set_clear_child_tid((&tidptr).into());
         });
         Ok(0)
     }
 
     fn ppoll(
         &mut self,
-        _fds: LinuxUserspaceArg<*mut pollfd>,
-        _n: LinuxUserspaceArg<c_uint>,
-        _to: LinuxUserspaceArg<*const timespec>,
-        _mask: LinuxUserspaceArg<*const sigset_t>,
+        fds: LinuxUserspaceArg<*mut pollfd>,
+        n: LinuxUserspaceArg<c_uint>,
+        to: LinuxUserspaceArg<Option<*const timespec>>,
+        mask: LinuxUserspaceArg<Option<*const sigset_t>>,
     ) -> Result<isize, Errno> {
+        let n = n.validate() as usize;
+        let _fds = fds.validate_slice(n)?;
+        let _to = to.validate_ptr()?;
+        let _mask = mask.validate_ptr()?;
         Ok(0)
     }
 
@@ -99,9 +103,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn sigaltstack(
         &mut self,
-        _uss: LinuxUserspaceArg<*const stack_t>,
+        uss: LinuxUserspaceArg<*const stack_t>,
         _uoss: LinuxUserspaceArg<*mut stack_t>,
     ) -> Result<isize, Errno> {
+        let _uss = uss.validate_ptr()?;
         Ok(0)
     }
 

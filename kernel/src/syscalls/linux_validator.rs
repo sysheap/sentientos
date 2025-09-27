@@ -1,12 +1,8 @@
+use crate::processes::{process::ProcessRef, userspace_ptr::UserspacePtr};
+use alloc::{string::String, vec::Vec};
+use common::pointer::Pointer;
 use core::marker::PhantomData;
-
-use common::{mutex::MutexGuard, unwrap_or_return};
 use headers::errno::Errno;
-
-use crate::processes::{
-    process::{Process, ProcessRef},
-    userspace_ptr::UserspacePtrMut,
-};
 
 pub struct LinuxUserspaceArg<T> {
     arg: usize,
@@ -35,44 +31,55 @@ macro_rules! simple_validate {
 }
 
 simple_validate!(i32);
+simple_validate!(u32);
 simple_validate!(usize);
 
-/// Contains a ref into the processes address space, therefore keeps a MutexGuard
-/// to the process so the memory mapping cannot be changed.
-pub struct ProcessRefGuard<'a, T: ?Sized> {
-    reference: &'a T,
-    // Field is never used, it is only there to keep the process locked
-    _process: MutexGuard<'a, Process>,
-}
-
-impl<'a, T: ?Sized> ProcessRefGuard<'a, T> {
-    pub fn get(&self) -> &'a T {
-        self.reference
-    }
-}
-
 impl LinuxUserspaceArg<*const u8> {
-    pub fn validate_str<'a>(&'a self, len: usize) -> Result<ProcessRefGuard<'a, str>, Errno> {
-        let process_guard = self.process.lock();
-        let ptr = self.process.with_lock(|p| {
-            let pt = p.get_page_table();
-            let ptr = self.arg as *const u8;
-            if !pt.is_valid_userspace_fat_ptr(ptr, len, false) {
-                return None;
-            }
-            pt.translate_userspace_address_to_physical_address(ptr)
-        });
-        let ptr = unwrap_or_return!(ptr, Err(Errno::EFAULT));
-        let slice = unsafe { core::str::from_raw_parts(ptr, len) };
-        Ok(ProcessRefGuard {
-            reference: slice,
-            _process: process_guard,
-        })
+    pub fn validate_str(&self, len: usize) -> Result<String, Errno> {
+        self.process
+            .with_lock(|p| p.read_userspace_str(&self.into(), len))
     }
 }
 
-impl<T> LinuxUserspaceArg<*mut T> {
-    pub fn as_userspace_ptr(&self) -> UserspacePtrMut<T> {
-        UserspacePtrMut::new(self.arg as *mut T, ProcessRef::downgrade(&self.process))
+impl<T> LinuxUserspaceArg<*const T> {
+    pub fn validate_ptr(&self) -> Result<T, Errno> {
+        self.process
+            .with_lock(|p| p.read_userspace_ptr(&self.into()))
+    }
+}
+
+impl<T> LinuxUserspaceArg<Option<*const T>> {
+    pub fn validate_ptr(&self) -> Result<Option<T>, Errno> {
+        if self.arg == 0 {
+            return Ok(None);
+        }
+        self.process
+            .with_lock(|p| p.read_userspace_ptr(&self.into()))
+            .map(|r| Some(r))
+    }
+}
+
+impl<T: Clone> LinuxUserspaceArg<*mut T> {
+    pub fn validate_slice(&self, len: usize) -> Result<Vec<T>, Errno> {
+        self.process
+            .with_lock(|p| p.read_userspace_slice(&self.into(), len))
+    }
+}
+
+impl<PTR: Pointer> From<&LinuxUserspaceArg<PTR>> for UserspacePtr<PTR> {
+    fn from(value: &LinuxUserspaceArg<PTR>) -> Self {
+        Self::new(PTR::as_pointer(value.arg))
+    }
+}
+
+impl<PTR: Pointer> From<&LinuxUserspaceArg<Option<PTR>>> for UserspacePtr<PTR> {
+    fn from(value: &LinuxUserspaceArg<Option<PTR>>) -> Self {
+        Self::new(PTR::as_pointer(value.arg))
+    }
+}
+
+impl<T> From<&LinuxUserspaceArg<*mut T>> for UserspacePtr<*const T> {
+    fn from(value: &LinuxUserspaceArg<*mut T>) -> Self {
+        Self::new(value.arg as *const T)
     }
 }

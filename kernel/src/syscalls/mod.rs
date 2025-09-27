@@ -1,6 +1,6 @@
 pub mod handler;
 pub mod linux;
-mod linux_validator;
+pub mod linux_validator;
 mod macros;
 mod validator;
 

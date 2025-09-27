@@ -7,7 +7,7 @@ use common::{
     syscalls::trap_frame::{Register, TrapFrame},
 };
 
-use crate::processes::userspace_ptr::UserspacePtrMut;
+use crate::processes::userspace_ptr::UserspacePtr;
 
 use super::process::{ProcessRef, ProcessWeakRef};
 
@@ -31,7 +31,7 @@ pub struct Thread {
     in_kernel_mode: bool,
     waiting_on_syscall: Option<TypeId>,
     process: ProcessWeakRef,
-    clear_child_tid: Option<UserspacePtrMut<c_int>>,
+    clear_child_tid: Option<UserspacePtr<*mut c_int>>,
 }
 
 impl core::fmt::Display for Thread {
@@ -78,11 +78,11 @@ impl Thread {
         self.tid
     }
 
-    pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtrMut<c_int>) {
+    pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtr<*mut c_int>) {
         self.clear_child_tid = Some(clear_child_tid);
     }
 
-    pub fn get_clear_child_tid(&self) -> &Option<UserspacePtrMut<c_int>> {
+    pub fn get_clear_child_tid(&self) -> &Option<UserspacePtr<*mut c_int>> {
         &self.clear_child_tid
     }
 

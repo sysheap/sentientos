@@ -3,7 +3,10 @@ use crate::{
     klibc::elf::ElfFile,
     memory::{PAGE_SIZE, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     net::sockets::SharedAssignedSocket,
-    processes::loader::{self, LoadedElf, STACK_END, STACK_SIZE, STACK_SIZE_PAGES, STACK_START},
+    processes::{
+        loader::{self, LoadedElf, STACK_END, STACK_SIZE, STACK_SIZE_PAGES, STACK_START},
+        userspace_ptr::UserspacePtr,
+    },
 };
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -16,6 +19,7 @@ use common::{
     mutex::Mutex,
     net::UDPDescriptor,
     pid::{Pid, Tid},
+    pointer::Pointer,
     syscalls::trap_frame::{Register, TrapFrame},
 };
 use core::{
@@ -112,20 +116,75 @@ impl Process {
         process
     }
 
-    pub fn write_userspace_ptr<T>(&self, ptr: *mut T, value: T) -> Result<(), Errno> {
+    pub fn read_userspace_slice<T: Clone>(
+        &self,
+        ptr: &UserspacePtr<*const T>,
+        len: usize,
+    ) -> Result<Vec<T>, Errno> {
+        let kernel_ptr = self.get_kernel_space_fat_pointer(ptr, len)?;
+        // SAFETY: We just validate the pointer
+        let slice = unsafe { core::slice::from_raw_parts(kernel_ptr, len) };
+        Ok(slice.to_vec())
+    }
+
+    pub fn read_userspace_str(
+        &self,
+        ptr: &UserspacePtr<*const u8>,
+        len: usize,
+    ) -> Result<String, Errno> {
+        let kernel_ptr = self.get_kernel_space_fat_pointer(ptr, len)?;
+        // SAFETY: We just validate the pointer
+        let slice = unsafe { core::slice::from_raw_parts(kernel_ptr, len) };
+        let cow = String::from_utf8_lossy(slice);
+        Ok(cow.into_owned())
+    }
+
+    fn get_kernel_space_pointer<PTR: Pointer>(
+        &self,
+        ptr: &UserspacePtr<PTR>,
+    ) -> Result<PTR, Errno> {
         let pt = self.get_page_table();
-        if !pt.is_valid_userspace_ptr(ptr, true) {
+        // SAFETY: We know it is a userspace pointer and we gonna translate it later
+        let ptr = unsafe { ptr.get() };
+        if !pt.is_valid_userspace_ptr(ptr, PTR::WRITABLE) {
             return Err(Errno::EFAULT);
         }
-        if let Some(kernel_ptr) = pt.translate_userspace_address_to_physical_address(ptr) {
-            // SAFETY: We just validate the pointer
-            unsafe {
-                kernel_ptr.write(value);
-            }
-            Ok(())
-        } else {
-            Err(Errno::EFAULT)
+        pt.translate_userspace_address_to_physical_address(ptr)
+            .ok_or(Errno::EFAULT)
+    }
+
+    fn get_kernel_space_fat_pointer<PTR: Pointer>(
+        &self,
+        ptr: &UserspacePtr<PTR>,
+        len: usize,
+    ) -> Result<PTR, Errno> {
+        let pt = self.get_page_table();
+        // SAFETY: We know it is a userspace pointer and we gonna translate it later
+        let ptr = unsafe { ptr.get() };
+        if !pt.is_valid_userspace_fat_ptr(ptr, len, PTR::WRITABLE) {
+            return Err(Errno::EFAULT);
         }
+        pt.translate_userspace_address_to_physical_address(ptr)
+            .ok_or(Errno::EFAULT)
+    }
+
+    pub fn read_userspace_ptr<T>(&self, ptr: &UserspacePtr<*const T>) -> Result<T, Errno> {
+        let kernel_ptr = self.get_kernel_space_pointer(ptr)?;
+        // SAFETY: We just validate the pointer
+        unsafe { Ok(kernel_ptr.read()) }
+    }
+
+    pub fn write_userspace_ptr<T>(
+        &self,
+        ptr: &UserspacePtr<*mut T>,
+        value: T,
+    ) -> Result<(), Errno> {
+        let kernel_ptr = self.get_kernel_space_pointer(ptr)?;
+        // SAFETY: We just validate the pointer
+        unsafe {
+            kernel_ptr.write(value);
+        }
+        Ok(())
     }
 
     pub fn create_powersave_process() -> Arc<Mutex<Self>> {

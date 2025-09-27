@@ -1,31 +1,33 @@
-use common::mutex::MutexGuard;
+use common::{mutex::MutexGuard, pointer::Pointer};
 use headers::errno::Errno;
 
-use crate::processes::process::{Process, ProcessWeakRef};
+use crate::processes::process::Process;
 
 // SAFETY: Userspace pointer can safely moved between Kernel threads.
-unsafe impl<T> Send for UserspacePtrMut<T> {}
+unsafe impl<PTR: Pointer> Send for UserspacePtr<PTR> {}
 
 #[derive(Debug)]
-pub struct UserspacePtrMut<T> {
+pub struct UserspacePtr<PTR: Pointer> {
     /// Pointer is a userspace pointer
-    ptr: *mut T,
-    _process: ProcessWeakRef,
+    ptr: PTR,
 }
 
-impl<T> UserspacePtrMut<T> {
-    pub fn new(ptr: *mut T, process: ProcessWeakRef) -> Self {
-        Self {
-            ptr,
-            _process: process,
-        }
+impl<PTR: Pointer> UserspacePtr<PTR> {
+    pub fn new(ptr: PTR) -> Self {
+        Self { ptr }
     }
 
+    pub unsafe fn get(&self) -> PTR {
+        self.ptr
+    }
+}
+
+impl<T> UserspacePtr<*mut T> {
     pub fn write_with_process_lock(
         &self,
         process_lock: &MutexGuard<'_, Process>,
         value: T,
     ) -> Result<(), Errno> {
-        process_lock.write_userspace_ptr(self.ptr, value)
+        process_lock.write_userspace_ptr(self, value)
     }
 }
