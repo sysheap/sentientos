@@ -6,67 +6,9 @@ edition = "2024"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
-default-target = "riscv64gc-unknown-linux-musl"
+forced-target = "riscv64gc-unknown-linux-musl"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 common = { path = "../common" }
-
-# Without theese the rust-analyzer would try to build the crate with tests enabled
-# which is not possible in no_std environments. I'm looking for a way where I don't
-# have to specify that individually for every file. But because userspace will
-# change anyways in the future, let's leave like that for now.
-[lib]
-test = false
-bench = false
-
-[[bin]]
-name = "connect4"
-test = false
-bench = false
-
-[[bin]]
-name = "init"
-test = false
-bench = false
-
-[[bin]]
-name = "loop"
-test = false
-bench = false
-
-[[bin]]
-name = "panic"
-test = false
-bench = false
-
-[[bin]]
-name = "prog1"
-test = false
-bench = false
-
-[[bin]]
-name = "prog2"
-test = false
-bench = false
-
-[[bin]]
-name = "udp"
-test = false
-bench = false
-
-[[bin]]
-name = "sesh"
-test = false
-bench = false
-
-[[bin]]
-name = "stress"
-test = false
-bench = false
-
-[[bin]]
-name = "echo"
-test = false
-bench = false
