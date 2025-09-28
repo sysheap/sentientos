@@ -1,11 +1,20 @@
-use crate::{cpu::Cpu, debug, device_tree, sbi};
-use common::{big_endian::BigEndian, runtime_initialized::RuntimeInitializedData};
+use crate::{
+    cpu::Cpu, debug, device_tree, klibc::btreemap::SplitOffLowerThan,
+    processes::thread::ThreadWeakRef, sbi,
+};
+use alloc::{collections::BTreeMap, vec::Vec};
+use common::{big_endian::BigEndian, mutex::Mutex, runtime_initialized::RuntimeInitializedData};
 use core::arch::asm;
+use headers::{errno::Errno, syscall_types::timespec};
 
 pub const CLINT_BASE: usize = 0x2000000;
 pub const CLINT_SIZE: usize = 0x10000;
 
-static CLOCKS_PER_SEC: RuntimeInitializedData<u64> = RuntimeInitializedData::new();
+static CLOCKS_PER_NANO: RuntimeInitializedData<u64> = RuntimeInitializedData::new();
+
+type WakeupClockTime = u64;
+
+static WAKEUP_QUEUE: Mutex<BTreeMap<WakeupClockTime, ThreadWeakRef>> = Mutex::new(BTreeMap::new());
 
 pub fn init() {
     let clocks_per_sec = device_tree::THE
@@ -17,15 +26,31 @@ pub fn init() {
         .consume_sized_type::<BigEndian<u32>>()
         .expect("The value must be u32")
         .get() as u64;
-    CLOCKS_PER_SEC.initialize(clocks_per_sec);
+    CLOCKS_PER_NANO.initialize(clocks_per_sec / 1000 / 1000);
+}
+
+pub fn register_wakeup(duration: &timespec, thread: ThreadWeakRef) -> Result<(), Errno> {
+    let clocks_per_nano = *CLOCKS_PER_NANO;
+    let clocks_per_second = clocks_per_nano * 1000 * 1000;
+    let clocks = u64::try_from(duration.tv_sec)? * clocks_per_second
+        + u64::try_from(duration.tv_nsec)? * clocks_per_nano;
+    let wakeup_time = get_current_clocks() + clocks;
+    WAKEUP_QUEUE.lock().insert(wakeup_time, thread);
+    Ok(())
+}
+
+pub fn return_threads_to_wakeup() -> Vec<ThreadWeakRef> {
+    let current = get_current_clocks();
+    let mut lg = WAKEUP_QUEUE.lock();
+    let threads = lg.split_off_lower_than(&current);
+    threads.into_values().collect()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();
-    assert_eq!(*CLOCKS_PER_SEC / 1000, 10_000);
-    let next = current + ((*CLOCKS_PER_SEC / 1000) * milliseconds);
+    let next = current + (*CLOCKS_PER_NANO * 1000 * milliseconds);
     sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
     Cpu::enable_timer_interrupt();
 }

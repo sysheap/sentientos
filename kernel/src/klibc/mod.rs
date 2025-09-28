@@ -1,3 +1,4 @@
+pub mod btreemap;
 pub mod elf;
 pub mod mmio;
 pub mod sizes;

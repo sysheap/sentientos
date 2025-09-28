@@ -108,6 +108,16 @@ fn generate_error_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error
 
     writeln!(errno_file, "}}")?;
 
+    writeln!(
+        errno_file,
+        "            
+impl From<core::num::TryFromIntError> for Errno {{
+    fn from(_value: core::num::TryFromIntError) -> Self {{
+        Errno::EINVAL
+    }}
+}}"
+    )?;
+
     drop(errno_file);
     format_file(errno_path)?;
 

@@ -65,8 +65,18 @@ impl CpuScheduler {
 
     pub fn schedule(&mut self) {
         debug!("Schedule next process");
+        self.check_wakeup_queue();
         self.prepare_next_process();
         timer::set_timer(10);
+    }
+
+    fn check_wakeup_queue(&mut self) {
+        let wakeup_threads = timer::return_threads_to_wakeup();
+        for thread in wakeup_threads.into_iter().filter_map(|w| w.upgrade()) {
+            thread.with_lock(|mut t| {
+                t.resume_on_syscall_linux(Ok(0));
+            });
+        }
     }
 
     pub fn kill_current_process(&mut self) {
