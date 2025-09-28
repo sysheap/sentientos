@@ -1,6 +1,10 @@
 use core::ffi::{c_int, c_uint};
 
-use crate::{print, processes::process::ProcessRef, syscalls::macros::linux_syscalls};
+use crate::{
+    print,
+    processes::{process::ProcessRef, thread::ThreadRef, timer},
+    syscalls::macros::linux_syscalls,
+};
 use common::{
     constructable::Constructable,
     syscalls::{
@@ -23,6 +27,7 @@ linux_syscalls! {
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: *const stack_t, uoss: *mut stack_t);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
+    SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
 }
 
 pub struct LinuxSyscallHandler {
@@ -104,6 +109,25 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn get_process(&self) -> ProcessRef {
         self.handler.current_process().clone()
+    }
+
+    fn nanosleep(
+        &mut self,
+        duration: LinuxUserspaceArg<*const timespec>,
+        _rem: LinuxUserspaceArg<Option<*const timespec>>,
+    ) -> Result<isize, Errno> {
+        let duration = duration.validate_ptr()?;
+        if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
+            return Err(Errno::EINVAL);
+        }
+        self.handler.current_thread().with_lock(|mut t| {
+            t.set_waiting_on_syscall::<Result<isize, Errno>>();
+        });
+        timer::register_wakeup(
+            &duration,
+            ThreadRef::downgrade(self.handler.current_thread()),
+        )?;
+        Ok(0)
     }
 }
 

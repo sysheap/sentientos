@@ -1,5 +1,9 @@
-use alloc::{string::String, sync::Arc};
+use alloc::{
+    string::String,
+    sync::{Arc, Weak},
+};
 use core::{any::TypeId, ffi::c_int};
+use headers::errno::Errno;
 
 use common::{
     mutex::Mutex,
@@ -12,6 +16,7 @@ use crate::processes::userspace_ptr::UserspacePtr;
 use super::process::{ProcessRef, ProcessWeakRef};
 
 pub type ThreadRef = Arc<Mutex<Thread>>;
+pub type ThreadWeakRef = Weak<Mutex<Thread>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
@@ -151,6 +156,21 @@ impl Thread {
             }
         });
 
+        self.waiting_on_syscall = None;
+        self.state = ThreadState::Runnable;
+    }
+
+    pub fn resume_on_syscall_linux(&mut self, return_value: Result<isize, Errno>) {
+        assert_eq!(
+            self.waiting_on_syscall,
+            Some(core::any::TypeId::of::<Result<isize, Errno>>()),
+            "resume return type is different than expected"
+        );
+        let ret = match return_value {
+            Ok(ret) => ret,
+            Err(errno) => -(errno as isize),
+        };
+        self.register_state[Register::a0] = ret as usize;
         self.waiting_on_syscall = None;
         self.state = ThreadState::Runnable;
     }
