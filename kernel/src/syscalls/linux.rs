@@ -25,7 +25,7 @@ linux_syscalls! {
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: *const sigset_t, oldset: *mut sigset_t, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
-    SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: *const stack_t, uoss: *mut stack_t);
+    SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
 }
@@ -100,10 +100,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn sigaltstack(
         &mut self,
-        uss: LinuxUserspaceArg<*const stack_t>,
-        _uoss: LinuxUserspaceArg<*mut stack_t>,
+        uss: LinuxUserspaceArg<Option<*const stack_t>>,
+        uoss: LinuxUserspaceArg<Option<*mut stack_t>>,
     ) -> Result<isize, Errno> {
-        let _uss = uss.validate_ptr()?;
+        let uss = uss.validate_ptr()?;
+        self.handler.current_thread().with_lock(|mut t| {
+            let old = t.get_sigaltstack();
+            if let Some(uss) = uss {
+                t.set_sigaltstack(&uss);
+            }
+            uoss.write_if_not_none(old)?;
+            Ok::<(), Errno>(())
+        })?;
         Ok(0)
     }
 

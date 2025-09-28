@@ -52,6 +52,17 @@ impl<T: Clone> LinuxUserspaceArg<*mut T> {
     }
 }
 
+impl<T: Clone> LinuxUserspaceArg<Option<*mut T>> {
+    pub fn write_if_not_none(&self, value: T) -> Result<Option<()>, Errno> {
+        if self.arg == 0 {
+            return Ok(None);
+        }
+        self.process
+            .with_lock(|p| p.write_userspace_ptr(&self.into(), value))?;
+        Ok(Some(()))
+    }
+}
+
 impl<PTR: Pointer> From<&LinuxUserspaceArg<PTR>> for UserspacePtr<PTR> {
     fn from(value: &LinuxUserspaceArg<PTR>) -> Self {
         Self::new(PTR::as_pointer(value.arg))
