@@ -2,8 +2,11 @@ use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
-use core::{any::TypeId, ffi::c_int};
-use headers::errno::Errno;
+use core::{any::TypeId, ffi::c_int, ptr::null_mut};
+use headers::{
+    errno::Errno,
+    syscall_types::{sigaltstack, stack_t},
+};
 
 use common::{
     mutex::Mutex,
@@ -11,7 +14,7 @@ use common::{
     syscalls::trap_frame::{Register, TrapFrame},
 };
 
-use crate::processes::userspace_ptr::UserspacePtr;
+use crate::processes::userspace_ptr::{ContainsUserspacePtr, UserspacePtr};
 
 use super::process::{ProcessRef, ProcessWeakRef};
 
@@ -37,6 +40,7 @@ pub struct Thread {
     waiting_on_syscall: Option<TypeId>,
     process: ProcessWeakRef,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
+    sigaltstack: ContainsUserspacePtr<stack_t>,
 }
 
 impl core::fmt::Display for Thread {
@@ -76,11 +80,24 @@ impl Thread {
             waiting_on_syscall: None,
             process,
             clear_child_tid: None,
+            sigaltstack: ContainsUserspacePtr(sigaltstack {
+                ss_sp: null_mut(),
+                ss_flags: 0,
+                ss_size: 0,
+            }),
         }))
     }
 
     pub fn get_tid(&self) -> Tid {
         self.tid
+    }
+
+    pub fn get_sigaltstack(&self) -> sigaltstack {
+        self.sigaltstack.0
+    }
+
+    pub fn set_sigaltstack(&mut self, sigaltstack: &sigaltstack) {
+        self.sigaltstack.0 = *sigaltstack;
     }
 
     pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtr<*mut c_int>) {

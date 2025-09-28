@@ -31,3 +31,9 @@ impl<T> UserspacePtr<*mut T> {
         process_lock.write_userspace_ptr(self, value)
     }
 }
+
+// SAFETY: Userspace pointer can safely moved between Kernel threads.
+unsafe impl<T> Send for ContainsUserspacePtr<T> {}
+
+#[derive(Debug)]
+pub struct ContainsUserspacePtr<T>(pub T);
