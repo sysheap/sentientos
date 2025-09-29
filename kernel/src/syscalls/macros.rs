@@ -32,6 +32,7 @@ impl_userspace_arg!(Option<*mut T>);
 
 impl_plain_arg!(c_int);
 impl_plain_arg!(c_uint);
+impl_plain_arg!(c_ulong);
 impl_plain_arg!(usize);
 
 macro_rules! linux_syscalls {
@@ -67,7 +68,7 @@ macro_rules! linux_syscalls {
     };
 }
 
-use core::ffi::{c_int, c_uint};
+use core::ffi::{c_int, c_uint, c_ulong};
 
 pub(super) use linux_syscalls;
 
