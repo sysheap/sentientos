@@ -17,15 +17,16 @@ use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 use headers::{
     errno::Errno,
     syscall_types::{
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, pollfd, sigaction, sigset_t, stack_t, timespec,
+        _NSIG, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, pollfd, sigaction, sigset_t,
+        stack_t, timespec,
     },
 };
 
 linux_syscalls! {
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
-    SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: usize);
-    SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
+    SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
+    SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
@@ -116,17 +117,36 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn rt_sigaction(
         &mut self,
-        _sig: c_int,
-        _act: LinuxUserspaceArg<*const sigaction>,
-        _oact: LinuxUserspaceArg<*mut sigaction>,
-        _sigsetsize: usize,
+        sig: c_uint,
+        act: LinuxUserspaceArg<Option<*const sigaction>>,
+        oact: LinuxUserspaceArg<Option<*mut sigaction>>,
+        sigsetsize: usize,
     ) -> Result<isize, Errno> {
+        if sigsetsize != core::mem::size_of::<sigset_t>()
+            || matches!(sig, SIGKILL | SIGSTOP)
+            || sig >= _NSIG
+        {
+            return Err(Errno::EINVAL);
+        }
+
+        let old_act = if let Some(act) = act.validate_ptr()? {
+            self.handler
+                .current_thread()
+                .with_lock(|mut t| t.set_sigaction(sig, act))
+        } else {
+            self.handler
+                .current_thread()
+                .with_lock(|t| t.get_sigaction(sig))
+        }?;
+
+        oact.write_if_not_none(old_act)?;
+
         Ok(0)
     }
 
     fn rt_sigprocmask(
         &mut self,
-        how: c_int,
+        how: c_uint,
         set: LinuxUserspaceArg<Option<*const sigset_t>>,
         oldset: LinuxUserspaceArg<Option<*mut sigset_t>>,
         sigsetsize: usize,
@@ -140,7 +160,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let old_set_in_thread = if let Some(new_set) = new_set {
             self.handler.current_thread().with_lock(|mut t| {
                 let mut current_set = t.get_sigset();
-                match how as u32 {
+                match how {
                     SIG_BLOCK => current_set.sig[0] |= new_set.sig[0],
                     SIG_UNBLOCK => current_set.sig[0] &= !new_set.sig[0],
                     SIG_SETMASK => current_set.sig[0] = new_set.sig[0],

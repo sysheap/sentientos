@@ -2,10 +2,14 @@ use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
-use core::{any::TypeId, ffi::c_int, ptr::null_mut};
+use core::{
+    any::TypeId,
+    ffi::{c_int, c_uint},
+    ptr::null_mut,
+};
 use headers::{
     errno::Errno,
-    syscall_types::{sigaltstack, sigset_t, stack_t},
+    syscall_types::{_NSIG, sigaction, sigaltstack, sigset_t, stack_t},
 };
 
 use common::{
@@ -42,6 +46,7 @@ pub struct Thread {
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     sigaltstack: ContainsUserspacePtr<stack_t>,
     sigmask: sigset_t,
+    sigaction: [sigaction; _NSIG as usize],
 }
 
 impl core::fmt::Display for Thread {
@@ -87,6 +92,11 @@ impl Thread {
                 ss_size: 0,
             }),
             sigmask: sigset_t { sig: [0] },
+            sigaction: [sigaction {
+                sa_handler: None,
+                sa_flags: 0,
+                sa_mask: sigset_t { sig: [0] },
+            }; _NSIG as usize],
         }))
     }
 
@@ -94,14 +104,29 @@ impl Thread {
         self.tid
     }
 
+    pub fn set_sigaction(&mut self, sig: c_uint, sigaction: sigaction) -> Result<sigaction, Errno> {
+        if sig >= _NSIG {
+            return Err(Errno::EINVAL);
+        }
+        Ok(core::mem::replace(
+            &mut self.sigaction[sig as usize],
+            sigaction,
+        ))
+    }
+
+    pub fn get_sigaction(&self, sig: c_uint) -> Result<sigaction, Errno> {
+        if sig >= _NSIG {
+            return Err(Errno::EINVAL);
+        }
+        Ok(self.sigaction[sig as usize])
+    }
+
     pub fn get_sigset(&self) -> sigset_t {
         self.sigmask
     }
 
     pub fn set_sigset(&mut self, sigmask: sigset_t) -> sigset_t {
-        let old = self.sigmask;
-        self.sigmask = sigmask;
-        old
+        core::mem::replace(&mut self.sigmask, sigmask)
     }
 
     pub fn get_sigaltstack(&self) -> sigaltstack {
