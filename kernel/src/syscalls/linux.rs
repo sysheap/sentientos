@@ -1,4 +1,4 @@
-use core::ffi::{c_int, c_uint};
+use core::ffi::{c_int, c_uint, c_ulong};
 
 use crate::{
     print,
@@ -31,6 +31,7 @@ linux_syscalls! {
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
+    SYSCALL_NR_BRK => brk(brk: c_ulong);
 }
 
 pub struct LinuxSyscallHandler {
@@ -217,6 +218,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             ThreadRef::downgrade(self.handler.current_thread()),
         )?;
         Ok(0)
+    }
+
+    fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
+        todo!("brk={brk}");
     }
 }
 
