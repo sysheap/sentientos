@@ -23,7 +23,7 @@ clean:
     cargo clean
 
 debugReleaseCommand := 'cargo run --release -- --wait'
-gdb := 'pwndbg -iex "add-auto-load-safe-path ."'
+gdb := 'pwndbg --nh -iex "add-auto-load-safe-path ."'
 
 run: build
     cargo run --release

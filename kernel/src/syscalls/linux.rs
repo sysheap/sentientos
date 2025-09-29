@@ -16,14 +16,16 @@ use common::{
 use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 use headers::{
     errno::Errno,
-    syscall_types::{pollfd, sigaction, sigset_t, stack_t, timespec},
+    syscall_types::{
+        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, pollfd, sigaction, sigset_t, stack_t, timespec,
+    },
 };
 
 linux_syscalls! {
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_int, act: *const sigaction, oact: *mut sigaction, sigsetsize: usize);
-    SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: *const sigset_t, oldset: *mut sigset_t, sigsetsize: usize);
+    SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_int, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
@@ -72,9 +74,43 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         to: LinuxUserspaceArg<Option<*const timespec>>,
         mask: LinuxUserspaceArg<Option<*const sigset_t>>,
     ) -> Result<isize, Errno> {
-        let _fds = fds.validate_slice(n as usize)?;
-        let _to = to.validate_ptr()?;
-        let _mask = mask.validate_ptr()?;
+        let mask = mask.validate_ptr()?;
+
+        let old_mask = if let Some(mask) = mask {
+            Some(
+                self.handler
+                    .current_thread()
+                    .with_lock(|mut t| t.set_sigset(mask)),
+            )
+        } else {
+            None
+        };
+
+        let to = to.validate_ptr()?;
+        if let Some(to) = to {
+            assert_eq!(to.tv_sec, 0, "ppoll with timeout not yet implemented");
+            assert_eq!(to.tv_nsec, 0, "ppoll with timeout not yet implemented");
+        }
+
+        let fds = fds.validate_slice(n as usize)?;
+
+        for fd in fds {
+            assert!(
+                matches!(fd.fd, 0..=2),
+                "Only stdin, stdout, and stderr is supported currently"
+            );
+            assert_eq!(
+                fd.events, 0,
+                "No further events are supported at the moment"
+            );
+        }
+
+        if let Some(mask) = old_mask {
+            self.handler
+                .current_thread()
+                .with_lock(|mut t| t.set_sigset(mask));
+        }
+
         Ok(0)
     }
 
@@ -90,11 +126,36 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     fn rt_sigprocmask(
         &mut self,
-        _how: c_int,
-        _set: LinuxUserspaceArg<*const sigset_t>,
-        _oldset: LinuxUserspaceArg<*mut sigset_t>,
-        _sigsetsize: usize,
+        how: c_int,
+        set: LinuxUserspaceArg<Option<*const sigset_t>>,
+        oldset: LinuxUserspaceArg<Option<*mut sigset_t>>,
+        sigsetsize: usize,
     ) -> Result<isize, Errno> {
+        if sigsetsize != core::mem::size_of::<sigset_t>() {
+            return Err(Errno::EINVAL);
+        }
+
+        let new_set = set.validate_ptr()?;
+
+        let old_set_in_thread = if let Some(new_set) = new_set {
+            self.handler.current_thread().with_lock(|mut t| {
+                let mut current_set = t.get_sigset();
+                match how as u32 {
+                    SIG_BLOCK => current_set.sig[0] |= new_set.sig[0],
+                    SIG_UNBLOCK => current_set.sig[0] &= !new_set.sig[0],
+                    SIG_SETMASK => current_set.sig[0] = new_set.sig[0],
+                    _ => {
+                        return Err(Errno::EINVAL);
+                    }
+                }
+                Ok(t.set_sigset(current_set))
+            })?
+        } else {
+            self.handler.current_thread().with_lock(|t| t.get_sigset())
+        };
+
+        oldset.write_if_not_none(old_set_in_thread)?;
+
         Ok(0)
     }
 

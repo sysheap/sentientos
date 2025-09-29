@@ -5,7 +5,7 @@ use alloc::{
 use core::{any::TypeId, ffi::c_int, ptr::null_mut};
 use headers::{
     errno::Errno,
-    syscall_types::{sigaltstack, stack_t},
+    syscall_types::{sigaltstack, sigset_t, stack_t},
 };
 
 use common::{
@@ -41,6 +41,7 @@ pub struct Thread {
     process: ProcessWeakRef,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     sigaltstack: ContainsUserspacePtr<stack_t>,
+    sigmask: sigset_t,
 }
 
 impl core::fmt::Display for Thread {
@@ -85,11 +86,22 @@ impl Thread {
                 ss_flags: 0,
                 ss_size: 0,
             }),
+            sigmask: sigset_t { sig: [0] },
         }))
     }
 
     pub fn get_tid(&self) -> Tid {
         self.tid
+    }
+
+    pub fn get_sigset(&self) -> sigset_t {
+        self.sigmask
+    }
+
+    pub fn set_sigset(&mut self, sigmask: sigset_t) -> sigset_t {
+        let old = self.sigmask;
+        self.sigmask = sigmask;
+        old
     }
 
     pub fn get_sigaltstack(&self) -> sigaltstack {
