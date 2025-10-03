@@ -1,11 +1,11 @@
-use core::ffi::{c_int, c_uint, c_ulong};
-
 use crate::{
+    io::stdin_buf::STDIN_BUFFER,
     memory::{PAGE_SIZE, page_tables::XWRMode},
     print,
     processes::{process::ProcessRef, thread::ThreadRef, timer},
-    syscalls::macros::linux_syscalls,
+    syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
 };
+use alloc::vec::Vec;
 use common::{
     constructable::Constructable,
     syscalls::{
@@ -13,8 +13,10 @@ use common::{
         trap_frame::{Register, TrapFrame},
     },
 };
-
-use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
+use core::{
+    cmp::min,
+    ffi::{c_int, c_uint, c_ulong},
+};
 use headers::{
     errno::Errno,
     syscall_types::{
@@ -36,6 +38,7 @@ linux_syscalls! {
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
+    SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
 }
 
 pub struct LinuxSyscallHandler {
@@ -43,6 +46,45 @@ pub struct LinuxSyscallHandler {
 }
 
 impl LinuxSyscalls for LinuxSyscallHandler {
+    fn read(
+        &mut self,
+        fd: c_int,
+        buf: LinuxUserspaceArg<*mut u8>,
+        count: usize,
+    ) -> Result<isize, headers::errno::Errno> {
+        if fd != 0 {
+            return Err(Errno::EBADF);
+        }
+
+        let mut stdin = STDIN_BUFFER.lock();
+        let actual_count = min(stdin.len(), count);
+
+        if actual_count == 0 {
+            stdin.register_wakeup(self.handler.current_tid());
+            drop(stdin);
+            self.handler
+                .current_thread()
+                .lock()
+                .set_waiting_on_syscall_linux(move || {
+                    let mut stdin = STDIN_BUFFER.lock();
+                    let actual_count = min(stdin.len(), count);
+
+                    let copied_buf: Vec<u8> = stdin.drain(..actual_count).collect();
+
+                    buf.write_slice(&copied_buf)?;
+
+                    Ok(copied_buf.len() as isize)
+                });
+            return Ok(0);
+        }
+
+        let copied_buf: Vec<u8> = stdin.drain(..actual_count).collect();
+
+        buf.write_slice(&copied_buf)?;
+
+        Ok(copied_buf.len() as isize)
+    }
+
     fn write(
         &mut self,
         fd: i32,
@@ -215,7 +257,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             return Err(Errno::EINVAL);
         }
         self.handler.current_thread().with_lock(|mut t| {
-            t.set_waiting_on_syscall::<Result<isize, Errno>>();
+            t.set_waiting_on_syscall_linux(|| Ok(0));
         });
         timer::register_wakeup(
             &duration,

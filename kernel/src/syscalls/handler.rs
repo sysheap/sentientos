@@ -44,6 +44,10 @@ impl SyscallHandler {
         }
     }
 
+    pub fn current_tid(&self) -> Tid {
+        self.current_tid
+    }
+
     pub fn current_process(&self) -> &ProcessRef {
         &self.current_process
     }
@@ -75,18 +79,7 @@ impl KernelSyscalls for SyscallHandler {
 
     fn sys_read_input(&mut self) -> Option<u8> {
         let mut stdin = STDIN_BUFFER.lock();
-        stdin.pop()
-    }
-
-    fn sys_read_input_wait(&mut self) -> u8 {
-        let input = STDIN_BUFFER.lock().pop();
-        if let Some(input) = input {
-            input
-        } else {
-            STDIN_BUFFER.lock().register_wakeup(self.current_tid);
-            self.current_thread.lock().set_waiting_on_syscall::<u8>();
-            0
-        }
+        stdin.pop_front()
     }
 
     fn sys_exit(&mut self, status: UserspaceArgument<isize>) {

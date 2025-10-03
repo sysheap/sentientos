@@ -1,5 +1,3 @@
-use userspace::{print, println};
-
 const COLUMNS: u8 = 7;
 const ROWS: u8 = 6;
 
@@ -59,10 +57,10 @@ impl GameBoard {
                     Position::H => print!(" H "),
                 }
             }
-            println!("");
+            println!();
         }
         println!(" 1  2  3  4  5  6  7");
-        println!("");
+        println!();
     }
 
     pub fn put(&mut self, player: Player, column: u8) -> Result<(), ()> {

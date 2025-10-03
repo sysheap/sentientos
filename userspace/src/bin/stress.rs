@@ -1,5 +1,4 @@
 use common::syscalls::{sys_execute, sys_wait};
-use userspace::println;
 
 use std::vec::Vec;
 

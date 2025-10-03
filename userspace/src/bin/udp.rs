@@ -1,6 +1,8 @@
+use std::io::{Write, stdout};
+
 // use alloc::string::String;
 use common::syscalls::sys_read_input;
-use userspace::{net::UdpSocket, print, println};
+use userspace::net::UdpSocket;
 
 extern crate alloc;
 extern crate userspace;
@@ -22,6 +24,7 @@ fn main() {
         if count > 0 {
             let text = std::str::from_utf8(&buffer[0..count]).expect("Must be valid utf8");
             print!("{}", text);
+            let _ = stdout().flush();
         }
 
         if let Some(c) = sys_read_input() {
@@ -36,7 +39,8 @@ fn main() {
                 }
                 DELETE => {
                     if input.pop().is_some() {
-                        print!("{}{}{}", 8 as char, ' ', 8 as char);
+                        print!("{} {}", 8 as char, 8 as char);
+                        let _ = stdout().flush();
                     }
                 }
                 _ => {
@@ -44,6 +48,7 @@ fn main() {
                     let result = c as char;
                     input.push(result);
                     print!("{}", result);
+                    let _ = stdout().flush();
                 }
             }
         }

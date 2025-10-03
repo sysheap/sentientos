@@ -67,14 +67,18 @@ impl CpuScheduler {
         debug!("Schedule next process");
         self.check_wakeup_queue();
         self.prepare_next_process();
-        timer::set_timer(10);
+        if self.is_current_process_energy_saver() {
+            timer::set_timer(50);
+        } else {
+            timer::set_timer(10);
+        }
     }
 
     fn check_wakeup_queue(&mut self) {
         let wakeup_threads = timer::return_threads_to_wakeup();
         for thread in wakeup_threads.into_iter().filter_map(|w| w.upgrade()) {
             thread.with_lock(|mut t| {
-                t.resume_on_syscall_linux(Ok(0));
+                t.resume_on_syscall_linux();
             });
         }
     }
@@ -134,8 +138,6 @@ impl CpuScheduler {
                 pt.kill(pid);
             }
         });
-
-        self.schedule();
     }
 
     pub fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Pid, SchedulerError> {
@@ -190,21 +192,32 @@ impl CpuScheduler {
 
             debug!("Getting next runnable process");
 
+            assert!(
+                self.is_current_process_energy_saver(),
+                "Current thread must be powersave thread to not have any dangling references"
+            );
+
             // next_runnable already sets the state to ThreadState::Running
             let next_runnable = pt.next_runnable().unwrap_or(self.powersave_thread.clone());
 
             debug!("Next runnable is {}", *next_runnable.lock());
 
             self.current_thread = next_runnable;
+
+            assert!(
+                self.current_thread.lock().has_process(),
+                "Thread must have process"
+            );
         });
 
         self.set_cpu_reg_for_current_thread();
     }
 
     fn set_cpu_reg_for_current_thread(&mut self) {
-        self.current_thread.with_lock(|t| {
+        self.current_thread.with_lock(|mut t| {
             let pc = t.get_program_counter();
 
+            t.finalize_syscall();
             self.trap_frame = *t.get_register_state();
             Cpu::write_sepc(pc);
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());

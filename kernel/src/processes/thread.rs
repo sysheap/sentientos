@@ -1,10 +1,18 @@
+use super::process::{ProcessRef, ProcessWeakRef};
+use crate::processes::userspace_ptr::{ContainsUserspacePtr, UserspacePtr};
 use alloc::{
+    boxed::Box,
     string::String,
     sync::{Arc, Weak},
 };
+use common::{
+    mutex::Mutex,
+    pid::{Pid, Tid},
+    syscalls::trap_frame::{Register, TrapFrame},
+};
 use core::{
-    any::TypeId,
     ffi::{c_int, c_uint},
+    fmt::Debug,
     ptr::null_mut,
 };
 use headers::{
@@ -12,18 +20,22 @@ use headers::{
     syscall_types::{_NSIG, sigaction, sigaltstack, sigset_t, stack_t},
 };
 
-use common::{
-    mutex::Mutex,
-    pid::{Pid, Tid},
-    syscalls::trap_frame::{Register, TrapFrame},
-};
-
-use crate::processes::userspace_ptr::{ContainsUserspacePtr, UserspacePtr};
-
-use super::process::{ProcessRef, ProcessWeakRef};
-
 pub type ThreadRef = Arc<Mutex<Thread>>;
 pub type ThreadWeakRef = Weak<Mutex<Thread>>;
+
+pub struct SyscallFinalizer(Box<dyn Fn() -> Result<isize, Errno> + Send + 'static>);
+
+impl SyscallFinalizer {
+    fn call(self) -> Result<isize, Errno> {
+        self.0()
+    }
+}
+
+impl Debug for SyscallFinalizer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("SyscallFinalizer").finish()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
@@ -41,7 +53,7 @@ pub struct Thread {
     program_counter: usize,
     state: ThreadState,
     in_kernel_mode: bool,
-    waiting_on_syscall: Option<TypeId>,
+    waiting_on_syscall: Option<SyscallFinalizer>,
     process: ProcessWeakRef,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     sigaltstack: ContainsUserspacePtr<stack_t>,
@@ -177,55 +189,44 @@ impl Thread {
         self.in_kernel_mode
     }
 
-    pub fn set_waiting_on_syscall<RetType: 'static>(&mut self) {
+    pub fn set_waiting_on_syscall_linux(
+        &mut self,
+        finalizer: impl Fn() -> Result<isize, Errno> + Send + 'static,
+    ) {
         self.state = ThreadState::Waiting;
-        self.waiting_on_syscall = Some(core::any::TypeId::of::<RetType>());
+        self.waiting_on_syscall = Some(SyscallFinalizer(Box::new(finalizer)));
+    }
+
+    pub fn has_process(&self) -> bool {
+        self.process.strong_count() > 0
     }
 
     pub fn process(&self) -> ProcessRef {
-        self.process
-            .upgrade()
-            .expect("Process must always be alive when thread exists")
-    }
-
-    pub fn resume_on_syscall<RetType: 'static>(&mut self, return_value: RetType) {
-        assert_eq!(
-            self.waiting_on_syscall,
-            Some(core::any::TypeId::of::<RetType>()),
-            "resume return type is different than expected"
-        );
-        let ptr = self.register_state[Register::a2] as *mut RetType;
-        assert!(!ptr.is_null() && ptr.is_aligned());
-
-        self.process().with_lock(|p| {
-            assert!(p.get_page_table().is_valid_userspace_ptr(ptr, true));
-            let kernel_ptr = p
-                .get_page_table()
-                .translate_userspace_address_to_physical_address(ptr)
-                .expect("Return pointer must be valid");
-
-            // SAFETY: We assured safety in the above checks
-            unsafe {
-                kernel_ptr.write(return_value);
+        // self.process
+        //     .upgrade()
+        //     .expect("Process must always be alive when thread exists")
+        match self.process.upgrade() {
+            Some(p) => p,
+            None => {
+                panic!(
+                    "Process {} non existent tid={} pid={}",
+                    self.process_name, self.tid, self.pid
+                );
             }
-        });
-
-        self.waiting_on_syscall = None;
-        self.state = ThreadState::Runnable;
+        }
     }
 
-    pub fn resume_on_syscall_linux(&mut self, return_value: Result<isize, Errno>) {
-        assert_eq!(
-            self.waiting_on_syscall,
-            Some(core::any::TypeId::of::<Result<isize, Errno>>()),
-            "resume return type is different than expected"
-        );
-        let ret = match return_value {
-            Ok(ret) => ret,
-            Err(errno) => -(errno as isize),
-        };
-        self.register_state[Register::a0] = ret as usize;
-        self.waiting_on_syscall = None;
+    pub fn finalize_syscall(&mut self) {
+        if let Some(finalizer) = self.waiting_on_syscall.take() {
+            let ret = match finalizer.call() {
+                Ok(ret) => ret,
+                Err(errno) => -(errno as isize),
+            };
+            self.register_state[Register::a0] = ret as usize;
+        }
+    }
+
+    pub fn resume_on_syscall_linux(&mut self) {
         self.state = ThreadState::Runnable;
     }
 }

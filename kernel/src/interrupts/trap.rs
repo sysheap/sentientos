@@ -26,7 +26,10 @@ extern "C" fn handle_timer_interrupt() {
 #[unsafe(no_mangle)]
 fn handle_external_interrupt() {
     debug!("External interrupt occurred!");
-    let plic_interrupt = plic::get_next_pending().expect("There should be a pending interrupt.");
+    let plic_interrupt = match plic::get_next_pending() {
+        Some(i) => i,
+        None => return,
+    };
     assert!(
         plic_interrupt == InterruptSource::Uart,
         "Plic interrupt should be uart."
@@ -41,6 +44,8 @@ fn handle_external_interrupt() {
         4 => crate::debugging::dump_current_state(),
         _ => STDIN_BUFFER.lock().push(input),
     }
+
+    Cpu::current().scheduler_mut().schedule();
 }
 
 fn handle_syscall() {
@@ -132,7 +137,7 @@ extern "C" fn handle_unimplemented() {
     let sepc = Cpu::read_sepc();
     let cause = InterruptCause::from_scause();
     panic!(
-        "Unimplemeneted trap occurred! (sepc: {:x?}) (cause: {:?})",
+        "Unimplemented trap occurred! (sepc: {:x?}) (cause: {:?})",
         sepc,
         cause.get_reason(),
     );

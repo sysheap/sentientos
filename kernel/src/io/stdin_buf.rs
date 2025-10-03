@@ -1,8 +1,6 @@
-use crate::{
-    cpu::Cpu,
-    debug,
-    processes::{process_table, timer},
-};
+use core::ops::{Deref, DerefMut};
+
+use crate::{debug, processes::process_table};
 use alloc::collections::{BTreeSet, VecDeque};
 use common::{mutex::Mutex, pid::Tid};
 
@@ -26,37 +24,32 @@ impl StdinBuffer {
     }
 
     pub fn push(&mut self, byte: u8) {
-        let notified = !self.wakeup_queue.is_empty();
+        self.data.push_back(byte);
+
         debug!("Waking up following tids={:?}", self.wakeup_queue);
         process_table::THE.with_lock(|pt| {
-            for tid in &self.wakeup_queue {
+            while let Some(tid) = &self.wakeup_queue.pop_first() {
                 if let Some(thread) = pt.get_thread(*tid) {
                     thread.with_lock(|mut t| {
+                        t.resume_on_syscall_linux();
                         debug!("Resume on syscall set on thread={}", *t);
-                        t.resume_on_syscall(byte);
                     })
                 }
             }
         });
-        Cpu::with_scheduler(|s| {
-            if notified && s.is_current_process_energy_saver() {
-                debug!("notified process and current process is energy saver");
-                s.schedule();
-            }
-        });
-        self.wakeup_queue.clear();
-        if notified {
-            if !Cpu::is_timer_enabled() {
-                // Enable timer because we were sleeping and waiting
-                // for input
-                timer::set_timer(0);
-            }
-            return;
-        }
-        self.data.push_back(byte);
     }
+}
 
-    pub fn pop(&mut self) -> Option<u8> {
-        self.data.pop_front()
+impl Deref for StdinBuffer {
+    type Target = VecDeque<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for StdinBuffer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
     }
 }

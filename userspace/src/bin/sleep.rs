@@ -1,7 +1,5 @@
 use std::{env, process::exit, thread::sleep, time::Duration};
 
-use userspace::println;
-
 fn main() {
     // Collect command line arguments
     let args: Vec<String> = env::args().collect();

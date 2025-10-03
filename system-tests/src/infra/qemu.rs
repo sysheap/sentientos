@@ -5,7 +5,7 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
-use super::{read_asserter::ReadAsserter, PROMPT};
+use super::{PROMPT, read_asserter::ReadAsserter};
 
 pub struct QemuOptions {
     add_network_card: bool,
@@ -136,5 +136,11 @@ impl QemuInstance {
         let trimmed_result = &result[command.len()..result.len() - wait_for.len()];
 
         Ok(String::from_utf8_lossy(trimmed_result).into_owned())
+    }
+
+    pub async fn write_and_wait_for(&mut self, text: &str, wait: &str) -> anyhow::Result<()> {
+        self.stdin().write_all(text.as_bytes()).await?;
+        self.stdout().assert_read_until(wait).await;
+        Ok(())
     }
 }

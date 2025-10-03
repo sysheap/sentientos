@@ -46,11 +46,15 @@ pub fn return_threads_to_wakeup() -> Vec<ThreadWeakRef> {
     threads.into_values().collect()
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn set_timer(milliseconds: u64) {
+pub fn disable_timer() {
+    debug!("disabling timer");
+    Cpu::disable_timer_interrupt();
+}
+
+pub fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();
-    let next = current + (*CLOCKS_PER_NANO * 1000 * milliseconds);
+    let next = current.wrapping_add(*CLOCKS_PER_NANO * 1000 * milliseconds);
     sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
     Cpu::enable_timer_interrupt();
 }
