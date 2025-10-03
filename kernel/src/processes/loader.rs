@@ -1,5 +1,6 @@
 use alloc::{string::ToString, vec::Vec};
 use common::{errors::LoaderError, util::align_up, writable_buffer::WritableBuffer};
+use headers::syscall_types::{AT_NULL, AT_PAGESZ};
 
 use crate::{
     debug,
@@ -37,7 +38,7 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
     let argc = 1 + args.len(); // name + amount of args
     let mut argv = vec![0usize; args.len() + 2]; // number of args plus name and null terminator
     let envp = [0usize];
-    let auxv: [usize; 2] = [/* AT_NULL */ 0, 0];
+    let auxv = [AT_PAGESZ as usize, PAGE_SIZE, AT_NULL as usize, 0];
     let strings = [name]
         .iter()
         .chain(args)

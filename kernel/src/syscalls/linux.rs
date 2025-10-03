@@ -1,6 +1,7 @@
 use core::ffi::{c_int, c_uint, c_ulong};
 
 use crate::{
+    memory::{PAGE_SIZE, page_tables::XWRMode},
     print,
     processes::{process::ProcessRef, thread::ThreadRef, timer},
     syscalls::macros::linux_syscalls,
@@ -17,21 +18,24 @@ use crate::syscalls::{handler::SyscallHandler, validator::UserspaceArgument};
 use headers::{
     errno::Errno,
     syscall_types::{
-        _NSIG, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, pollfd, sigaction, sigset_t,
+        _NSIG, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, pollfd, sigaction, sigset_t,
         stack_t, timespec,
     },
 };
 
 linux_syscalls! {
+    SYSCALL_NR_BRK => brk(brk: c_ulong);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
+    SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
+    SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
-    SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
-    SYSCALL_NR_BRK => brk(brk: c_ulong);
 }
 
 pub struct LinuxSyscallHandler {
@@ -224,6 +228,83 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         self.handler
             .current_process()
             .with_lock(|mut p| Ok(p.brk(brk as usize) as isize))
+    }
+
+    fn mmap(
+        &mut self,
+        addr: usize,
+        length: usize,
+        prot: c_uint,
+        flags: c_uint,
+        fd: c_int,
+        offset: isize,
+    ) -> Result<isize, headers::errno::Errno> {
+        assert_eq!(
+            flags & !(MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED),
+            0,
+            "Only this flags are implemented so far."
+        );
+        assert_eq!(
+            flags & (MAP_ANONYMOUS | MAP_PRIVATE),
+            MAP_ANONYMOUS | MAP_PRIVATE,
+            "File backed mappings and shared mappings are not supported yet."
+        );
+        assert_eq!(fd, -1, "fd must be -1 when working in MAP_ANONYMOUS");
+        assert_eq!(
+            offset, 0,
+            "offset must be null when working with MAP_ANONYMOUS"
+        );
+        assert_eq!(
+            length % PAGE_SIZE,
+            0,
+            "Length must be dividable through PAGE_SIZE"
+        );
+        if (flags & MAP_FIXED) > 0 && addr == 0 {
+            return Err(Errno::EINVAL);
+        }
+        if length == 0 {
+            return Err(Errno::EINVAL);
+        }
+        // Handle special PROT_NONE case and map it to the null pointer
+        if prot == PROT_NONE {
+            return self.handler.current_process().with_lock(|mut p| {
+                if p.get_page_table().is_mapped(addr..addr + length) {
+                    return Err(Errno::EEXIST);
+                }
+                p.get_page_table_mut().map_userspace(
+                    addr,
+                    0,
+                    length / PAGE_SIZE,
+                    XWRMode::ReadOnly,
+                    "PROT_NONE".into(),
+                );
+                Ok(addr as isize)
+            });
+        }
+        let permission = match prot {
+            PROT_EXEC => XWRMode::ExecuteOnly,
+            PROT_READ => XWRMode::ReadOnly,
+            x if x == (PROT_READ | PROT_WRITE) => XWRMode::ReadWrite,
+            _ => return Err(Errno::EINVAL),
+        };
+        self.handler.current_process().with_lock(|mut p| {
+            if (flags & MAP_FIXED) > 0 {
+                if p.get_page_table().is_mapped(addr..addr + length) {
+                    return Err(Errno::EEXIST);
+                }
+                let ptr = p.mmap_pages_with_address(length / PAGE_SIZE, addr, permission);
+                return Ok(ptr as isize);
+            }
+            if addr == 0 || p.get_page_table().is_mapped(addr..addr + length) {
+                return Ok(p.mmap_pages(length / PAGE_SIZE, permission) as isize);
+            }
+            Ok(p.mmap_pages_with_address(length / PAGE_SIZE, addr, permission) as isize)
+        })
+    }
+
+    fn munmap(&mut self, _addr: usize, _length: usize) -> Result<isize, headers::errno::Errno> {
+        // Ignore munmap for now
+        Ok(0)
     }
 }
 

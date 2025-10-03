@@ -34,12 +34,7 @@ fn panic(info: &PanicInfo) -> ! {
         wfi_loop();
     }
 
-    println!("");
-    println!("KERNEL Panic Occured on cpu {}!", Cpu::cpu_id());
-    println!("Message: {}", info.message());
-    if let Some(location) = info.location() {
-        println!("Location: {}", location);
-    }
+    println!("\nKERNEL Panic");
     let kernel_page_tables = Cpu::maybe_kernel_page_tables();
     if let Some(kernel_page_tables) = kernel_page_tables {
         println!("Kernel Page Tables {kernel_page_tables}");
@@ -53,6 +48,11 @@ fn panic(info: &PanicInfo) -> ! {
 
     crate::debugging::dump_current_state();
 
+    println!("'\nPanic Occurred on cpu {}!", Cpu::cpu_id());
+    println!("Message: {}", info.message());
+    if let Some(location) = info.location() {
+        println!("Location: {}", location);
+    }
     println!("Time to attach gdb ;) use 'just attach'");
 
     #[cfg(test)]

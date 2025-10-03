@@ -56,7 +56,7 @@ impl MappingEntry {
         }
     }
 
-    fn contains(&self, range: Range<usize>) -> bool {
+    fn contains(&self, range: &Range<usize>) -> bool {
         self.virtual_range.start <= range.end && range.start <= self.virtual_range.end
     }
 }
@@ -303,7 +303,7 @@ impl RootPageTableHolder {
         let already_mapped = self
             .already_mapped
             .iter()
-            .find(|m| m.contains(virtual_address_start..virtual_end));
+            .find(|m| m.contains(&(virtual_address_start..virtual_end)));
 
         if let Some(mapping) = already_mapped {
             panic!("Cannot map {}. Overlaps with {}", name, mapping.name);
@@ -523,6 +523,10 @@ impl RootPageTableHolder {
         unsafe {
             Cpu::write_satp_and_fence(satp_val);
         };
+    }
+
+    pub fn is_mapped(&self, range: Range<usize>) -> bool {
+        self.already_mapped.iter().any(|m| m.contains(&range))
     }
 }
 

@@ -29,6 +29,17 @@ impl<T> Mutex<T> {
         f(lock)
     }
 
+    pub fn try_with_lock<'a, R>(&'a self, f: impl FnOnce(MutexGuard<'a, T>) -> R) -> Option<R> {
+        let value = self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed);
+        if value.is_ok() {
+            let lock = MutexGuard { mutex: self };
+            return Some(f(lock));
+        }
+        None
+    }
+
     pub fn lock(&self) -> MutexGuard<'_, T> {
         if self.disarmed.load(Ordering::SeqCst) {
             return MutexGuard { mutex: self };

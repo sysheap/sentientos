@@ -72,7 +72,14 @@ impl ProcessTable {
 
     pub fn dump(&self) {
         for process in self.processes.values() {
-            info!("{}", *process.lock());
+            if process
+                .try_with_lock(|p| {
+                    info!("{}", *p);
+                })
+                .is_none()
+            {
+                info!("Cannot dump process because it is locked.");
+            }
         }
     }
 

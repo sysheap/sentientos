@@ -20,8 +20,8 @@ pub fn dump_current_state() {
         used_heap_pages, total_heap_pages
     );
 
-    process_table::THE.lock().dump();
-    Cpu::current_thread().with_lock(|t| {
+    process_table::THE.try_with_lock(|pt| pt.dump());
+    Cpu::current_thread().try_with_lock(|t| {
         info!("Current Thread: {}", *t);
     });
 }
