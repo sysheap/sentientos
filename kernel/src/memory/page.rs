@@ -1,12 +1,18 @@
 use alloc::boxed::Box;
 use common::util::copy_slice;
-use core::{
-    num::NonZeroUsize,
-    ops::{Deref, DerefMut},
-    ptr::NonNull,
-};
+use core::ops::{Add, Deref, DerefMut};
 
 pub const PAGE_SIZE: usize = 4096;
+
+pub struct Pages(pub usize);
+
+impl Add<Pages> for usize {
+    type Output = usize;
+
+    fn add(self, rhs: Pages) -> Self::Output {
+        (rhs.0 * PAGE_SIZE) + self
+    }
+}
 
 #[derive(PartialEq, Eq, Clone)]
 #[repr(C, align(4096))]
@@ -38,11 +44,11 @@ impl Page {
     }
 }
 
-pub trait Pages {
+pub trait PagesAsSlice {
     fn as_u8_slice(&mut self) -> &mut [u8];
 }
 
-impl Pages for [Page] {
+impl PagesAsSlice for [Page] {
     fn as_u8_slice(&mut self) -> &mut [u8] {
         unsafe {
             core::slice::from_raw_parts_mut(
@@ -65,16 +71,20 @@ impl PinnedHeapPages {
         Self { allocation }
     }
 
+    pub fn new_pages(pages: Pages) -> Self {
+        Self::new(pages.0)
+    }
+
     pub fn fill(&mut self, data: &[u8], offset: usize) {
         copy_slice(data, &mut self.as_u8_slice()[offset..offset + data.len()]);
     }
 
-    pub fn as_mut_ptr(&mut self) -> NonNull<Page> {
-        unsafe { NonNull::new_unchecked(self.allocation.as_mut_ptr()) }
+    pub fn addr(&self) -> usize {
+        self.allocation.as_ptr() as usize
     }
 
-    pub fn addr(&mut self) -> NonZeroUsize {
-        self.as_mut_ptr().addr()
+    pub fn size(&self) -> usize {
+        self.allocation.len() * PAGE_SIZE
     }
 }
 
@@ -94,7 +104,7 @@ impl DerefMut for PinnedHeapPages {
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::{PAGE_SIZE, page::Pages};
+    use crate::memory::{PAGE_SIZE, page::PagesAsSlice};
 
     use super::{Page, PinnedHeapPages};
 

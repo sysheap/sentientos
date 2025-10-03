@@ -221,7 +221,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
-        todo!("brk={brk}");
+        self.handler
+            .current_process()
+            .with_lock(|mut p| Ok(p.brk(brk as usize) as isize))
     }
 }
 

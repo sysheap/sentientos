@@ -9,9 +9,10 @@ use crate::{
     },
     memory::{
         PAGE_SIZE,
-        page::{Pages, PinnedHeapPages},
+        page::{PagesAsSlice, PinnedHeapPages},
         page_tables::RootPageTableHolder,
     },
+    processes::brk::Brk,
 };
 
 pub const STACK_START: usize = usize::MAX;
@@ -27,6 +28,7 @@ pub struct LoadedElf {
     pub page_tables: RootPageTableHolder,
     pub allocated_pages: Vec<PinnedHeapPages>,
     pub args_start: usize,
+    pub brk: Brk,
 }
 
 fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize, LoaderError> {
@@ -118,19 +120,21 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     page_tables.map_userspace(
         STACK_END,
-        stack_addr.get(),
+        stack_addr,
         STACK_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
         "Stack".to_string(),
     );
 
     // Map load program header
-    let loadable_program_header = elf_file
-        .get_program_headers()
-        .iter()
-        .filter(|header| header.header_type == ProgramHeaderType::PT_LOAD);
+    let loadable_program_header = || {
+        elf_file
+            .get_program_headers()
+            .iter()
+            .filter(|header| header.header_type == ProgramHeaderType::PT_LOAD)
+    };
 
-    for program_header in loadable_program_header {
+    for program_header in loadable_program_header() {
         debug!("Load {:#X?}", program_header);
 
         let data = elf_file.get_program_header_data(program_header);
@@ -164,17 +168,31 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
         page_tables.map_userspace(
             program_header.virtual_address as usize - offset,
-            pages_addr.get(),
+            pages_addr,
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
             "LOAD".to_string(),
         );
     }
 
+    let bss_end = loadable_program_header()
+        .map(|l| l.virtual_address + l.memory_size)
+        .max();
+
+    let brk = match bss_end {
+        Some(bss_end) => {
+            let (pages, brk) = Brk::new(bss_end as usize, &mut page_tables);
+            allocated_pages.push(pages);
+            brk
+        }
+        None => Brk::empty(),
+    };
+
     Ok(LoadedElf {
         entry_address: elf_header.entry_point as usize,
         page_tables,
         allocated_pages,
         args_start,
+        brk,
     })
 }
