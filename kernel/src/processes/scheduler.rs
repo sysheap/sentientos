@@ -79,6 +79,20 @@ impl CpuScheduler {
         }
     }
 
+    pub fn enter_syscall(&self) {
+        self.current_thread.with_lock(|mut t| {
+            t.set_program_counter(Cpu::read_sepc());
+            t.set_in_kernel_mode(true);
+            t.set_register_state(&self.trap_frame);
+        });
+    }
+
+    pub fn exit_syscall(&self) {
+        self.current_thread.with_lock(|mut t| {
+            t.set_in_kernel_mode(false);
+        })
+    }
+
     pub fn kill_current_process(&mut self) {
         let pid = self.current_thread.lock().process().with_lock(|p| {
             // TODO: Kill other threads first
@@ -154,7 +168,7 @@ impl CpuScheduler {
             match t.get_state() {
                 ThreadState::Running => t.set_state(ThreadState::Runnable),
                 ThreadState::Waiting => {}
-                ThreadState::Runnable => panic!("Inavlid process state."),
+                ThreadState::Runnable => panic!("Invalid process state."),
             }
 
             t.set_program_counter(Cpu::read_sepc());

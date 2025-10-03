@@ -46,6 +46,7 @@ fn handle_external_interrupt() {
 fn handle_syscall() {
     let cpu = Cpu::current();
     let scheduler = cpu.scheduler();
+    scheduler.enter_syscall();
 
     let trap_frame = *scheduler.trap_frame();
     let nr = trap_frame[Register::a7];
@@ -80,6 +81,8 @@ fn handle_syscall() {
         trap_frame[Register::a0] = ret as usize;
         Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
     }
+
+    scheduler.exit_syscall();
 
     // In case our current process was set to waiting state we need to reschedule
     if scheduler.get_current_thread().lock().get_state() == ThreadState::Waiting {

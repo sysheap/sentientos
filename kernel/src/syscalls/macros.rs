@@ -34,6 +34,7 @@ impl_plain_arg!(c_int);
 impl_plain_arg!(c_uint);
 impl_plain_arg!(c_ulong);
 impl_plain_arg!(usize);
+impl_plain_arg!(isize);
 
 macro_rules! linux_syscalls {
     ($($number:ident => $name:ident ($($arg_name: ident: $arg_ty:ty),*);)*) => {
@@ -56,11 +57,12 @@ macro_rules! linux_syscalls {
                 match nr {
                     $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())),*)),*,
                     syscall_nr => {
+                        let pc = $crate::cpu::Cpu::read_sepc();
                         let name = headers::syscalls::SYSCALL_NAMES
                             .iter()
                             .find_map(|(nr, name)| if *nr == syscall_nr { Some(*name) } else { None })
                             .unwrap_or("");
-                        panic!("Syscall {name} {syscall_nr} not implemented");
+                        panic!("Syscall {name} {syscall_nr} not implemented (pc={pc:#x})");
                     }
                 }
             }

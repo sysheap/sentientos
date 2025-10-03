@@ -12,6 +12,7 @@ use crate::{
     cpu::Cpu,
     debug,
     io::stdin_buf::STDIN_BUFFER,
+    memory::page_tables::XWRMode,
     net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
     print, println,
     processes::{
@@ -126,7 +127,9 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_mmap_pages(&mut self, number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
-        self.current_process.lock().mmap_pages(*number_of_pages)
+        self.current_process
+            .lock()
+            .mmap_pages(*number_of_pages, XWRMode::ReadWrite)
     }
 
     fn sys_open_udp_socket(
