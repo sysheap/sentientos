@@ -1,3 +1,4 @@
+mod brk;
 mod loader;
 pub mod process;
 pub mod process_table;

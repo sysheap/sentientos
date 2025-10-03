@@ -16,7 +16,7 @@ use crate::{
     cpu::Cpu,
     debug, debugging,
     interrupts::plic,
-    io::TEST_DEVICE_ADDRESSS,
+    io::TEST_DEVICE_ADDRESS,
     klibc::{
         elf,
         sizes::{GiB, MiB},
@@ -204,7 +204,7 @@ impl RootPageTableHolder {
             );
 
             root_page_table_holder.map_identity_kernel(
-                TEST_DEVICE_ADDRESSS,
+                TEST_DEVICE_ADDRESS,
                 PAGE_SIZE,
                 XWRMode::ReadWrite,
                 "Qemu Test Device".to_string(),
@@ -676,8 +676,8 @@ impl PageTableEntry {
     fn get_target_page_table(&self) -> &'static mut PageTable {
         assert!(!self.is_leaf());
         assert!(!self.get_physical_address().is_null());
-        let phyiscal_address = self.get_physical_address();
-        unsafe { &mut *phyiscal_address }
+        let physical_address = self.get_physical_address();
+        unsafe { &mut *physical_address }
     }
 }
 

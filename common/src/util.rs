@@ -1,5 +1,11 @@
 use core::fmt::Display;
 
+const PAGE_SIZE: usize = 4096;
+
+pub fn align_up_page_size(value: usize) -> usize {
+    align_up(value, PAGE_SIZE)
+}
+
 pub const fn align_up(value: usize, alignment: usize) -> usize {
     let remainder = value % alignment;
     if remainder == 0 {

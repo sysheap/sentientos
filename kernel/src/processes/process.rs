@@ -4,6 +4,7 @@ use crate::{
     memory::{PAGE_SIZE, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     net::sockets::SharedAssignedSocket,
     processes::{
+        brk::Brk,
         loader::{self, LoadedElf, STACK_END, STACK_SIZE, STACK_SIZE_PAGES, STACK_START},
         userspace_ptr::UserspacePtr,
     },
@@ -57,6 +58,7 @@ pub struct Process {
     open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
     notify_on_die: BTreeSet<Tid>,
     threads: BTreeMap<Tid, ThreadRef>,
+    brk: Brk,
 }
 
 impl Debug for Process {
@@ -78,6 +80,7 @@ impl Debug for Process {
 }
 
 impl Process {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         name: impl Into<String>,
         pid: Pid,
@@ -86,6 +89,7 @@ impl Process {
         program_counter: usize,
         allocated_pages: Vec<PinnedHeapPages>,
         in_kernel_mode: bool,
+        brk: Brk,
     ) -> Arc<Mutex<Self>> {
         let name = Arc::new(name.into());
         let process = Arc::new(Mutex::new(Self {
@@ -98,6 +102,7 @@ impl Process {
             open_udp_sockets: BTreeMap::new(),
             notify_on_die: BTreeSet::new(),
             threads: BTreeMap::new(),
+            brk,
         }));
 
         let main_thread_tid = Tid(pid.0);
@@ -114,6 +119,10 @@ impl Process {
         process.lock().threads.insert(main_thread_tid, main_thread);
 
         process
+    }
+
+    pub fn brk(&mut self, brk: usize) -> usize {
+        self.brk.brk(brk)
     }
 
     pub fn read_userspace_slice<T: Clone>(
@@ -195,7 +204,7 @@ impl Process {
         let mut allocated_pages = Vec::with_capacity(1);
 
         // Map 4KB stack
-        let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
+        let stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
         let stack_addr = stack.addr();
         allocated_pages.push(stack);
 
@@ -203,7 +212,7 @@ impl Process {
 
         page_table.map(
             STACK_END,
-            stack_addr.get(),
+            stack_addr,
             STACK_SIZE,
             crate::memory::page_tables::XWRMode::ReadWrite,
             false,
@@ -221,6 +230,7 @@ impl Process {
             powersave as usize,
             allocated_pages,
             true,
+            Brk::empty(),
         )
     }
 
@@ -286,6 +296,7 @@ impl Process {
             page_tables: page_table,
             allocated_pages,
             args_start,
+            brk,
         } = loader::load_elf(elf_file, name, args)?;
 
         let mut register_state = TrapFrame::zero();
@@ -300,6 +311,7 @@ impl Process {
             entry_address,
             allocated_pages,
             false,
+            brk,
         ))
     }
 
