@@ -1,19 +1,21 @@
 use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
 use std::{
+    io::{Write, stdout},
     string::{String, ToString},
     vec::Vec,
 };
-use userspace::{print, println, util::read_line};
+use userspace::util::read_line;
 
 extern crate alloc;
 extern crate userspace;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("### SeSH - Sentient Shell ###");
     println!("Type 'help' for a list of available commands.");
     loop {
         print!("$ ");
+        stdout().flush()?;
         let input = read_line();
         // Parse input and execute
         parse_command_and_execute(input);

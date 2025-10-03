@@ -1,5 +1,3 @@
-use userspace::println;
-
 extern crate userspace;
 
 fn main() {

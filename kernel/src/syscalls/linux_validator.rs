@@ -4,6 +4,11 @@ use common::pointer::Pointer;
 use core::marker::PhantomData;
 use headers::errno::Errno;
 
+// SAFETY: We can safely send 'just' an usize value
+// Validation happens later anyways
+unsafe impl<T> Send for LinuxUserspaceArg<T> {}
+
+#[derive(Clone)]
 pub struct LinuxUserspaceArg<T> {
     arg: usize,
     process: ProcessRef,
@@ -45,10 +50,15 @@ impl<T> LinuxUserspaceArg<Option<*const T>> {
     }
 }
 
-impl<T: Clone> LinuxUserspaceArg<*mut T> {
+impl<T: Copy> LinuxUserspaceArg<*mut T> {
     pub fn validate_slice(&self, len: usize) -> Result<Vec<T>, Errno> {
         self.process
             .with_lock(|p| p.read_userspace_slice(&self.into(), len))
+    }
+    pub fn write_slice(&self, values: &[T]) -> Result<(), Errno> {
+        self.process
+            .with_lock(|p| p.write_userspace_slice(&self.into(), values))?;
+        Ok(())
     }
 }
 

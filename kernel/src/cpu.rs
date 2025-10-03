@@ -227,6 +227,7 @@ impl Cpu {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_timer_enabled() -> bool {
         let sie = Self::read_sie();
         (sie & (1 << SIE_STIE)) > 0
@@ -235,6 +236,11 @@ impl Cpu {
     pub fn enable_timer_interrupt() {
         Self::csrs_sie(1 << SIE_STIE);
     }
+
+    pub fn disable_timer_interrupt() {
+        Self::csrc_sie(1 << SIE_STIE);
+    }
+
     pub fn is_in_kernel_mode() -> bool {
         let sstatus = Self::read_sstatus();
         (sstatus & (1 << SSTATUS_SPP)) > 0

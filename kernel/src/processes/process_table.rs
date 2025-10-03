@@ -94,8 +94,8 @@ impl ProcessTable {
             for pid in lg.get_notifies_on_die() {
                 self.wake_process_up(*pid);
             }
-            for threads in lg.threads() {
-                threads.with_lock(|t| {
+            for thread in lg.threads() {
+                thread.with_lock(|t| {
                     if let Some(clear_child_tid) = t.get_clear_child_tid() {
                         // We don't care if the address is not mapped anymore
                         // Since this operation should only wake up other threads
@@ -112,8 +112,12 @@ impl ProcessTable {
             self.threads.len()
         );
         for thread in self.threads.iter() {
-            debug!("Check if thread={thread:?} is runnable");
             let runnable = thread.with_lock(|mut t| {
+                assert!(
+                    t.has_process(),
+                    "Thread doesn't have a process anymore. {}",
+                    *t
+                );
                 debug!("Checking {}", *t);
                 if t.get_state() != ThreadState::Runnable {
                     return false;

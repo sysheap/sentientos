@@ -48,7 +48,7 @@ fn panic(info: &PanicInfo) -> ! {
 
     crate::debugging::dump_current_state();
 
-    println!("'\nPanic Occurred on cpu {}!", Cpu::cpu_id());
+    println!("\nPanic Occurred on cpu {}!", Cpu::cpu_id());
     println!("Message: {}", info.message());
     if let Some(location) = info.location() {
         println!("Location: {}", location);

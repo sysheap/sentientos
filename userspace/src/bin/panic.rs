@@ -1,5 +1,4 @@
 use common::syscalls::sys_panic;
-use userspace::println;
 
 extern crate userspace;
 

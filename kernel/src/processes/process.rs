@@ -141,6 +141,19 @@ impl Process {
         Ok(slice.to_vec())
     }
 
+    pub fn write_userspace_slice<T: Copy>(
+        &self,
+        ptr: &UserspacePtr<*mut T>,
+        data: &[T],
+    ) -> Result<(), Errno> {
+        let len = data.len();
+        let kernel_ptr = self.get_kernel_space_fat_pointer(ptr, len)?;
+        // SAFETY: We just validate the pointer
+        let slice = unsafe { core::slice::from_raw_parts_mut(kernel_ptr, len) };
+        slice.copy_from_slice(data);
+        Ok(())
+    }
+
     pub fn read_userspace_str(
         &self,
         ptr: &UserspacePtr<*const u8>,
