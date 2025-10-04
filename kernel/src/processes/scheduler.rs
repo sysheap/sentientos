@@ -74,20 +74,6 @@ impl CpuScheduler {
         }
     }
 
-    pub fn enter_syscall(&self) {
-        self.current_thread.with_lock(|mut t| {
-            t.set_program_counter(Cpu::read_sepc());
-            t.set_in_kernel_mode(true);
-            t.set_register_state(&self.trap_frame);
-        });
-    }
-
-    pub fn exit_syscall(&self) {
-        self.current_thread.with_lock(|mut t| {
-            t.set_in_kernel_mode(false);
-        })
-    }
-
     pub fn kill_current_process(&mut self) {
         let tid = self.current_thread.lock().process().with_lock(|p| {
             // TODO: Kill other threads first
@@ -160,7 +146,6 @@ impl CpuScheduler {
             }
 
             t.set_program_counter(Cpu::read_sepc());
-            t.set_in_kernel_mode(Cpu::is_in_kernel_mode());
             t.set_register_state(&self.trap_frame);
 
             debug!("Saved thread {} back", *t);

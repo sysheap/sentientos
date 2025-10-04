@@ -302,10 +302,6 @@ impl Thread {
         self.state = state;
     }
 
-    pub fn set_in_kernel_mode(&mut self, in_kernel_mode: bool) {
-        self.in_kernel_mode = in_kernel_mode;
-    }
-
     pub fn get_in_kernel_mode(&self) -> bool {
         self.in_kernel_mode
     }
