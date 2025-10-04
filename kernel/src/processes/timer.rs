@@ -46,11 +46,6 @@ pub fn return_threads_to_wakeup() -> Vec<ThreadWeakRef> {
     threads.into_values().collect()
 }
 
-pub fn disable_timer() {
-    debug!("disabling timer");
-    Cpu::disable_timer_interrupt();
-}
-
 pub fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();

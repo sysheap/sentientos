@@ -8,7 +8,7 @@ use crate::memory::{
 const BRK_SIZE: Pages = Pages(4);
 
 #[derive(Debug)]
-pub(super) struct Brk {
+pub struct Brk {
     brk_start: usize,
     brk_current: usize,
     /// One past the end of the allocated area
@@ -16,10 +16,7 @@ pub(super) struct Brk {
 }
 
 impl Brk {
-    pub(super) fn new(
-        bss_end: usize,
-        page_tables: &mut RootPageTableHolder,
-    ) -> (PinnedHeapPages, Self) {
+    pub fn new(bss_end: usize, page_tables: &mut RootPageTableHolder) -> (PinnedHeapPages, Self) {
         let brk_start = align_up_page_size(bss_end);
         let pages = PinnedHeapPages::new_pages(BRK_SIZE);
         page_tables.map_userspace(

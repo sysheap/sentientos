@@ -1,20 +1,16 @@
-use core::ops::{Deref, DerefMut};
-
+use super::handler::SyscallHandler;
+use crate::net::sockets::SharedAssignedSocket;
+use alloc::vec::Vec;
 use common::{
     constructable::Constructable,
     errors::{SysSocketError, ValidationError},
     net::UDPDescriptor,
-    pid::Pid,
+    pid::Tid,
     pointer::{FatPointer, Pointer},
     syscalls::syscall_argument::SyscallArgument,
     unwrap_or_return,
 };
-
-use alloc::vec::Vec;
-
-use crate::net::sockets::SharedAssignedSocket;
-
-use super::handler::SyscallHandler;
+use core::ops::{Deref, DerefMut};
 
 #[derive(Debug)]
 pub struct UserspaceArgument<T: SyscallArgument> {
@@ -159,4 +155,4 @@ simple_type!(i32);
 simple_type!(i64);
 simple_type!(isize);
 
-simple_type!(Pid);
+simple_type!(Tid);

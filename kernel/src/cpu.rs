@@ -237,10 +237,6 @@ impl Cpu {
         Self::csrs_sie(1 << SIE_STIE);
     }
 
-    pub fn disable_timer_interrupt() {
-        Self::csrc_sie(1 << SIE_STIE);
-    }
-
     pub fn is_in_kernel_mode() -> bool {
         let sstatus = Self::read_sstatus();
         (sstatus & (1 << SSTATUS_SPP)) > 0
