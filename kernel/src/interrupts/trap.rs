@@ -2,7 +2,7 @@ use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE}
 use crate::{
     cpu::Cpu,
     debug, info,
-    interrupts::plic::{self, InterruptSource},
+    interrupts::plic::{InterruptSource, PLIC},
     io::{stdin_buf::STDIN_BUFFER, uart},
     processes::thread::ThreadState,
     syscalls::{
@@ -26,7 +26,8 @@ extern "C" fn handle_timer_interrupt() {
 #[unsafe(no_mangle)]
 fn handle_external_interrupt() {
     debug!("External interrupt occurred!");
-    let plic_interrupt = match plic::get_next_pending() {
+    let mut plic = PLIC.lock();
+    let plic_interrupt = match plic.get_next_pending() {
         Some(i) => i,
         None => return,
     };
@@ -35,14 +36,31 @@ fn handle_external_interrupt() {
         "Plic interrupt should be uart."
     );
 
-    let input = uart::read().expect("There should be input from the uart.");
+    let input = match uart::read() {
+        Some(input) => input,
+        None => {
+            plic.complete_interrupt(plic_interrupt);
+            return;
+        }
+    };
 
-    plic::complete_interrupt(plic_interrupt);
+    plic.complete_interrupt(plic_interrupt);
 
     match input {
-        3 => Cpu::current().scheduler_mut().send_ctrl_c(),
-        4 => crate::debugging::dump_current_state(),
-        _ => STDIN_BUFFER.lock().push(input),
+        3 => {
+            drop(plic);
+            Cpu::current().scheduler_mut().send_ctrl_c();
+        }
+        4 => {
+            drop(plic);
+            crate::debugging::dump_current_state()
+        }
+        _ => {
+            // Drop plic after pushing byte to STDIN BUFFER since we
+            // have issues with sometimes getting input out of order
+            STDIN_BUFFER.lock().push(input);
+            drop(plic)
+        }
     }
 
     Cpu::current().scheduler_mut().schedule();

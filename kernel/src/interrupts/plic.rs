@@ -5,7 +5,7 @@ use crate::{info, klibc::MMIO};
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x1000_0000;
 
-struct Plic {
+pub struct Plic {
     priority_register_base: MMIO<u32>,
     // pending_register: MMIO<u32>,
     enable_register: MMIO<u32>,
@@ -26,11 +26,11 @@ impl Plic {
             claim_complete_register: MMIO::new(plic_base + 0x20_0004 + (0x1000 * context)),
         }
     }
-    pub fn enable(&mut self, interrupt_id: u32) {
+    fn enable(&mut self, interrupt_id: u32) {
         self.enable_register |= 1 << interrupt_id;
     }
 
-    pub fn set_priority(&mut self, interrupt_id: u32, priority: u32) {
+    fn set_priority(&mut self, interrupt_id: u32, priority: u32) {
         assert!(priority <= 7);
         unsafe {
             self.priority_register_base
@@ -39,7 +39,7 @@ impl Plic {
         }
     }
 
-    pub fn set_threshold(&mut self, threshold: u32) {
+    fn set_threshold(&mut self, threshold: u32) {
         assert!(threshold <= 7);
         self.threshold_register.write(threshold);
     }
@@ -63,7 +63,7 @@ impl Plic {
     }
 }
 
-static PLIC: RuntimeInitializedData<Mutex<Plic>> = RuntimeInitializedData::new();
+pub static PLIC: RuntimeInitializedData<Mutex<Plic>> = RuntimeInitializedData::new();
 
 const UART_INTERRUPT_NUMBER: u32 = 10;
 
@@ -82,12 +82,4 @@ pub fn init_uart_interrupt(hart_id: usize) {
     plic.set_threshold(0);
     plic.enable(UART_INTERRUPT_NUMBER);
     plic.set_priority(UART_INTERRUPT_NUMBER, 1);
-}
-
-pub fn get_next_pending() -> Option<InterruptSource> {
-    PLIC.lock().get_next_pending()
-}
-
-pub fn complete_interrupt(source: InterruptSource) {
-    PLIC.lock().complete_interrupt(source);
 }
