@@ -237,6 +237,7 @@ impl Cpu {
         Self::csrs_sie(1 << SIE_STIE);
     }
 
+    #[allow(dead_code)]
     pub fn is_in_kernel_mode() -> bool {
         let sstatus = Self::read_sstatus();
         (sstatus & (1 << SSTATUS_SPP)) > 0
