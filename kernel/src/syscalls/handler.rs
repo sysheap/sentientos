@@ -1,7 +1,7 @@
 use common::{
     errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
     net::UDPDescriptor,
-    pid::{Pid, Tid},
+    pid::Tid,
     pointer::Pointer,
     syscalls::{SyscallStatus, kernel::KernelSyscalls, syscall_argument::SyscallArgument},
     unwrap_or_return,
@@ -89,7 +89,6 @@ impl KernelSyscalls for SyscallHandler {
         Cpu::with_scheduler(|s| {
             // It is important to clean up the last references to the previous process
             // Otherwise the thread arc is still hanging around and will be schedule next
-            self.current_process = s.powersave_process();
             self.current_thread = s.powersave_thread().clone();
             self.current_tid = POWERSAVE_TID;
 
@@ -103,16 +102,16 @@ impl KernelSyscalls for SyscallHandler {
         &mut self,
         name: UserspaceArgument<&str>,
         args: UserspaceArgument<&'a [&'a str]>,
-    ) -> Result<Pid, SysExecuteError> {
+    ) -> Result<Tid, SysExecuteError> {
         let name = name.validate(self)?;
         let args = args.validate(self)?;
 
-        let pid = Cpu::with_scheduler(|s| s.start_program(name, &args))?;
-        Ok(pid)
+        let tid = Cpu::with_scheduler(|s| s.start_program(name, &args))?;
+        Ok(tid)
     }
 
-    fn sys_wait(&mut self, pid: UserspaceArgument<Pid>) -> Result<(), SysWaitError> {
-        if Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*pid)) {
+    fn sys_wait(&mut self, tid: UserspaceArgument<Tid>) -> Result<(), SysWaitError> {
+        if Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*tid)) {
             Ok(())
         } else {
             Err(SysWaitError::InvalidPid)
