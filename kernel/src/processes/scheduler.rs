@@ -139,10 +139,8 @@ impl CpuScheduler {
             return;
         }
         self.swap_current_with_powersave().with_lock(|mut t| {
-            match t.get_state() {
-                ThreadState::Running => t.set_state(ThreadState::Runnable),
-                ThreadState::Waiting => {}
-                ThreadState::Runnable => panic!("Invalid process state."),
+            if t.get_state() == ThreadState::Running {
+                t.set_state(ThreadState::Runnable);
             }
 
             t.set_program_counter(Cpu::read_sepc());

@@ -3,7 +3,7 @@ use crate::{
     cpu::Cpu,
     debug, info,
     interrupts::plic::{InterruptSource, PLIC},
-    io::{stdin_buf::STDIN_BUFFER, uart},
+    io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
     processes::thread::ThreadState,
     syscalls::{
         self,
@@ -36,34 +36,26 @@ fn handle_external_interrupt() {
         "Plic interrupt should be uart."
     );
 
-    let input = match uart::read() {
-        Some(input) => input,
-        None => {
-            plic.complete_interrupt(plic_interrupt);
-            return;
+    let uart = QEMU_UART.lock();
+    while let Some(input) = uart.read() {
+        match input {
+            3 => {
+                Cpu::with_scheduler(|s| {
+                    s.send_ctrl_c();
+                    s.schedule();
+                });
+            }
+            4 => crate::debugging::dump_current_state(),
+            _ => {
+                STDIN_BUFFER.lock().push(input);
+            }
         }
-    };
+    }
+    drop(uart);
 
     plic.complete_interrupt(plic_interrupt);
 
-    match input {
-        3 => {
-            drop(plic);
-            Cpu::current().scheduler_mut().send_ctrl_c();
-        }
-        4 => {
-            drop(plic);
-            crate::debugging::dump_current_state()
-        }
-        _ => {
-            // Drop plic after pushing byte to STDIN BUFFER since we
-            // have issues with sometimes getting input out of order
-            STDIN_BUFFER.lock().push(input);
-            drop(plic)
-        }
-    }
-
-    Cpu::current().scheduler_mut().schedule();
+    drop(plic);
 }
 
 fn handle_syscall() {
