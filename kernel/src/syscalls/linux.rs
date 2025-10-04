@@ -5,7 +5,6 @@ use crate::{
     processes::{process::ProcessRef, thread::ThreadRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
 };
-use alloc::vec::Vec;
 use common::{
     constructable::Constructable,
     syscalls::{
@@ -13,10 +12,7 @@ use common::{
         trap_frame::{Register, TrapFrame},
     },
 };
-use core::{
-    cmp::min,
-    ffi::{c_int, c_uint, c_ulong},
-};
+use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
     errno::Errno,
     syscall_types::{
@@ -57,9 +53,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
 
         let mut stdin = STDIN_BUFFER.lock();
-        let actual_count = min(stdin.len(), count);
 
-        if actual_count == 0 {
+        if stdin.is_empty() {
             stdin.register_wakeup(self.handler.current_tid());
             drop(stdin);
             self.handler
@@ -67,9 +62,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 .lock()
                 .set_waiting_on_syscall_linux(move || {
                     let mut stdin = STDIN_BUFFER.lock();
-                    let actual_count = min(stdin.len(), count);
 
-                    let copied_buf: Vec<u8> = stdin.drain(..actual_count).collect();
+                    let copied_buf = stdin.get(count);
 
                     buf.write_slice(&copied_buf)?;
 
@@ -78,7 +72,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             return Ok(0);
         }
 
-        let copied_buf: Vec<u8> = stdin.drain(..actual_count).collect();
+        let copied_buf = stdin.get(count);
 
         buf.write_slice(&copied_buf)?;
 

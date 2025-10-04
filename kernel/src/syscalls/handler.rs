@@ -79,7 +79,7 @@ impl KernelSyscalls for SyscallHandler {
 
     fn sys_read_input(&mut self) -> Option<u8> {
         let mut stdin = STDIN_BUFFER.lock();
-        stdin.pop_front()
+        stdin.pop()
     }
 
     fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
