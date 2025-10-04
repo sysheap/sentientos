@@ -87,7 +87,7 @@ impl Uart {
         self.transmitter.write(character);
     }
 
-    fn read(&self) -> Option<u8> {
+    pub fn read(&self) -> Option<u8> {
         if self.lcr.read() & 1 == 0 {
             return None;
         }
@@ -105,8 +105,4 @@ impl Write for Uart {
         }
         Ok(())
     }
-}
-
-pub fn read() -> Option<u8> {
-    QEMU_UART.lock().read()
 }
