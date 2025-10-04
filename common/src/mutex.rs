@@ -93,21 +93,21 @@ impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
+        // SAFETY: We're (the MutexGuard) have exclusive rights to the data
         unsafe { &*self.mutex.data.get() }
     }
 }
 
 impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
+        // SAFETY: We're (the MutexGuard) have exclusive rights to the data
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
 impl<T: Debug> Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // SAFETY: We're (the MutexGuard) have exlusive rights to the data
+        // SAFETY: We're (the MutexGuard) have exclusive rights to the data
         unsafe { writeln!(f, "MutexGuard {{\n{:?}\n}}", *self.mutex.data.get()) }
     }
 }
