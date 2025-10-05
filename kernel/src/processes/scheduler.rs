@@ -12,13 +12,9 @@ use crate::{
     test::qemu_exit,
 };
 use alloc::sync::Arc;
-use common::{errors::SchedulerError, pid::Tid, syscalls::trap_frame::TrapFrame, unwrap_or_return};
-use core::mem::offset_of;
-
-pub const TRAP_FRAME_OFFSET: usize = offset_of!(CpuScheduler, trap_frame);
+use common::{errors::SchedulerError, pid::Tid, unwrap_or_return};
 
 pub struct CpuScheduler {
-    trap_frame: TrapFrame,
     current_thread: ThreadRef,
     powersave_thread: ThreadRef,
 }
@@ -28,18 +24,9 @@ impl CpuScheduler {
         let powersave_thread = Thread::create_powersave_thread();
 
         Self {
-            trap_frame: TrapFrame::zero(),
             current_thread: powersave_thread.clone(),
             powersave_thread,
         }
-    }
-
-    pub fn trap_frame(&self) -> &TrapFrame {
-        &self.trap_frame
-    }
-
-    pub fn trap_frame_mut(&mut self) -> &mut TrapFrame {
-        &mut self.trap_frame
     }
 
     pub fn get_current_thread(&self) -> &ThreadRef {
@@ -88,9 +75,7 @@ impl CpuScheduler {
             p.main_tid()
         });
 
-        self.queue_current_process_back();
         process_table::THE.lock().kill(tid);
-        self.schedule();
     }
 
     pub fn let_current_thread_wait_for(&self, tid: Tid) -> bool {
@@ -105,8 +90,6 @@ impl CpuScheduler {
     }
 
     pub fn send_ctrl_c(&mut self) {
-        self.queue_current_process_back();
-
         process_table::THE.with_lock(|mut pt| {
             let highest_pid = pt.get_highest_tid_without(&["sesh"]);
 
@@ -114,6 +97,7 @@ impl CpuScheduler {
                 pt.kill(pid);
             }
         });
+        self.schedule();
     }
 
     pub fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Tid, SchedulerError> {
@@ -129,10 +113,6 @@ impl CpuScheduler {
         Err(SchedulerError::InvalidProgramName)
     }
 
-    pub fn powersave_thread(&self) -> ThreadRef {
-        self.powersave_thread.clone()
-    }
-
     fn queue_current_process_back(&mut self) {
         if self.current_thread.lock().get_tid() == POWERSAVE_TID {
             debug!("Current thread is already powersave thread - don't queuing back");
@@ -144,7 +124,7 @@ impl CpuScheduler {
             }
 
             t.set_program_counter(Cpu::read_sepc());
-            t.set_register_state(&self.trap_frame);
+            t.set_register_state(&Cpu::read_trap_frame());
 
             debug!("Saved thread {} back", *t);
         });
@@ -182,7 +162,7 @@ impl CpuScheduler {
             let pc = t.get_program_counter();
 
             t.finalize_syscall();
-            self.trap_frame = *t.get_register_state();
+            Cpu::write_trap_frame(*t.get_register_state());
             Cpu::write_sepc(pc);
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
         });

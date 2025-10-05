@@ -64,7 +64,7 @@ impl Debug for SyscallFinalizer {
 pub enum ThreadState {
     Running,
     Runnable,
-    Waiting,
+    Waiting, // Waiting or killed
 }
 
 #[derive(Debug)]

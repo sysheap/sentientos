@@ -15,10 +15,7 @@ use crate::{
     memory::page_tables::XWRMode,
     net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
     print, println,
-    processes::{
-        process::{POWERSAVE_TID, ProcessRef},
-        thread::ThreadRef,
-    },
+    processes::{process::ProcessRef, thread::ThreadRef},
 };
 
 use super::validator::{UserspaceArgument, Validatable};
@@ -78,20 +75,14 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_read_input(&mut self) -> Option<u8> {
-        let mut stdin = STDIN_BUFFER.lock();
-        stdin.pop()
+        STDIN_BUFFER.lock().pop()
     }
 
     fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
         // We don't want to overwrite the next process trap frame
         self.process_exit = true;
 
-        Cpu::with_scheduler(|s| {
-            // It is important to clean up the last references to the previous process
-            // Otherwise the thread arc is still hanging around and will be schedule next
-            self.current_thread = s.powersave_thread().clone();
-            self.current_tid = POWERSAVE_TID;
-
+        Cpu::with_scheduler(|mut s| {
             s.kill_current_process();
         });
 
@@ -106,7 +97,7 @@ impl KernelSyscalls for SyscallHandler {
         let name = name.validate(self)?;
         let args = args.validate(self)?;
 
-        let tid = Cpu::with_scheduler(|s| s.start_program(name, &args))?;
+        let tid = Cpu::with_scheduler(|mut s| s.start_program(name, &args))?;
         Ok(tid)
     }
 

@@ -20,7 +20,7 @@ extern "C" fn get_process_satp_value() -> usize {
 
 #[unsafe(no_mangle)]
 extern "C" fn handle_timer_interrupt() {
-    Cpu::with_scheduler(|s| s.schedule());
+    Cpu::with_scheduler(|mut s| s.schedule());
 }
 
 #[unsafe(no_mangle)]
@@ -40,9 +40,8 @@ fn handle_external_interrupt() {
     while let Some(input) = uart.read() {
         match input {
             3 => {
-                Cpu::with_scheduler(|s| {
+                Cpu::with_scheduler(|mut s| {
                     s.send_ctrl_c();
-                    s.schedule();
                 });
             }
             4 => crate::debugging::dump_current_state(),
@@ -59,43 +58,33 @@ fn handle_external_interrupt() {
 }
 
 fn handle_syscall() {
-    let cpu = Cpu::current();
-    let scheduler = cpu.scheduler();
-
-    let trap_frame = *scheduler.trap_frame();
+    let mut trap_frame = Cpu::read_trap_frame();
     let nr = trap_frame[Register::a7];
     let arg = trap_frame[Register::a1];
     let ret = trap_frame[Register::a2];
 
-    drop(cpu);
-
-    let ret = if (1 << 63) & nr > 0 {
+    if (1 << 63) & nr > 0 {
         // We might need to get the current cpu again in handle_syscall
-        syscalls::handle_syscall(nr, arg, ret)
+        if let Some(ret) = syscalls::handle_syscall(nr, arg, ret) {
+            trap_frame[Register::a0] = ret as usize;
+            Cpu::write_trap_frame(trap_frame);
+            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+        }
     } else {
         let mut handler = LinuxSyscallHandler::new();
         let result = handler.handle(&trap_frame);
-        let mut cpu = Cpu::current();
-        let scheduler = cpu.scheduler_mut();
-        let trap_frame = scheduler.trap_frame_mut();
         let ret = match result {
             Ok(ret) => ret,
             Err(errno) => -(errno as isize),
         };
         trap_frame[Register::a0] = ret as usize;
-        Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
-        None
-    };
-
-    let mut cpu = Cpu::current();
-    let scheduler = cpu.scheduler_mut();
-
-    if let Some(ret) = ret {
-        let trap_frame = scheduler.trap_frame_mut();
-        trap_frame[Register::a0] = ret as usize;
+        Cpu::write_trap_frame(trap_frame);
         Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
     }
 
+    let cpu = Cpu::current();
+
+    let mut scheduler = cpu.scheduler().lock();
     // In case our current process was set to waiting state we need to reschedule
     if scheduler.get_current_thread().lock().get_state() == ThreadState::Waiting {
         scheduler.schedule();
@@ -106,8 +95,8 @@ fn handle_unhandled_exception() {
     let cause = InterruptCause::from_scause();
     let stval = Cpu::read_stval();
     let sepc = Cpu::read_sepc();
-    let mut cpu = Cpu::current();
-    let scheduler = cpu.scheduler_mut();
+    let cpu = Cpu::current();
+    let mut scheduler = cpu.scheduler().lock();
     let (message, from_userspace) = scheduler.get_current_process().with_lock(|p| {
         let from_userspace =
             p.get_page_table().is_userspace_address(sepc);
@@ -119,7 +108,7 @@ fn handle_unhandled_exception() {
             sepc,
             from_userspace,
             p.get_name(),
-            scheduler.trap_frame()
+            Cpu::read_trap_frame()
         ), from_userspace)
     });
     if from_userspace {
@@ -137,6 +126,15 @@ extern "C" fn handle_exception() {
         ENVIRONMENT_CALL_FROM_U_MODE => handle_syscall(),
         _ => handle_unhandled_exception(),
     }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn handle_supervisor_software_interrupt() {
+    // This interrupt is fired when we kill a thread
+    // It could be that our cpu is currently running this
+    // thread, therefore, reschedule.
+    Cpu::with_scheduler(|mut s| s.schedule());
+    Cpu::clear_supervisor_software_interrupt();
 }
 
 #[unsafe(no_mangle)]
