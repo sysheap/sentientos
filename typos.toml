@@ -1,0 +1,6 @@
+[default.extend-identifiers]
+SIE_STIE = "SIE_STIE"
+sie = "sie"
+
+[default.extend-words]
+sie = "sie"
