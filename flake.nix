@@ -95,6 +95,7 @@
             pwndbg.packages.${system}.default
             gcc-riscv-debug.cc
             gcc-riscv-debug.bintools
+            pkgs.typos-lsp
           ];
           shellHook = hookWithMusl;
         };
