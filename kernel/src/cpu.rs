@@ -1,41 +1,38 @@
 use alloc::boxed::Box;
-use core::{
-    arch::asm,
-    cell::Cell,
-    mem::offset_of,
-    ops::{Deref, DerefMut},
-    ptr::addr_of,
-};
+use core::{arch::asm, mem::offset_of, ptr::addr_of};
 
-use common::{mutex::MutexGuard, runtime_initialized::RuntimeInitializedData};
+use common::{
+    mutex::{Mutex, MutexGuard},
+    runtime_initialized::RuntimeInitializedData,
+    syscalls::trap_frame::TrapFrame,
+};
 
 use crate::{
     klibc::sizes::KiB,
     memory::page_tables::RootPageTableHolder,
-    processes::{
-        process::Process,
-        scheduler::{self, CpuScheduler},
-        thread::ThreadRef,
-    },
+    processes::{process::Process, scheduler::CpuScheduler, thread::ThreadRef},
+    sbi::extensions::ipi_extension::sbi_send_ipi,
 };
 
 const KERNEL_STACK_SIZE: usize = KiB(512);
 
 const SIE_STIE: usize = 5;
 const SSTATUS_SPP: usize = 8;
+const SIP_SSIP: usize = 1;
 
 pub static STARTING_CPU_ID: RuntimeInitializedData<usize> = RuntimeInitializedData::new();
 
-pub const TRAP_FRAME_OFFSET: usize = offset_of!(Cpu, scheduler) + scheduler::TRAP_FRAME_OFFSET;
+pub const TRAP_FRAME_OFFSET: usize = offset_of!(Cpu, trap_frame);
 
 pub const KERNEL_PAGE_TABLES_SATP_OFFSET: usize = offset_of!(Cpu, kernel_page_tables_satp_value);
 
 pub struct Cpu {
     kernel_page_tables_satp_value: usize,
-    scheduler: CpuScheduler,
+    trap_frame: TrapFrame,
+    scheduler: Mutex<CpuScheduler>,
     cpu_id: usize,
     kernel_page_tables: RootPageTableHolder,
-    mutable_reference_alive: Cell<bool>,
+    number_cpus: usize,
 }
 
 macro_rules! read_csrr {
@@ -103,8 +100,21 @@ impl Cpu {
     write_csrr!(sscratch);
     write_csrr!(sstatus);
     write_csrr!(sie);
+    write_csrr!(sip);
 
-    pub fn init(cpu_id: usize) -> *mut Cpu {
+    pub fn ipi_to_all_but_me(&self) {
+        assert!(
+            self.number_cpus <= 64,
+            "If we have more cpu's we need to use hart_mask_base, that is not implemented yet."
+        );
+        let mut mask = 0;
+        for id in (1..=self.number_cpus).filter(|i| *i != self.cpu_id) {
+            mask |= 1 << id;
+        }
+        sbi_send_ipi(mask, 0).assert_success();
+    }
+
+    pub fn init(cpu_id: usize, number_cpus: usize) -> *const Cpu {
         let kernel_stack =
             Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()) as *mut _ as *mut u8;
         let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(true);
@@ -124,44 +134,50 @@ impl Cpu {
 
         let cpu = Box::new(Self {
             kernel_page_tables_satp_value: satp_value,
-            scheduler: CpuScheduler::new(),
+            trap_frame: TrapFrame::zero(),
+            scheduler: Mutex::new(CpuScheduler::new()),
             cpu_id,
+            number_cpus,
             kernel_page_tables: page_tables,
-            mutable_reference_alive: Cell::new(false),
         });
 
-        Box::leak(cpu) as *mut Cpu
+        Box::leak(cpu) as *const Cpu
     }
 
-    fn get_per_cpu_data() -> *mut Self {
+    fn cpu_ptr() -> *mut Cpu {
         let ptr = Self::read_sscratch() as *mut Self;
         assert!(!ptr.is_null() && ptr.is_aligned());
         ptr
     }
 
-    pub unsafe fn reset_current_cpu_alive() {
-        let ptr = Self::get_per_cpu_data();
+    pub fn current() -> &'static Cpu {
         // SAFETY: The pointer points to a static and is therefore always valid.
-        let mutable_reference_alive = unsafe { &(*ptr).mutable_reference_alive };
-        mutable_reference_alive.set(false);
+        unsafe { &*Self::cpu_ptr() }
     }
 
-    pub fn current() -> CpuRefHolder {
-        let ptr = Self::get_per_cpu_data();
-        // SAFETY: The pointer points to a static and is therefore always valid.
-        let mutable_reference_alive = unsafe { &(*ptr).mutable_reference_alive };
-        let old = mutable_reference_alive.replace(true);
-        assert!(
-            !old,
-            "There must be only one valid mutable reference to the current cpu struct."
-        );
-        // SAFETY: The pointer points to a static and is therefore always valid.
-        unsafe { CpuRefHolder(&mut *ptr) }
+    pub fn read_trap_frame() -> TrapFrame {
+        let cpu_ptr = Self::cpu_ptr();
+        // SAFETY: Cpu is statically allocated and offset
+        // is calculated by the actual field offset.
+        unsafe {
+            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET) as *mut TrapFrame;
+            trap_frame_ptr.read_volatile()
+        }
     }
 
-    pub fn with_scheduler<R>(f: impl FnOnce(&mut CpuScheduler) -> R) -> R {
-        let mut cpu = Self::current();
-        let scheduler = cpu.scheduler_mut();
+    pub fn write_trap_frame(trap_frame: TrapFrame) {
+        let cpu_ptr = Self::cpu_ptr();
+        // SAFETY: Cpu is statically allocated and offset
+        // is calculated by the actual field offset.
+        unsafe {
+            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET) as *mut TrapFrame;
+            trap_frame_ptr.write_volatile(trap_frame);
+        }
+    }
+
+    pub fn with_scheduler<R>(f: impl FnOnce(MutexGuard<'_, CpuScheduler>) -> R) -> R {
+        let cpu = Self::current();
+        let scheduler = cpu.scheduler().lock();
         f(scheduler)
     }
 
@@ -195,12 +211,8 @@ impl Cpu {
         self.kernel_page_tables.activate_page_table();
     }
 
-    pub fn scheduler(&self) -> &CpuScheduler {
+    pub fn scheduler(&self) -> &Mutex<CpuScheduler> {
         &self.scheduler
-    }
-
-    pub fn scheduler_mut(&mut self) -> &mut CpuScheduler {
-        &mut self.scheduler
     }
 
     pub unsafe fn write_satp_and_fence(satp_val: usize) {
@@ -237,6 +249,11 @@ impl Cpu {
         Self::csrs_sie(1 << SIE_STIE);
     }
 
+    /// Clear SSIP (supervisor software interrupt pending)
+    pub fn clear_supervisor_software_interrupt() {
+        Self::csrc_sip(1 << SIP_SSIP);
+    }
+
     #[allow(dead_code)]
     pub fn is_in_kernel_mode() -> bool {
         let sstatus = Self::read_sstatus();
@@ -252,24 +269,8 @@ impl Cpu {
     }
 }
 
-pub struct CpuRefHolder(&'static mut Cpu);
-
-impl Drop for CpuRefHolder {
+impl Drop for Cpu {
     fn drop(&mut self) {
-        self.0.mutable_reference_alive.set(false);
-    }
-}
-
-impl Deref for CpuRefHolder {
-    type Target = Cpu;
-
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl DerefMut for CpuRefHolder {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
+        panic!("Cpu struct is never allowed to be dropped!");
     }
 }

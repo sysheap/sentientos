@@ -117,7 +117,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     process_table::init();
 
-    Cpu::write_sscratch(Cpu::init(hart_id) as usize);
+    Cpu::write_sscratch(Cpu::init(hart_id, num_cpus) as usize);
 
     Cpu::current().activate_kernel_page_table();
 
@@ -161,7 +161,7 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
             continue;
         }
 
-        let cpu_struct = Cpu::init(cpu_id);
+        let cpu_struct = Cpu::init(cpu_id, number_of_cpus);
         sbi::extensions::hart_state_extension::start_hart(
             cpu_id,
             start_hart as usize,

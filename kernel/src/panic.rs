@@ -16,7 +16,7 @@ static CPU_ENTERED_PANIC: AtomicIsize = AtomicIsize::new(-1);
 fn panic(info: &PanicInfo) -> ! {
     use core::sync::atomic::Ordering;
 
-    use crate::{asm::wfi_loop, cpu::Cpu};
+    use crate::{asm::wfi_loop, cpu::Cpu, io::uart::QEMU_UART};
 
     unsafe {
         crate::Cpu::disable_global_interrupts();
@@ -34,6 +34,10 @@ fn panic(info: &PanicInfo) -> ! {
         wfi_loop();
     }
 
+    unsafe {
+        QEMU_UART.disarm();
+    }
+
     println!("\nKERNEL Panic");
     let kernel_page_tables = Cpu::maybe_kernel_page_tables();
     if let Some(kernel_page_tables) = kernel_page_tables {
@@ -41,10 +45,6 @@ fn panic(info: &PanicInfo) -> ! {
     }
     abort_if_double_panic();
     crate::debugging::backtrace::print();
-
-    unsafe {
-        Cpu::reset_current_cpu_alive();
-    }
 
     crate::debugging::dump_current_state();
 
