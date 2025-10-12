@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    generate_userspace_programs_include(&["true", "false"])?;
+    generate_userspace_programs_include(&["true", "false", "echo"])?;
 
     Ok(())
 }
