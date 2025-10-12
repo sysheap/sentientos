@@ -1,6 +1,7 @@
 [default.extend-identifiers]
 SIE_STIE = "SIE_STIE"
 sie = "sie"
+RISCV_ATTRIBUT = "RISCV_ATTRIBUT"
 
 [default.extend-words]
 sie = "sie"

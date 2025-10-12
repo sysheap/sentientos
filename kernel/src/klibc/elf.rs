@@ -17,7 +17,7 @@ pub enum BitFormat {
 #[derive(PartialEq, Eq)]
 #[non_exhaustive]
 #[allow(dead_code)]
-pub enum Endianess {
+pub enum Endianness {
     Little = 1,
     Big = 2,
 }
@@ -51,7 +51,7 @@ pub enum OsAbi {
 /// Warning: This only works for little endian at the moment.
 #[allow(non_camel_case_types)]
 #[repr(u16)]
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 #[allow(dead_code)]
 pub enum FileType {
@@ -146,7 +146,7 @@ pub enum Machine {
 pub struct ElfHeader {
     pub magic_number: BigEndian<u32>,
     pub bit_format: BitFormat,
-    pub endianess: Endianess,
+    pub endianness: Endianness,
     pub version: u8,
     pub os_abi: OsAbi,
     pub abi_version: u8,
@@ -230,7 +230,7 @@ pub enum ElfParseErrors {
     BigEndianIsNotSupported,
     UnsupportedElfVersionNumber,
     UnsupportedOsABI,
-    NotAnExceutableFile,
+    NotAnExecutableFile,
     NotAnRISCVExecutable,
 }
 
@@ -308,7 +308,7 @@ impl<'a> ElfFile<'a> {
             return Some(ElfParseErrors::Bit32IsNotSupported);
         }
 
-        if header.endianess != Endianess::Little {
+        if header.endianness != Endianness::Little {
             return Some(ElfParseErrors::BigEndianIsNotSupported);
         }
 
@@ -321,7 +321,7 @@ impl<'a> ElfFile<'a> {
         }
 
         if header.object_file_type != FileType::ExecutableFile {
-            return Some(ElfParseErrors::NotAnExceutableFile);
+            return Some(ElfParseErrors::NotAnExecutableFile);
         }
 
         if header.machine != Machine::RISC_V {

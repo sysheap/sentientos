@@ -33,6 +33,7 @@
           configureFlags = (builtins.filter (f: f != "--enable-shared") old.configureFlags) ++ [
             "--disable-optimize"
           ];
+          hardeningDisable = [ "fortify" ];
           separateDebugInfo = false;
           dontStrip = true;
           postPatch = old.postPatch + ''
@@ -50,11 +51,25 @@
           };
         };
 
-        basePackages = with pkgs; [
-          qemu
-          cargo-nextest
+        coreutils = riscv-toolchain.pkgsStatic.coreutils;
+        coreutils-debug = riscv-toolchain.pkgsStatic.coreutils.overrideAttrs (old: {
+          stdenv = riscv-toolchain.overrideCC riscv-toolchain.stdenv gcc-riscv-debug;
+          hardeningDisable = [ "fortify" ];
+          separateDebugInfo = false;
+          dontStrip = true;
+          env.NIX_CFLAGS_COMPILE = old.env.NIX_CFLAGS_COMPILE + " -O0 -ggdb";
+          postPatch = old.postPatch + ''
+            # copy sources to $out/src so gdb can find them
+            mkdir -p $out/src
+            cp -r ./ $out/src/
+          '';
+        });
+
+        basePackages = [
+          pkgs.qemu
+          pkgs.cargo-nextest
+          pkgs.just
           rustToolchain
-          just
         ];
 
         commonEnv = {
@@ -67,9 +82,11 @@
           {
             extraInputs,
             shellHook ? "",
+            extraEnv,
           }:
           riscv-toolchain.mkShellNoCC (
             commonEnv
+            // extraEnv
             // {
               nativeBuildInputs = extraInputs ++ basePackages;
               inherit shellHook;
@@ -79,6 +96,7 @@
         hookWithMusl = ''
           rm -rf musl headers/linux_headers
           ln -sf ${musl-riscv}/src musl
+          ln -sf ${coreutils-debug}/src coreutils
           ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
         '';
 
@@ -89,6 +107,9 @@
       in
       {
         devShells.default = mkDevShell {
+          extraEnv = {
+            COREUTILS = coreutils-debug;
+          };
           extraInputs = [
             pkgs.gdb
             pkgs.tmux
@@ -101,6 +122,9 @@
         };
 
         devShells.ci = mkDevShell {
+          extraEnv = {
+            COREUTILS = coreutils;
+          };
           extraInputs = [
             riscv-toolchain.buildPackages.gcc
             riscv-toolchain.buildPackages.binutils

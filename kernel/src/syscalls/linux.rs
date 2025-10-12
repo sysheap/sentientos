@@ -35,6 +35,7 @@ linux_syscalls! {
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
     SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
+    SYSCALL_NR_PRCTL => prctl();
 }
 
 pub struct LinuxSyscallHandler {
@@ -341,6 +342,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     fn munmap(&mut self, _addr: usize, _length: usize) -> Result<isize, headers::errno::Errno> {
         // Ignore munmap for now
         Ok(0)
+    }
+
+    fn prctl(&mut self) -> Result<isize, headers::errno::Errno> {
+        // We dont support any of prctl right now
+        Err(Errno::EINVAL)
     }
 }
 

@@ -1,6 +1,6 @@
 mod basics;
 mod connect4;
-mod echo;
+mod coreutils;
 mod net;
 mod panic;
 mod signals;
