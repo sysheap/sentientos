@@ -43,7 +43,7 @@
           '';
         });
 
-        gcc-riscv-debug = riscv-toolchain.buildPackages.wrapCCWith {
+        gcc-riscv = riscv-toolchain.buildPackages.wrapCCWith {
           cc = riscv-toolchain.buildPackages.gcc;
           bintools = riscv-toolchain.buildPackages.wrapBintoolsWith {
             bintools = riscv-toolchain.buildPackages.binutils;
@@ -51,9 +51,8 @@
           };
         };
 
-        coreutils = riscv-toolchain.pkgsStatic.coreutils;
-        coreutils-debug = riscv-toolchain.pkgsStatic.coreutils.overrideAttrs (old: {
-          stdenv = riscv-toolchain.overrideCC riscv-toolchain.stdenv gcc-riscv-debug;
+        coreutils = riscv-toolchain.pkgsStatic.coreutils.overrideAttrs (old: {
+          stdenv = riscv-toolchain.overrideCC riscv-toolchain.stdenv gcc-riscv;
           hardeningDisable = [ "fortify" ];
           separateDebugInfo = false;
           dontStrip = true;
@@ -70,66 +69,47 @@
           pkgs.cargo-nextest
           pkgs.just
           rustToolchain
+          gcc-riscv.cc
+          gcc-riscv.bintools
         ];
 
         commonEnv = {
           # Needed for bindgen
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          COREUTILS = coreutils;
         };
+
+        hook = ''
+          rm -rf musl coreutils headers/linux_headers
+          ln -sf ${musl-riscv}/src musl
+          ln -sf ${coreutils}/src coreutils
+          ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
+        '';
 
         # helper to build devShells
         mkDevShell =
           {
-            extraInputs,
-            shellHook ? "",
-            extraEnv,
+            extraInputs ? [ ],
           }:
           riscv-toolchain.mkShellNoCC (
             commonEnv
-            // extraEnv
             // {
               nativeBuildInputs = extraInputs ++ basePackages;
-              inherit shellHook;
+              shellHook = hook;
             }
           );
-
-        hookWithMusl = ''
-          rm -rf musl headers/linux_headers
-          ln -sf ${musl-riscv}/src musl
-          ln -sf ${coreutils-debug}/src coreutils
-          ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
-        '';
-
-        hookHeadersOnly = ''
-          rm -rf headers/linux_headers
-          ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
-        '';
       in
       {
         devShells.default = mkDevShell {
-          extraEnv = {
-            COREUTILS = coreutils-debug;
-          };
           extraInputs = [
             pkgs.gdb
             pkgs.tmux
             pwndbg.packages.${system}.default
-            gcc-riscv-debug.cc
-            gcc-riscv-debug.bintools
             pkgs.typos-lsp
           ];
-          shellHook = hookWithMusl;
         };
 
         devShells.ci = mkDevShell {
-          extraEnv = {
-            COREUTILS = coreutils;
-          };
-          extraInputs = [
-            riscv-toolchain.buildPackages.gcc
-            riscv-toolchain.buildPackages.binutils
-          ];
-          shellHook = hookHeadersOnly;
         };
       }
     );
