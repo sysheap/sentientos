@@ -8,7 +8,7 @@ build-cargo: build-userspace
     cargo build --release
 
 build-userspace:
-    cd userspace && cargo build --bins --target-dir ../target-userspace --artifact-dir ../kernel/compiled_userspace -Z unstable-options -Z build-std=panic_abort,std
+    cd userspace && cargo build --bins --target-dir ../target-userspace --artifact-dir ../kernel/compiled_userspace -Z unstable-options --release # -Z build-std=panic_abort,std
 
 clippy: build-userspace
     cd userspace && cargo clippy -- -D warnings
