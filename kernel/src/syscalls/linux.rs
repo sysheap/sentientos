@@ -5,6 +5,7 @@ use crate::{
     processes::{process::ProcessRef, thread::ThreadRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
 };
+use alloc::{string::String, vec::Vec};
 use common::{
     constructable::Constructable,
     syscalls::{
@@ -17,25 +18,28 @@ use headers::{
     errno::Errno,
     syscall_types::{
         _NSIG, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, pollfd, sigaction, sigset_t,
-        stack_t, timespec,
+        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
+        sigaction, sigset_t, stack_t, timespec,
     },
 };
 
 linux_syscalls! {
     SYSCALL_NR_BRK => brk(brk: c_ulong);
+    SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
     SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
+    SYSCALL_NR_PRCTL => prctl();
+    SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
+    SYSCALL_NR_WRITEV => writev(fd: c_int, iov: *const iovec, iovcnt: c_int);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
-    SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
-    SYSCALL_NR_PRCTL => prctl();
 }
 
 pub struct LinuxSyscallHandler {
@@ -347,6 +351,49 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     fn prctl(&mut self) -> Result<isize, headers::errno::Errno> {
         // We dont support any of prctl right now
         Err(Errno::EINVAL)
+    }
+
+    fn ioctl(&mut self, fd: c_int, op: c_uint) -> Result<isize, headers::errno::Errno> {
+        if fd > 2 {
+            return Err(Errno::EBADFD);
+        }
+        if op == TIOCGWINSZ && (fd == 1 || fd == 2) {
+            return Err(Errno::ENOTTY);
+        }
+        Err(Errno::EINVAL)
+    }
+
+    fn writev(
+        &mut self,
+        fd: c_int,
+        iov: LinuxUserspaceArg<*const iovec>,
+        iovcnt: c_int,
+    ) -> Result<isize, headers::errno::Errno> {
+        if fd != 1 && fd != 2 {
+            return Err(Errno::EBADF);
+        }
+
+        let iov = iov.validate_slice(iovcnt as usize)?;
+        let mut data = Vec::new();
+
+        for io in iov {
+            let buf = LinuxUserspaceArg::<*const u8>::new(io.iov_base as usize, self.get_process());
+            let mut buf = buf.validate_slice(io.iov_len as usize)?;
+            data.append(&mut buf);
+        }
+
+        let len = data.len();
+        print!("{}", String::from_utf8_lossy_owned(data));
+
+        Ok(len as isize)
+    }
+
+    fn close(
+        &mut self,
+        _fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
+    ) -> Result<isize, headers::errno::Errno> {
+        // TODO: Implement when we really manage fd objects
+        Ok(0)
     }
 }
 
