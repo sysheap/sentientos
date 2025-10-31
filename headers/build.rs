@@ -76,11 +76,13 @@ fn default_bindgen_builder() -> bindgen::Builder {
 
 fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm-generic/ioctls.h")
         .header("linux_headers/include/asm-generic/poll.h")
         .header("linux_headers/include/asm-generic/signal.h")
         .header("linux_headers/include/linux/auxvec.h")
         .header("linux_headers/include/linux/mman.h")
         .header("linux_headers/include/linux/time.h")
+        .header("linux_headers/include/linux/uio.h")
         .generate()?;
     let syscall_file_path = out_path.join("syscall_types.rs");
     bindings.write_to_file(syscall_file_path.clone())?;

@@ -50,6 +50,13 @@ impl<T> LinuxUserspaceArg<Option<*const T>> {
     }
 }
 
+impl<T: Copy> LinuxUserspaceArg<*const T> {
+    pub fn validate_slice(&self, len: usize) -> Result<Vec<T>, Errno> {
+        self.process
+            .with_lock(|p| p.read_userspace_slice(&self.into(), len))
+    }
+}
+
 impl<T: Copy> LinuxUserspaceArg<*mut T> {
     pub fn validate_slice(&self, len: usize) -> Result<Vec<T>, Errno> {
         self.process
