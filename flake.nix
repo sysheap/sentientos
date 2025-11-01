@@ -27,32 +27,27 @@
         pkgs = import nixpkgs { inherit system overlays; };
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
-        riscv-toolchain = pkgs.pkgsCross.riscv64-musl;
 
-        musl-riscv = riscv-toolchain.musl.overrideAttrs (old: {
-          configureFlags = (builtins.filter (f: f != "--enable-shared") old.configureFlags) ++ [
-            "--disable-optimize"
-          ];
-          hardeningDisable = [ "fortify" ];
-          separateDebugInfo = false;
-          dontStrip = true;
-          postPatch = old.postPatch + ''
-            # copy sources to $out/src so gdb can find them
-            mkdir -p $out/src
-            cp -r ./ $out/src/
-          '';
-        });
+        riscv-toolchain = pkgs.pkgsCross.riscv64-musl.pkgsStatic.extend (
+          final: prev: {
+            musl = prev.musl.overrideAttrs (old: {
+              configureFlags = old.configureFlags ++ [
+                "--disable-optimize"
+              ];
+              hardeningDisable = [ "fortify" ];
+              separateDebugInfo = false;
+              dontStrip = true;
+              postPatch = old.postPatch + ''
+                mkdir -p $out/src
+                cp -r ./ $out/src/
+              '';
+            });
+          }
+        );
 
-        gcc-riscv = riscv-toolchain.buildPackages.wrapCCWith {
-          cc = riscv-toolchain.buildPackages.gcc;
-          bintools = riscv-toolchain.buildPackages.wrapBintoolsWith {
-            bintools = riscv-toolchain.buildPackages.binutils;
-            libc = musl-riscv;
-          };
-        };
+        musl-riscv = riscv-toolchain.musl;
 
-        coreutils = riscv-toolchain.pkgsStatic.coreutils.overrideAttrs (old: {
-          stdenv = riscv-toolchain.overrideCC riscv-toolchain.stdenv gcc-riscv;
+        coreutils = riscv-toolchain.coreutils.overrideAttrs (old: {
           hardeningDisable = [ "fortify" ];
           separateDebugInfo = false;
           dontStrip = true;
@@ -69,8 +64,8 @@
           pkgs.cargo-nextest
           pkgs.just
           rustToolchain
-          gcc-riscv.cc
-          gcc-riscv.bintools
+          riscv-toolchain.buildPackages.gcc
+          riscv-toolchain.buildPackages.binutils
         ];
 
         commonEnv = {
@@ -91,7 +86,7 @@
           {
             extraInputs ? [ ],
           }:
-          riscv-toolchain.mkShellNoCC (
+          pkgs.mkShell (
             commonEnv
             // {
               nativeBuildInputs = extraInputs ++ basePackages;
