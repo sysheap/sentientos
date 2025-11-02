@@ -25,6 +25,7 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+        lib = pkgs.lib;
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
 
@@ -71,14 +72,26 @@
         commonEnv = {
           # Needed for bindgen
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-          COREUTILS = coreutils;
         };
 
+        userBins = [
+          "${coreutils}/bin/true"
+          "${coreutils}/bin/false"
+          "${coreutils}/bin/echo"
+        ];
+
         hook = ''
-          rm -rf musl coreutils headers/linux_headers
+          rm -rf musl coreutils headers/linux_headers kernel/compiled_userspace_nix
+
           ln -sf ${musl-riscv}/src musl
           ln -sf ${coreutils}/src coreutils
           ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
+
+          mkdir kernel/compiled_userspace_nix
+          for target in ${lib.concatStringsSep " " (map (p: "'${p}'") userBins)}; do
+            name="$(basename "$target")"
+            ln -sf "$target" "./kernel/compiled_userspace_nix/$name"
+          done
         '';
 
         # helper to build devShells
