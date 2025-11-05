@@ -26,6 +26,7 @@ impl<T> LinuxUserspaceArg<T> {
 }
 
 impl LinuxUserspaceArg<*const u8> {
+    #[allow(dead_code)]
     pub fn validate_str(&self, len: usize) -> Result<String, Errno> {
         self.process
             .with_lock(|p| p.read_userspace_str(&self.into(), len))

@@ -1,3 +1,4 @@
+pub mod fds;
 pub mod stdin_buf;
 pub mod uart;
 

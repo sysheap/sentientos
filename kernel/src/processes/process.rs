@@ -1,5 +1,6 @@
 use crate::{
     debug,
+    io::fds::FDs,
     memory::{
         PAGE_SIZE,
         page::PinnedHeapPages,
@@ -36,6 +37,7 @@ pub struct Process {
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     brk: Brk,
+    fds: FDs,
 }
 
 impl Debug for Process {
@@ -73,11 +75,20 @@ impl Process {
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
+            fds: FDs::new_with_std(),
         }
     }
 
     pub fn brk(&mut self, brk: usize) -> usize {
         self.brk.brk(brk)
+    }
+
+    pub fn fds(&self) -> &FDs {
+        &self.fds
+    }
+
+    pub fn fds_mut(&mut self) -> &mut FDs {
+        &mut self.fds
     }
 
     pub fn add_thread(&mut self, tid: Tid, thread: ThreadWeakRef) {
@@ -108,6 +119,7 @@ impl Process {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn read_userspace_str(
         &self,
         ptr: &UserspacePtr<*const u8>,
