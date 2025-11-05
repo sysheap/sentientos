@@ -1,11 +1,10 @@
 use crate::{
     io::stdin_buf::STDIN_BUFFER,
     memory::{PAGE_SIZE, page_tables::XWRMode},
-    print,
     processes::{process::ProcessRef, thread::ThreadRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
 };
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 use common::{
     constructable::Constructable,
     syscalls::{
@@ -18,8 +17,8 @@ use headers::{
     errno::Errno,
     syscall_types::{
         _NSIG, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
-        sigaction, sigset_t, stack_t, timespec,
+        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, iovec, pollfd, sigaction, sigset_t,
+        stack_t, timespec,
     },
 };
 
@@ -53,35 +52,31 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*mut u8>,
         count: usize,
     ) -> Result<isize, headers::errno::Errno> {
-        if fd != 0 {
-            return Err(Errno::EBADF);
+        let mut temp = vec![0u8; count];
+        let fd = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fds().get(fd))?;
+
+        let len = fd.read(&mut temp).map(|len| len as isize)?;
+
+        if len > 0 {
+            buf.write_slice(&temp)?;
+            return Ok(len);
         }
 
-        let mut stdin = STDIN_BUFFER.lock();
-
-        if stdin.is_empty() {
-            stdin.register_wakeup(self.handler.current_tid());
-            drop(stdin);
-            self.handler
-                .current_thread()
-                .lock()
-                .set_waiting_on_syscall_linux(move || {
-                    let mut stdin = STDIN_BUFFER.lock();
-
-                    let copied_buf = stdin.get(count);
-
-                    buf.write_slice(&copied_buf)?;
-
-                    Ok(copied_buf.len() as isize)
-                });
-            return Ok(0);
-        }
-
-        let copied_buf = stdin.get(count);
-
-        buf.write_slice(&copied_buf)?;
-
-        Ok(copied_buf.len() as isize)
+        STDIN_BUFFER
+            .lock()
+            .register_wakeup(self.handler.current_tid());
+        self.handler
+            .current_thread()
+            .lock()
+            .set_waiting_on_syscall_linux(move || {
+                let len = fd.read(&mut temp).map(|len| len as isize)?;
+                buf.write_slice(&temp)?;
+                Ok(len)
+            });
+        Err(Errno::EAGAIN)
     }
 
     fn write(
@@ -90,15 +85,12 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*const u8>,
         count: usize,
     ) -> Result<isize, Errno> {
-        if fd != 1 && fd != 2 {
-            return Err(Errno::EBADF);
-        }
-
-        let string = buf.validate_str(count)?;
-
-        print!("{}", string);
-
-        Ok(count as isize)
+        let buf = buf.validate_slice(count)?;
+        let fd = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fds().get(fd))?;
+        fd.write(&buf).map(|len| len as isize)
     }
 
     fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
@@ -354,13 +346,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     fn ioctl(&mut self, fd: c_int, op: c_uint) -> Result<isize, headers::errno::Errno> {
-        if fd > 2 {
-            return Err(Errno::EBADFD);
-        }
-        if op == TIOCGWINSZ && (fd == 1 || fd == 2) {
-            return Err(Errno::ENOTTY);
-        }
-        Err(Errno::EINVAL)
+        let fd = self.get_process().with_lock(|p| p.fds().get(fd))?;
+        fd.ioctl(op)
     }
 
     fn writev(
@@ -369,9 +356,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         iov: LinuxUserspaceArg<*const iovec>,
         iovcnt: c_int,
     ) -> Result<isize, headers::errno::Errno> {
-        if fd != 1 && fd != 2 {
-            return Err(Errno::EBADF);
-        }
+        let fd = self.get_process().with_lock(|p| p.fds().get(fd))?;
 
         let iov = iov.validate_slice(iovcnt as usize)?;
         let mut data = Vec::new();
@@ -382,18 +367,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             data.append(&mut buf);
         }
 
-        let len = data.len();
-        print!("{}", String::from_utf8_lossy_owned(data));
-
-        Ok(len as isize)
+        fd.write(&data).map(|len| len as isize)
     }
 
-    fn close(
-        &mut self,
-        _fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
-    ) -> Result<isize, headers::errno::Errno> {
-        // TODO: Implement when we really manage fd objects
-        Ok(0)
+    fn close(&mut self, fd: c_int) -> Result<isize, headers::errno::Errno> {
+        self.get_process()
+            .with_lock(|mut p| p.fds_mut().close(fd))
+            .map(|_| 0)
     }
 }
 

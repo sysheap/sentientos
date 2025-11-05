@@ -46,10 +46,10 @@ fn get_next_tid() -> Tid {
     Tid(next_tid)
 }
 
-pub struct SyscallFinalizer(Box<dyn Fn() -> Result<isize, Errno> + Send + 'static>);
+pub struct SyscallFinalizer(Box<dyn FnMut() -> Result<isize, Errno> + Send + 'static>);
 
 impl SyscallFinalizer {
-    fn call(self) -> Result<isize, Errno> {
+    fn call(mut self) -> Result<isize, Errno> {
         self.0()
     }
 }
@@ -308,7 +308,7 @@ impl Thread {
 
     pub fn set_waiting_on_syscall_linux(
         &mut self,
-        finalizer: impl Fn() -> Result<isize, Errno> + Send + 'static,
+        finalizer: impl FnMut() -> Result<isize, Errno> + Send + 'static,
     ) {
         self.state = ThreadState::Waiting;
         self.waiting_on_syscall = Some(SyscallFinalizer(Box::new(finalizer)));

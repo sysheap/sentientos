@@ -54,21 +54,11 @@ impl StdinBuffer {
 
         self.data.drain(..actual_count).collect()
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::io::stdin_buf::StdinBuffer;
-
-    #[test_case]
-    fn empty() {
-        let stdin = StdinBuffer::new();
-        assert!(stdin.is_empty());
-    }
 
     #[test_case]
     fn order_is_correct() {
