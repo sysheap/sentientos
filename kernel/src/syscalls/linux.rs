@@ -27,6 +27,7 @@ linux_syscalls! {
     SYSCALL_NR_BRK => brk(brk: c_ulong);
     SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
     SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
@@ -394,6 +395,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, headers::errno::Errno> {
         // TODO: Implement when we really manage fd objects
         Ok(0)
+    }
+
+    fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
+        Ok(self.handler.current_tid().0 as isize)
     }
 }
 
