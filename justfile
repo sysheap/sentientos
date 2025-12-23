@@ -59,7 +59,7 @@ debugf FUNC: build
     tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel'\; attach
 
 disassm: build
-    riscv64-none-elf-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
+    riscv64-unknown-linux-musl-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel | less
 
 addr2line ADDR:
-    riscv64-none-elf-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
+    riscv64-unknown-linux-musl-addr2line -f -p -i -C -e target/riscv64gc-unknown-none-elf/release/kernel {{ADDR}}
