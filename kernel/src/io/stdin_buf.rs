@@ -1,12 +1,12 @@
-use crate::{debug, processes::process_table};
+use crate::{debug, klibc::Spinlock, processes::process_table};
 use alloc::{
     collections::{BTreeSet, VecDeque},
     vec::Vec,
 };
-use common::{mutex::Mutex, pid::Tid};
+use common::pid::Tid;
 use core::cmp::min;
 
-pub static STDIN_BUFFER: Mutex<StdinBuffer> = Mutex::new(StdinBuffer::new());
+pub static STDIN_BUFFER: Spinlock<StdinBuffer> = Spinlock::new(StdinBuffer::new());
 
 pub struct StdinBuffer {
     data: VecDeque<u8>,

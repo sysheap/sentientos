@@ -14,9 +14,11 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
-use common::{mutex::Mutex, net::UDPDescriptor, pid::Tid, pointer::Pointer};
+use common::{net::UDPDescriptor, pid::Tid, pointer::Pointer};
 use core::{self, fmt::Debug, ptr::null_mut};
 use headers::errno::Errno;
+
+use crate::klibc::Spinlock;
 
 use super::thread::ThreadRef;
 
@@ -24,7 +26,7 @@ pub const POWERSAVE_TID: Tid = Tid(0);
 
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
-pub type ProcessRef = Arc<Mutex<Process>>;
+pub type ProcessRef = Arc<Spinlock<Process>>;
 
 pub struct Process {
     name: Arc<String>,

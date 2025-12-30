@@ -1,6 +1,9 @@
-use common::{mutex::Mutex, runtime_initialized::RuntimeInitializedData};
+use common::runtime_initialized::RuntimeInitializedData;
 
-use crate::{info, klibc::MMIO};
+use crate::{
+    info,
+    klibc::{MMIO, Spinlock},
+};
 
 pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_SIZE: usize = 0x1000_0000;
@@ -63,7 +66,7 @@ impl Plic {
     }
 }
 
-pub static PLIC: RuntimeInitializedData<Mutex<Plic>> = RuntimeInitializedData::new();
+pub static PLIC: RuntimeInitializedData<Spinlock<Plic>> = RuntimeInitializedData::new();
 
 const UART_INTERRUPT_NUMBER: u32 = 10;
 
@@ -76,7 +79,7 @@ pub enum InterruptSource {
 pub fn init_uart_interrupt(hart_id: usize) {
     info!("Initializing plic uart interrupt");
 
-    PLIC.initialize(Mutex::new(Plic::new(PLIC_BASE, hart_id)));
+    PLIC.initialize(Spinlock::new(Plic::new(PLIC_BASE, hart_id)));
 
     let mut plic = PLIC.lock();
     plic.set_threshold(0);

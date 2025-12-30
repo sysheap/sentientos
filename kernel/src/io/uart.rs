@@ -1,12 +1,10 @@
 use core::fmt::Write;
 
-use common::mutex::Mutex;
-
-use crate::klibc::MMIO;
+use crate::klibc::{MMIO, Spinlock};
 
 pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 
-pub static QEMU_UART: Mutex<Uart> = Mutex::new(Uart::new(UART_BASE_ADDRESS));
+pub static QEMU_UART: Spinlock<Uart> = Spinlock::new(Uart::new(UART_BASE_ADDRESS));
 
 unsafe impl Sync for Uart {}
 unsafe impl Send for Uart {}

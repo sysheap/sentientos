@@ -15,7 +15,6 @@ pub mod consumable_buffer;
 pub mod errors;
 pub mod leb128;
 pub mod macros;
-pub mod mutex;
 pub mod net;
 pub mod numbers;
 pub mod pid;

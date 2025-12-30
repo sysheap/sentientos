@@ -1,11 +1,11 @@
 use core::{cell::LazyCell, net::Ipv4Addr};
 
 use alloc::{collections::BTreeMap, vec::Vec};
-use common::mutex::Mutex;
 
 use crate::{
     debug,
     drivers::virtio::net::NetworkDevice,
+    klibc::Spinlock,
     net::{ipv4::IpV4Header, udp::UdpHeader},
 };
 
@@ -18,11 +18,11 @@ pub mod mac;
 pub mod sockets;
 pub mod udp;
 
-static NETWORK_DEVICE: Mutex<Option<NetworkDevice>> = Mutex::new(None);
+static NETWORK_DEVICE: Spinlock<Option<NetworkDevice>> = Spinlock::new(None);
 static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
-pub static ARP_CACHE: Mutex<BTreeMap<Ipv4Addr, MacAddress>> = Mutex::new(BTreeMap::new());
-pub static OPEN_UDP_SOCKETS: Mutex<LazyCell<OpenSockets>> =
-    Mutex::new(LazyCell::new(OpenSockets::new));
+pub static ARP_CACHE: Spinlock<BTreeMap<Ipv4Addr, MacAddress>> = Spinlock::new(BTreeMap::new());
+pub static OPEN_UDP_SOCKETS: Spinlock<LazyCell<OpenSockets>> =
+    Spinlock::new(LazyCell::new(OpenSockets::new));
 
 pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_DEVICE.lock() = Some(device);

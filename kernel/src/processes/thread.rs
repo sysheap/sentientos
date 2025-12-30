@@ -19,7 +19,6 @@ use alloc::{
 };
 use common::{
     errors::LoaderError,
-    mutex::Mutex,
     pid::Tid,
     syscalls::trap_frame::{Register, TrapFrame},
 };
@@ -34,8 +33,10 @@ use headers::{
     syscall_types::{_NSIG, sigaction, sigaltstack, sigset_t, stack_t},
 };
 
-pub type ThreadRef = Arc<Mutex<Thread>>;
-pub type ThreadWeakRef = Weak<Mutex<Thread>>;
+use crate::klibc::Spinlock;
+
+pub type ThreadRef = Arc<Spinlock<Thread>>;
+pub type ThreadWeakRef = Weak<Spinlock<Thread>>;
 
 fn get_next_tid() -> Tid {
     // PIDs will start from 1
@@ -100,7 +101,7 @@ impl core::fmt::Display for Thread {
 }
 
 impl Thread {
-    pub fn create_powersave_thread() -> Arc<Mutex<Self>> {
+    pub fn create_powersave_thread() -> Arc<Spinlock<Self>> {
         unsafe extern "C" {
             fn powersave();
         }
@@ -127,7 +128,7 @@ impl Thread {
         elf_file: &ElfFile,
         name: &str,
         args: &[&str],
-    ) -> Result<Arc<Mutex<Self>>, LoaderError> {
+    ) -> Result<Arc<Spinlock<Self>>, LoaderError> {
         debug!("Create process from elf file");
 
         let LoadedElf {
@@ -166,7 +167,7 @@ impl Thread {
         brk: Brk,
     ) -> ThreadRef {
         let name = Arc::new(name.into());
-        let process = Arc::new(Mutex::new(Process::new(
+        let process = Arc::new(Spinlock::new(Process::new(
             name.clone(),
             page_table,
             allocated_pages,
@@ -201,7 +202,7 @@ impl Thread {
         in_kernel_mode: bool,
         process: ProcessRef,
     ) -> ThreadRef {
-        Arc::new(Mutex::new(Self {
+        Arc::new(Spinlock::new(Self {
             tid,
             process_name,
             register_state,

@@ -5,16 +5,15 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use common::mutex::Mutex;
 
-use crate::debug;
+use crate::{debug, klibc::Spinlock};
 
-pub type SharedAssignedSocket = Arc<Mutex<AssignedSocket>>;
-type WeakSharedAssignedSocket = Weak<Mutex<AssignedSocket>>;
+pub type SharedAssignedSocket = Arc<Spinlock<AssignedSocket>>;
+type WeakSharedAssignedSocket = Weak<Spinlock<AssignedSocket>>;
 
-type MutexSocketMap = Mutex<BTreeMap<u16, WeakSharedAssignedSocket>>;
-type SharedSocketMap = Arc<MutexSocketMap>;
-type WeakSharedSocketMap = Weak<MutexSocketMap>;
+type SpinlockSocketMap = Spinlock<BTreeMap<u16, WeakSharedAssignedSocket>>;
+type SharedSocketMap = Arc<SpinlockSocketMap>;
+type WeakSharedSocketMap = Weak<SpinlockSocketMap>;
 
 pub struct OpenSockets {
     sockets: SharedSocketMap,
@@ -23,7 +22,7 @@ pub struct OpenSockets {
 impl OpenSockets {
     pub fn new() -> Self {
         Self {
-            sockets: Arc::new(Mutex::new(BTreeMap::new())),
+            sockets: Arc::new(Spinlock::new(BTreeMap::new())),
         }
     }
 
@@ -36,7 +35,7 @@ impl OpenSockets {
         let weak_socket_map = Arc::downgrade(&self.sockets);
         let assigned_socket = AssignedSocket::new(port, weak_socket_map);
 
-        let arc_socket = Arc::new(Mutex::new(assigned_socket));
+        let arc_socket = Arc::new(Spinlock::new(assigned_socket));
 
         assert!(
             sockets.insert(port, Arc::downgrade(&arc_socket)).is_none(),
