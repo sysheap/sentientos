@@ -117,7 +117,7 @@ impl Thread {
             POWERSAVE_TID,
             register_state,
             page_table,
-            powersave as usize,
+            powersave as *const () as usize,
             allocated_pages,
             true,
             Brk::empty(),

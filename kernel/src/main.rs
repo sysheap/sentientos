@@ -7,7 +7,6 @@
 #![cfg_attr(test, allow(unused_imports))]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
-#![feature(vec_into_raw_parts)]
 #![feature(assert_matches)]
 #![feature(map_try_insert)]
 #![feature(new_range_api)]
@@ -165,7 +164,7 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
         let cpu_struct = Cpu::init(cpu_id, number_of_cpus);
         sbi::extensions::hart_state_extension::start_hart(
             cpu_id,
-            start_hart as usize,
+            start_hart as *const () as usize,
             cpu_struct as usize,
         )
         .assert_success();
