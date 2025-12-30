@@ -1,6 +1,8 @@
-use common::mutex::Mutex;
-
-use crate::{cpu::Cpu, io::TEST_DEVICE_ADDRESS, klibc::MMIO};
+use crate::{
+    cpu::Cpu,
+    io::TEST_DEVICE_ADDRESS,
+    klibc::{MMIO, Spinlock},
+};
 
 const EXIT_SUCCESS_CODE: u32 = 0x5555;
 #[allow(dead_code)]
@@ -8,7 +10,7 @@ const EXIT_FAILURE_CODE: u32 = 0x3333;
 #[allow(dead_code)]
 const EXIT_RESET_CODE: u32 = 0x7777;
 
-static TEST_DEVICE: Mutex<MMIO<u32>> = Mutex::new(MMIO::new(TEST_DEVICE_ADDRESS));
+static TEST_DEVICE: Spinlock<MMIO<u32>> = Spinlock::new(MMIO::new(TEST_DEVICE_ADDRESS));
 
 pub fn exit_success() -> ! {
     TEST_DEVICE.lock().write(EXIT_SUCCESS_CODE);

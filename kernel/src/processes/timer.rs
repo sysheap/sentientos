@@ -1,9 +1,12 @@
 use crate::{
-    cpu::Cpu, debug, device_tree, klibc::btreemap::SplitOffLowerThan,
-    processes::thread::ThreadWeakRef, sbi,
+    cpu::Cpu,
+    debug, device_tree,
+    klibc::{Spinlock, btreemap::SplitOffLowerThan},
+    processes::thread::ThreadWeakRef,
+    sbi,
 };
 use alloc::{collections::BTreeMap, vec::Vec};
-use common::{big_endian::BigEndian, mutex::Mutex, runtime_initialized::RuntimeInitializedData};
+use common::{big_endian::BigEndian, runtime_initialized::RuntimeInitializedData};
 use core::arch::asm;
 use headers::{errno::Errno, syscall_types::timespec};
 
@@ -14,7 +17,8 @@ static CLOCKS_PER_NANO: RuntimeInitializedData<u64> = RuntimeInitializedData::ne
 
 type WakeupClockTime = u64;
 
-static WAKEUP_QUEUE: Mutex<BTreeMap<WakeupClockTime, ThreadWeakRef>> = Mutex::new(BTreeMap::new());
+static WAKEUP_QUEUE: Spinlock<BTreeMap<WakeupClockTime, ThreadWeakRef>> =
+    Spinlock::new(BTreeMap::new());
 
 pub fn init() {
     let clocks_per_sec = device_tree::THE

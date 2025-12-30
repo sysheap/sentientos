@@ -211,8 +211,7 @@ pub trait PageAllocator {
 #[cfg(test)]
 mod tests {
     use super::{MetadataPageAllocator, PAGE_SIZE, Page};
-    use crate::memory::page_allocator::PageStatus;
-    use common::mutex::Mutex;
+    use crate::{klibc::Spinlock, memory::page_allocator::PageStatus};
     use core::{
         mem::MaybeUninit,
         ops::Range,
@@ -223,7 +222,8 @@ mod tests {
 
     static mut PAGE_ALLOC_MEMORY: [MaybeUninit<u8>; PAGE_SIZE * 8] =
         [const { MaybeUninit::uninit() }; _];
-    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
+    static PAGE_ALLOC: Spinlock<MetadataPageAllocator> =
+        Spinlock::new(MetadataPageAllocator::new());
 
     fn init_allocator(fill: bool, reserved_areas: &[Range<*const u8>]) {
         unsafe {

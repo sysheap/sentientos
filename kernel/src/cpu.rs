@@ -1,14 +1,10 @@
 use alloc::boxed::Box;
 use core::{arch::asm, mem::offset_of, ptr::addr_of};
 
-use common::{
-    mutex::{Mutex, MutexGuard},
-    runtime_initialized::RuntimeInitializedData,
-    syscalls::trap_frame::TrapFrame,
-};
+use common::{runtime_initialized::RuntimeInitializedData, syscalls::trap_frame::TrapFrame};
 
 use crate::{
-    klibc::sizes::KiB,
+    klibc::{Spinlock, SpinlockGuard, sizes::KiB},
     memory::page_tables::RootPageTableHolder,
     processes::{process::Process, scheduler::CpuScheduler, thread::ThreadRef},
     sbi::extensions::ipi_extension::sbi_send_ipi,
@@ -29,7 +25,7 @@ pub const KERNEL_PAGE_TABLES_SATP_OFFSET: usize = offset_of!(Cpu, kernel_page_ta
 pub struct Cpu {
     kernel_page_tables_satp_value: usize,
     trap_frame: TrapFrame,
-    scheduler: Mutex<CpuScheduler>,
+    scheduler: Spinlock<CpuScheduler>,
     cpu_id: usize,
     kernel_page_tables: RootPageTableHolder,
     number_cpus: usize,
@@ -135,7 +131,7 @@ impl Cpu {
         let cpu = Box::new(Self {
             kernel_page_tables_satp_value: satp_value,
             trap_frame: TrapFrame::zero(),
-            scheduler: Mutex::new(CpuScheduler::new()),
+            scheduler: Spinlock::new(CpuScheduler::new()),
             cpu_id,
             number_cpus,
             kernel_page_tables: page_tables,
@@ -175,7 +171,7 @@ impl Cpu {
         }
     }
 
-    pub fn with_scheduler<R>(f: impl FnOnce(MutexGuard<'_, CpuScheduler>) -> R) -> R {
+    pub fn with_scheduler<R>(f: impl FnOnce(SpinlockGuard<'_, CpuScheduler>) -> R) -> R {
         let cpu = Self::current();
         let scheduler = cpu.scheduler().lock();
         f(scheduler)
@@ -185,7 +181,7 @@ impl Cpu {
         Self::with_scheduler(|s| s.get_current_thread().clone())
     }
 
-    pub fn with_current_process<R>(mut f: impl FnMut(MutexGuard<'_, Process>) -> R) -> R {
+    pub fn with_current_process<R>(mut f: impl FnMut(SpinlockGuard<'_, Process>) -> R) -> R {
         Self::with_scheduler(|s| f(s.get_current_process().lock()))
     }
 
@@ -211,7 +207,7 @@ impl Cpu {
         self.kernel_page_tables.activate_page_table();
     }
 
-    pub fn scheduler(&self) -> &Mutex<CpuScheduler> {
+    pub fn scheduler(&self) -> &Spinlock<CpuScheduler> {
         &self.scheduler
     }
 

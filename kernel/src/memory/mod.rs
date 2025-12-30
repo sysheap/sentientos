@@ -1,10 +1,9 @@
-use crate::{device_tree, info};
+use crate::{device_tree, info, klibc::Spinlock};
 
 use self::{
     page::Page,
     page_allocator::{MetadataPageAllocator, PageAllocator},
 };
-use common::mutex::Mutex;
 use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
 use linker_information::LinkerInformation;
 
@@ -19,7 +18,8 @@ pub use page::PAGE_SIZE;
 
 pub use runtime_mappings::initialize_runtime_mappings;
 
-static PAGE_ALLOCATOR: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
+static PAGE_ALLOCATOR: Spinlock<MetadataPageAllocator> =
+    Spinlock::new(MetadataPageAllocator::new());
 
 pub struct StaticPageAllocator;
 

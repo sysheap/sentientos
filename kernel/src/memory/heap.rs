@@ -5,9 +5,12 @@ use core::{
     ptr::{NonNull, null_mut},
 };
 
-use common::{mutex::Mutex, util::align_up};
+use common::util::align_up;
 
-use crate::{assert::static_assert_size, klibc::util::minimum_amount_of_pages};
+use crate::{
+    assert::static_assert_size,
+    klibc::{Spinlock, util::minimum_amount_of_pages},
+};
 
 use super::{PAGE_SIZE, page_allocator::PageAllocator};
 
@@ -241,22 +244,22 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
     }
 }
 
-struct MutexHeap<Allocator: PageAllocator> {
-    inner: Mutex<Heap<Allocator>>,
+struct SpinlockHeap<Allocator: PageAllocator> {
+    inner: Spinlock<Heap<Allocator>>,
 }
 
 // SAFETY: Heap can be send between threads
 unsafe impl<Allocator: PageAllocator> Send for Heap<Allocator> {}
 
-impl<Allocator: PageAllocator> MutexHeap<Allocator> {
+impl<Allocator: PageAllocator> SpinlockHeap<Allocator> {
     const fn new() -> Self {
         Self {
-            inner: Mutex::new(Heap::new()),
+            inner: Spinlock::new(Heap::new()),
         }
     }
 }
 
-unsafe impl<Allocator: PageAllocator> GlobalAlloc for MutexHeap<Allocator> {
+unsafe impl<Allocator: PageAllocator> GlobalAlloc for SpinlockHeap<Allocator> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         self.inner.lock().alloc(layout)
     }
@@ -268,7 +271,7 @@ unsafe impl<Allocator: PageAllocator> GlobalAlloc for MutexHeap<Allocator> {
 
 #[cfg(not(miri))]
 #[global_allocator]
-static HEAP: MutexHeap<super::StaticPageAllocator> = MutexHeap::new();
+static HEAP: SpinlockHeap<super::StaticPageAllocator> = SpinlockHeap::new();
 
 #[cfg(not(miri))]
 pub fn allocated_size() -> usize {
@@ -282,12 +285,14 @@ pub fn allocated_size() -> usize {
 
 #[cfg(test)]
 mod test {
-    use super::{FreeBlock, MutexHeap, PAGE_SIZE};
-    use crate::memory::{
-        page::Page,
-        page_allocator::{MetadataPageAllocator, PageAllocator},
+    use super::{FreeBlock, PAGE_SIZE, SpinlockHeap};
+    use crate::{
+        klibc::Spinlock,
+        memory::{
+            page::Page,
+            page_allocator::{MetadataPageAllocator, PageAllocator},
+        },
     };
-    use common::mutex::Mutex;
     use core::{
         alloc::GlobalAlloc,
         mem::MaybeUninit,
@@ -300,7 +305,8 @@ mod test {
 
     static mut PAGE_ALLOC_MEMORY: [MaybeUninit<u8>; PAGE_SIZE * HEAP_PAGES] =
         [const { MaybeUninit::uninit() }; PAGE_SIZE * HEAP_PAGES];
-    static PAGE_ALLOC: Mutex<MetadataPageAllocator> = Mutex::new(MetadataPageAllocator::new());
+    static PAGE_ALLOC: Spinlock<MetadataPageAllocator> =
+        Spinlock::new(MetadataPageAllocator::new());
 
     struct TestAllocator;
     impl PageAllocator for TestAllocator {
@@ -321,17 +327,17 @@ mod test {
         }
     }
 
-    fn create_heap() -> MutexHeap<TestAllocator> {
+    fn create_heap() -> SpinlockHeap<TestAllocator> {
         init_allocator();
-        MutexHeap::<TestAllocator>::new()
+        SpinlockHeap::<TestAllocator>::new()
     }
 
-    fn alloc<T>(heap: &MutexHeap<TestAllocator>) -> *mut T {
+    fn alloc<T>(heap: &SpinlockHeap<TestAllocator>) -> *mut T {
         let layout = core::alloc::Layout::new::<T>();
         unsafe { heap.alloc(layout) as *mut T }
     }
 
-    fn dealloc<T>(heap: &MutexHeap<TestAllocator>, ptr: *mut T) {
+    fn dealloc<T>(heap: &SpinlockHeap<TestAllocator>, ptr: *mut T) {
         let layout = core::alloc::Layout::new::<T>();
         unsafe { heap.dealloc(ptr as *mut u8, layout) };
     }

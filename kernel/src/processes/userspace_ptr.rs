@@ -1,7 +1,7 @@
-use common::{mutex::MutexGuard, pointer::Pointer};
+use common::pointer::Pointer;
 use headers::errno::Errno;
 
-use crate::processes::process::Process;
+use crate::{klibc::SpinlockGuard, processes::process::Process};
 
 // SAFETY: Userspace pointer can safely moved between Kernel threads.
 unsafe impl<PTR: Pointer> Send for UserspacePtr<PTR> {}
@@ -25,7 +25,7 @@ impl<PTR: Pointer> UserspacePtr<PTR> {
 impl<T> UserspacePtr<*mut T> {
     pub fn write_with_process_lock(
         &self,
-        process_lock: &MutexGuard<'_, Process>,
+        process_lock: &SpinlockGuard<'_, Process>,
         value: T,
     ) -> Result<(), Errno> {
         process_lock.write_userspace_ptr(self, value)
