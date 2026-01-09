@@ -15,6 +15,7 @@
 #![feature(str_from_raw_parts)]
 #![feature(macro_metavar_expr)]
 #![feature(string_from_utf8_lossy_owned)]
+#![feature(debug_closure_helpers)]
 #![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 

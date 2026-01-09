@@ -4,14 +4,14 @@ use crate::{
     debug, info,
     interrupts::plic::{InterruptSource, PLIC},
     io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
-    processes::thread::ThreadState,
+    processes::{task::Task, thread::ThreadState, waker::TaskWaker},
     syscalls::{
         self,
         linux::{LinuxSyscallHandler, LinuxSyscalls},
     },
 };
 use common::syscalls::trap_frame::Register;
-use core::panic;
+use core::{panic, task::Context};
 
 #[unsafe(no_mangle)]
 extern "C" fn get_process_satp_value() -> usize {
@@ -71,8 +71,16 @@ fn handle_syscall() {
             Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
         }
     } else {
-        let mut handler = LinuxSyscallHandler::new();
-        let result = handler.handle(&trap_frame);
+        let waker = TaskWaker::new();
+        let mut cx = Context::from_waker(&waker);
+        let mut task = Task::new(async move {
+            let mut handler = LinuxSyscallHandler::new();
+            handler.handle(&trap_frame).await
+        });
+        let result = match task.poll(&mut cx) {
+            core::task::Poll::Ready(result) => result,
+            core::task::Poll::Pending => panic!("Task is pending"),
+        };
         let ret = match result {
             Ok(ret) => ret,
             Err(errno) => -(errno as isize),
