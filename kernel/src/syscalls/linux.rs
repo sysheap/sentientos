@@ -48,7 +48,7 @@ pub struct LinuxSyscallHandler {
 }
 
 impl LinuxSyscalls for LinuxSyscallHandler {
-    fn read(
+    async fn read(
         &mut self,
         fd: c_int,
         buf: LinuxUserspaceArg<*mut u8>,
@@ -85,7 +85,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(copied_buf.len() as isize)
     }
 
-    fn write(
+    async fn write(
         &mut self,
         fd: i32,
         buf: LinuxUserspaceArg<*const u8>,
@@ -102,20 +102,23 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(count as isize)
     }
 
-    fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
+    async fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
         self.handler
             .sys_exit(UserspaceArgument::new(status as isize));
         Ok(0)
     }
 
-    fn set_tid_address(&mut self, tidptr: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
+    async fn set_tid_address(
+        &mut self,
+        tidptr: LinuxUserspaceArg<*mut c_int>,
+    ) -> Result<isize, Errno> {
         self.handler.current_thread().with_lock(|mut t| {
             t.set_clear_child_tid((&tidptr).into());
         });
         Ok(0)
     }
 
-    fn ppoll(
+    async fn ppoll(
         &mut self,
         fds: LinuxUserspaceArg<*mut pollfd>,
         n: c_uint,
@@ -162,7 +165,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn rt_sigaction(
+    async fn rt_sigaction(
         &mut self,
         sig: c_uint,
         act: LinuxUserspaceArg<Option<*const sigaction>>,
@@ -191,7 +194,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn rt_sigprocmask(
+    async fn rt_sigprocmask(
         &mut self,
         how: c_uint,
         set: LinuxUserspaceArg<Option<*const sigset_t>>,
@@ -226,7 +229,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn sigaltstack(
+    async fn sigaltstack(
         &mut self,
         uss: LinuxUserspaceArg<Option<*const stack_t>>,
         uoss: LinuxUserspaceArg<Option<*mut stack_t>>,
@@ -247,7 +250,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         self.handler.current_process().clone()
     }
 
-    fn nanosleep(
+    async fn nanosleep(
         &mut self,
         duration: LinuxUserspaceArg<*const timespec>,
         _rem: LinuxUserspaceArg<Option<*const timespec>>,
@@ -266,13 +269,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
+    async fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
         self.handler
             .current_process()
             .with_lock(|mut p| Ok(p.brk(brk as usize) as isize))
     }
 
-    fn mmap(
+    async fn mmap(
         &mut self,
         addr: usize,
         length: usize,
@@ -344,17 +347,21 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         })
     }
 
-    fn munmap(&mut self, _addr: usize, _length: usize) -> Result<isize, headers::errno::Errno> {
+    async fn munmap(
+        &mut self,
+        _addr: usize,
+        _length: usize,
+    ) -> Result<isize, headers::errno::Errno> {
         // Ignore munmap for now
         Ok(0)
     }
 
-    fn prctl(&mut self) -> Result<isize, headers::errno::Errno> {
+    async fn prctl(&mut self) -> Result<isize, headers::errno::Errno> {
         // We dont support any of prctl right now
         Err(Errno::EINVAL)
     }
 
-    fn ioctl(&mut self, fd: c_int, op: c_uint) -> Result<isize, headers::errno::Errno> {
+    async fn ioctl(&mut self, fd: c_int, op: c_uint) -> Result<isize, headers::errno::Errno> {
         if fd > 2 {
             return Err(Errno::EBADFD);
         }
@@ -364,7 +371,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Err(Errno::EINVAL)
     }
 
-    fn writev(
+    async fn writev(
         &mut self,
         fd: c_int,
         iov: LinuxUserspaceArg<*const iovec>,
@@ -389,7 +396,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(len as isize)
     }
 
-    fn close(
+    async fn close(
         &mut self,
         _fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
     ) -> Result<isize, headers::errno::Errno> {
@@ -397,7 +404,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
+    async fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
         Ok(self.handler.current_tid().0 as isize)
     }
 }

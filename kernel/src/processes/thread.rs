@@ -7,6 +7,7 @@ use crate::{
         brk::Brk,
         loader::{self, LoadedElf},
         process::{POWERSAVE_TID, Process},
+        task::Task,
         userspace_ptr::{ContainsUserspacePtr, UserspacePtr},
     },
 };
@@ -83,6 +84,7 @@ pub struct Thread {
     sigaltstack: ContainsUserspacePtr<stack_t>,
     sigmask: sigset_t,
     sigaction: [sigaction; _NSIG as usize],
+    syscall_task: Option<Task>,
 }
 
 impl core::fmt::Display for Thread {
@@ -224,6 +226,7 @@ impl Thread {
                 sa_flags: 0,
                 sa_mask: sigset_t { sig: [0] },
             }; _NSIG as usize],
+            syscall_task: None,
         }))
     }
 

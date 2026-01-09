@@ -40,11 +40,11 @@ macro_rules! linux_syscalls {
     ($($number:ident => $name:ident ($($arg_name: ident: $arg_ty:ty),*);)*) => {
         use $crate::syscalls::linux_validator::LinuxUserspaceArg;
         pub trait LinuxSyscalls {
-            $(fn $name(&mut self, $($arg_name: <$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped),*) -> Result<isize, headers::errno::Errno>;)*
+            $(async fn $name(&mut self, $($arg_name: <$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped),*) -> Result<isize, headers::errno::Errno>;)*
 
             fn get_process(&self) -> $crate::processes::process::ProcessRef;
 
-            fn handle(&mut self, trap_frame: &TrapFrame) -> Result<isize, headers::errno::Errno> {
+            async fn handle(&mut self, trap_frame: &TrapFrame) -> Result<isize, headers::errno::Errno> {
                 let nr = trap_frame[Register::a7];
                 let args = [
                     trap_frame[Register::a0],
@@ -55,7 +55,7 @@ macro_rules! linux_syscalls {
                     trap_frame[Register::a5]
                 ];
                 match nr {
-                    $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())),*)),*,
+                    $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())),*).await),*,
                     syscall_nr => {
                         let pc = $crate::cpu::Cpu::read_sepc();
                         let name = headers::syscalls::SYSCALL_NAMES
