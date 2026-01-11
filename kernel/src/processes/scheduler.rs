@@ -197,10 +197,9 @@ impl CpuScheduler {
     }
 
     pub fn set_cpu_reg_for_current_thread(&mut self) {
-        self.current_thread.with_lock(|mut t| {
+        self.current_thread.with_lock(|t| {
             let pc = t.get_program_counter();
 
-            t.finalize_syscall();
             Cpu::write_trap_frame(t.get_register_state().clone());
             Cpu::write_sepc(pc);
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
