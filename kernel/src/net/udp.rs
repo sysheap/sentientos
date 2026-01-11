@@ -1,12 +1,13 @@
 use alloc::vec::Vec;
 use core::net::Ipv4Addr;
 
-use common::big_endian::BigEndian;
-
 use crate::{
     assert::static_assert_size,
     debug,
-    klibc::util::{BufferExtension, ByteInterpretable},
+    klibc::{
+        big_endian::BigEndian,
+        util::{BufferExtension, ByteInterpretable},
+    },
     net::ethernet::EthernetHeader,
 };
 
@@ -184,9 +185,7 @@ impl UdpHeader {
 
 #[cfg(test)]
 mod tests {
-    use common::big_endian::BigEndian;
-
-    use crate::net::ipv4::IpV4Header;
+    use crate::{klibc::big_endian::BigEndian, net::ipv4::IpV4Header};
     use core::net::Ipv4Addr;
 
     use super::UdpHeader;

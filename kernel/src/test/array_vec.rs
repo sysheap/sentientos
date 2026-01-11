@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::klibc::array_vec::{ArrayVec, ArrayVecError};
     use alloc::rc::Rc;
-    use common::array_vec::{ArrayVec, ArrayVecError};
     use core::cell::Cell;
 
     #[test_case]

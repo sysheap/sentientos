@@ -1,7 +1,6 @@
-use crate::debug;
+use crate::{debug, klibc::array_vec::ArrayVec};
 
 use super::eh_frame_parser::{Instruction, ParsedFDE};
-use common::array_vec::ArrayVec;
 
 pub struct Unwinder<'a> {
     fde: &'a ParsedFDE<'a>,

@@ -4,12 +4,13 @@ use core::{
     ptr::null_mut,
 };
 
+use crate::klibc::util::align_up;
 use alloc::{
     boxed::Box,
     string::{String, ToString},
     vec::Vec,
 };
-use common::{pointer::Pointer, unwrap_or_return, util::align_up};
+use common::{pointer::Pointer, unwrap_or_return};
 
 use crate::{
     assert::static_assert_size,

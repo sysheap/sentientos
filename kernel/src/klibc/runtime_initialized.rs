@@ -27,10 +27,6 @@ impl<T> RuntimeInitializedData<T> {
             self.data.get().write(MaybeUninit::new(value));
         }
     }
-
-    pub fn initialized(&self) -> &AtomicBool {
-        &self.initialized
-    }
 }
 
 impl<T> Deref for RuntimeInitializedData<T> {

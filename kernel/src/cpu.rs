@@ -1,10 +1,9 @@
 use alloc::{boxed::Box, sync::Arc};
+use common::syscalls::trap_frame::TrapFrame;
 use core::{arch::asm, mem::offset_of, ptr::addr_of};
 
-use common::{runtime_initialized::RuntimeInitializedData, syscalls::trap_frame::TrapFrame};
-
 use crate::{
-    klibc::{Spinlock, SpinlockGuard, sizes::KiB},
+    klibc::{Spinlock, SpinlockGuard, runtime_initialized::RuntimeInitializedData, sizes::KiB},
     memory::page_tables::RootPageTableHolder,
     processes::{
         process::Process,

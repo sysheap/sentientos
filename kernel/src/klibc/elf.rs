@@ -1,5 +1,4 @@
-use common::big_endian::BigEndian;
-
+use super::big_endian::BigEndian;
 use crate::{assert::static_assert_size, debug};
 
 const ELF_MAGIC_NUMBER: u32 = 0x7f454c46;

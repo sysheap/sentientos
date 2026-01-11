@@ -1,4 +1,4 @@
-use crate::consumable_buffer::{ConsumableBuffer, FromU8BufferUnsized};
+use super::consumable_buffer::{ConsumableBuffer, FromU8BufferUnsized};
 
 #[derive(Clone, Copy)]
 pub struct UnsignedLEB128 {

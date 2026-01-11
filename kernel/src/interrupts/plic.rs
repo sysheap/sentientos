@@ -1,8 +1,6 @@
-use common::runtime_initialized::RuntimeInitializedData;
-
 use crate::{
     info,
-    klibc::{MMIO, Spinlock},
+    klibc::{MMIO, Spinlock, runtime_initialized::RuntimeInitializedData},
 };
 
 pub const PLIC_BASE: usize = 0x0c00_0000;

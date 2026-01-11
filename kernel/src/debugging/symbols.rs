@@ -1,6 +1,7 @@
-use common::runtime_initialized::RuntimeInitializedData;
-
-use crate::{debug, info, memory::linker_information::LinkerInformation};
+use crate::{
+    debug, info, klibc::runtime_initialized::RuntimeInitializedData,
+    memory::linker_information::LinkerInformation,
+};
 use core::ffi::c_char;
 
 pub static THE: RuntimeInitializedData<&'static str> = RuntimeInitializedData::new();
