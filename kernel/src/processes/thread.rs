@@ -12,7 +12,6 @@ use crate::{
     },
 };
 use alloc::{
-    boxed::Box,
     collections::BTreeSet,
     string::String,
     sync::{Arc, Weak},
@@ -50,20 +49,6 @@ fn get_next_tid() -> Tid {
     Tid(next_tid)
 }
 
-pub struct SyscallFinalizer(Box<dyn Fn() -> Result<isize, Errno> + Send + 'static>);
-
-impl SyscallFinalizer {
-    fn call(self) -> Result<isize, Errno> {
-        self.0()
-    }
-}
-
-impl Debug for SyscallFinalizer {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("SyscallFinalizer").finish()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
     Running,
@@ -79,7 +64,6 @@ pub struct Thread {
     program_counter: usize,
     state: ThreadState,
     in_kernel_mode: bool,
-    waiting_on_syscall: Option<SyscallFinalizer>,
     process: ProcessRef,
     notify_on_die: BTreeSet<Tid>,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
@@ -93,13 +77,8 @@ impl core::fmt::Display for Thread {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "tid={} process_name={} pc={:#x} state={:?} in_kernel_mode={} waiting_on_syscall={}",
-            self.tid,
-            self.process_name,
-            self.program_counter,
-            self.state,
-            self.in_kernel_mode,
-            self.waiting_on_syscall.is_some()
+            "tid={} process_name={} pc={:#x} state={:?} in_kernel_mode={}",
+            self.tid, self.process_name, self.program_counter, self.state, self.in_kernel_mode,
         )
     }
 }
@@ -213,7 +192,6 @@ impl Thread {
             program_counter,
             state: ThreadState::Runnable,
             in_kernel_mode,
-            waiting_on_syscall: None,
             process,
             notify_on_die: BTreeSet::new(),
             clear_child_tid: None,
@@ -346,15 +324,5 @@ impl Thread {
 
     pub fn process(&self) -> ProcessRef {
         self.process.clone()
-    }
-
-    pub fn finalize_syscall(&mut self) {
-        if let Some(finalizer) = self.waiting_on_syscall.take() {
-            let ret = match finalizer.call() {
-                Ok(ret) => ret,
-                Err(errno) => -(errno as isize),
-            };
-            self.register_state[Register::a0] = ret as usize;
-        }
     }
 }
