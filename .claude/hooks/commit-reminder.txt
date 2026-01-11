@@ -1,0 +1,13 @@
+COMMIT CHECK REQUIRED
+=====================
+
+Before stopping, check if you made code changes:
+
+1. Run `git status` to see if there are uncommitted changes
+2. Run cargo fmt to format all the code
+3. If changes exist from your work, commit them NOW
+4. Commit incrementally - each small working step, not one big commit
+5. Run `just clippy` before committing to ensure no warnings
+6. Remove any dead/unused code before committing
+
+DO NOT wait for user to ask you to commit. Commit automatically.
