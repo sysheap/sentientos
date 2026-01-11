@@ -110,7 +110,9 @@ impl ProcessTable {
                 if t.get_state() != ThreadState::Runnable {
                     return false;
                 }
-                t.set_state(ThreadState::Running);
+                t.set_state(ThreadState::Running {
+                    cpu_id: Cpu::cpu_id(),
+                });
                 true
             });
             if runnable {
@@ -124,12 +126,7 @@ impl ProcessTable {
         debug!("Waking thread up with tid={tid}");
         let thread = self.get_thread(tid).expect("Process must exist");
         thread.with_lock(|mut t| {
-            assert_eq!(
-                t.get_state(),
-                ThreadState::Waiting,
-                "Process must be in waiting state to be woken up"
-            );
-            t.set_state(ThreadState::Runnable);
+            t.wake_up();
         });
     }
 }

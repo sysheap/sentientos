@@ -51,9 +51,9 @@ fn get_next_tid() -> Tid {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
-    Running,
+    Running { cpu_id: usize },
     Runnable,
-    Waiting, // Waiting or killed
+    Waiting,
 }
 
 #[derive(Debug)]
@@ -221,12 +221,12 @@ impl Thread {
     }
 
     pub fn wake_up(&mut self) {
-        assert_eq!(
-            self.state,
-            ThreadState::Waiting,
-            "Thread must be suspended to be woken up"
-        );
-        self.state = ThreadState::Runnable;
+        // Only transition from Waiting to Runnable.
+        // Spurious wakes (already Runnable/Running) are ignored - this can happen
+        // if another CPU already scheduled this thread before the waker fired.
+        if self.state == ThreadState::Waiting {
+            self.state = ThreadState::Runnable;
+        }
     }
 
     fn suspend(&mut self) {
@@ -299,7 +299,7 @@ impl Thread {
     }
 
     pub fn set_register_state(&mut self, register_state: TrapFrame) {
-        self.register_state = register_state.clone();
+        self.register_state = register_state;
     }
 
     pub fn get_program_counter(&self) -> usize {
@@ -324,5 +324,9 @@ impl Thread {
 
     pub fn process(&self) -> ProcessRef {
         self.process.clone()
+    }
+
+    pub fn is_running(&self) -> bool {
+        matches!(self.state, ThreadState::Running { .. })
     }
 }

@@ -8,7 +8,7 @@ use crate::{
     processes::{
         process::Process,
         scheduler::CpuScheduler,
-        thread::{Thread, ThreadRef, ThreadWeakRef},
+        thread::{ThreadRef, ThreadWeakRef},
     },
     sbi::extensions::ipi_extension::sbi_send_ipi,
 };
@@ -186,10 +186,6 @@ impl Cpu {
 
     pub fn current_thread_weak() -> ThreadWeakRef {
         Self::with_scheduler(|s| Arc::downgrade(s.get_current_thread()))
-    }
-
-    pub fn with_current_thread<R>(f: impl FnOnce(SpinlockGuard<'_, Thread>) -> R) -> R {
-        Self::with_scheduler(|s| f(s.get_current_thread().lock()))
     }
 
     pub fn with_current_process<R>(f: impl FnOnce(SpinlockGuard<'_, Process>) -> R) -> R {
