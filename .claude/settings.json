@@ -9,6 +9,10 @@
           {
             "type": "command",
             "command": "setsid paplay /usr/share/sounds/freedesktop/stereo/complete.oga"
+          },
+          {
+            "type": "command",
+            "command": "cat .claude/hooks/commit-reminder.txt"
           }
         ]
       }
