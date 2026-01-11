@@ -1,0 +1,260 @@
+# Testing
+
+## Overview
+
+Two testing approaches:
+1. **Unit Tests** - Kernel unit tests with custom framework
+2. **System Tests** - Integration tests via QEMU (preferred for AI iteration)
+
+## Quick Commands
+
+```bash
+just test           # Run all tests (unit + system)
+just unit-test      # Run only unit tests
+just system-test    # Run only system tests
+
+# Run specific system test
+cargo nextest run --release --manifest-path system-tests/Cargo.toml \
+    --target x86_64-unknown-linux-gnu test_name
+
+# Loop test until failure (for flaky tests)
+just loop-system-test test_name
+```
+
+## System Tests (Preferred)
+
+**Location:** `system-tests/src/tests/`
+
+System tests run on x86_64 and interact with the OS running in QEMU. Better for AI iteration because:
+- No need to recompile kernel for test changes
+- Can interact with the OS interactively
+- Easier to debug failures
+
+### QemuInstance
+
+**File:** `system-tests/src/infra/qemu.rs`
+
+```rust
+pub struct QemuInstance {
+    instance: Child,
+    stdin: ChildStdin,
+    stdout: ReadAsserter<ChildStdout>,
+}
+
+impl QemuInstance {
+    // Start with default options (SMP enabled)
+    pub async fn start() -> anyhow::Result<Self>
+
+    // Start with custom options
+    pub async fn start_with(options: QemuOptions) -> anyhow::Result<Self>
+
+    // Run a program and get output
+    pub async fn run_prog(&mut self, prog_name: &str) -> anyhow::Result<String>
+
+    // Run program and wait for specific output
+    pub async fn run_prog_waiting_for(&mut self, prog: &str, wait: &str)
+        -> anyhow::Result<String>
+
+    // Send Ctrl+C and wait for prompt
+    pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String>
+
+    // Wait for QEMU to exit
+    pub async fn wait_for_qemu_to_exit(self) -> anyhow::Result<ExitStatus>
+
+    // Access stdin/stdout directly
+    pub fn stdin(&mut self) -> &mut ChildStdin
+    pub fn stdout(&mut self) -> &mut ReadAsserter<ChildStdout>
+}
+```
+
+### QemuOptions
+
+```rust
+pub struct QemuOptions {
+    add_network_card: bool,  // Enable VirtIO network
+    use_smp: bool,           // Enable multi-core (default: true)
+}
+
+// Usage
+QemuInstance::start_with(
+    QemuOptions::default()
+        .add_network_card(true)
+        .use_smp(false)
+).await?
+```
+
+### ReadAsserter
+
+**File:** `system-tests/src/infra/read_asserter.rs`
+
+```rust
+impl ReadAsserter<R> {
+    pub async fn assert_read_until(&mut self, needle: &str) -> Vec<u8>
+}
+```
+
+Reads from stdout until finding the needle string.
+
+### Boot Sequence
+
+QemuInstance::start() automatically waits for:
+1. "Hello World from SentientOS!"
+2. "kernel_init done!"
+3. "init process started"
+4. "### SeSH - Sentient Shell ###"
+5. Shell prompt ("$ ")
+
+### Example Tests
+
+**Basic program execution:**
+```rust
+#[tokio::test]
+async fn execute_program() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
+    let output = sentientos.run_prog("prog1").await?;
+    assert_eq!(output, "Hello from Prog1\n");
+    Ok(())
+}
+```
+
+**Time-based test:**
+```rust
+#[tokio::test]
+async fn sleep() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
+    let start = Instant::now();
+    sentientos.run_prog("sleep 1").await?;
+    assert!(start.elapsed() >= Duration::from_secs(1));
+    Ok(())
+}
+```
+
+**Network test:**
+```rust
+#[file_serial]  // Prevent concurrent network tests
+#[tokio::test]
+async fn udp() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start_with(
+        QemuOptions::default().add_network_card(true)
+    ).await?;
+
+    sentientos.run_prog_waiting_for("udp", "Listening").await?;
+
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
+    socket.connect("127.0.0.1:1234").await?;
+    socket.send(b"test").await?;
+
+    sentientos.stdout().assert_read_until("test").await;
+    Ok(())
+}
+```
+
+**Signal handling:**
+```rust
+#[tokio::test]
+async fn ctrl_c() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
+    sentientos.run_prog_waiting_for("loop", "looping").await?;
+    sentientos.ctrl_c_and_assert_prompt().await?;
+    Ok(())
+}
+```
+
+### Writing Throw-Away Tests
+
+Add to `system-tests/src/tests/basics.rs`:
+
+```rust
+#[tokio::test]
+async fn my_quick_test() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
+    // Your test code here
+    let output = sentientos.run_prog("myprogram").await?;
+    println!("Output: {}", output);
+    Ok(())
+}
+```
+
+Run: `cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu my_quick_test`
+
+### Test Files
+
+| File | Contents |
+|------|----------|
+| system-tests/src/tests/basics.rs | Basic boot, shutdown, program execution |
+| system-tests/src/tests/sleep.rs | Sleep syscall tests |
+| system-tests/src/tests/signals.rs | Signal handling (Ctrl+C) |
+| system-tests/src/tests/net.rs | UDP networking tests |
+| system-tests/src/tests/coreutils.rs | GNU coreutils tests |
+| system-tests/src/tests/panic.rs | Panic handling |
+| system-tests/src/tests/connect4.rs | Connect 4 game tests |
+
+## Unit Tests
+
+**Location:** Scattered throughout `kernel/src/`
+
+Uses Rust's `custom_test_frameworks` feature with `#[test_case]` macro.
+
+### Test Framework
+
+**File:** `kernel/src/test/mod.rs`
+
+```rust
+pub fn test_runner(tests: &[&dyn Testable]) {
+    // Initialize kernel systems needed for tests
+    // Run each test
+    // Exit QEMU with success/failure
+}
+
+pub trait Testable {
+    fn run(&self);
+}
+```
+
+### Writing Unit Tests
+
+```rust
+#[cfg(test)]
+mod tests {
+    #[test_case]
+    fn my_test() {
+        assert_eq!(2 + 2, 4);
+    }
+}
+```
+
+### Run Unit Tests
+
+```bash
+just unit-test
+# or
+cargo test --release
+```
+
+## Test Dependencies
+
+System tests use:
+- `tokio` - Async runtime
+- `anyhow` - Error handling
+- `serial_test` - Test synchronization (`#[file_serial]`)
+- `cargo-nextest` - Test runner
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| justfile | Test commands |
+| system-tests/Cargo.toml | System test dependencies |
+| system-tests/src/lib.rs | Test module registration |
+| system-tests/src/infra/qemu.rs | QEMU instance management |
+| system-tests/src/infra/read_asserter.rs | Stdout assertion helper |
+| kernel/src/test/mod.rs | Unit test framework |
+| kernel/src/test/qemu_exit.rs | QEMU exit signaling |
+
+## Tips for AI
+
+1. **Prefer system tests** - Easier to iterate without kernel recompilation
+2. **Use throw-away tests** - Write quick tests in basics.rs, clean up later
+3. **Use `#[file_serial]`** - For tests that conflict (network, state)
+4. **Check boot sequence** - If tests hang, boot may have failed
+5. **Use `run_prog_waiting_for`** - When you need specific output before continuing
