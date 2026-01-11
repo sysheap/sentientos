@@ -11,3 +11,10 @@ Before stopping, check if you made code changes:
 6. Remove any dead/unused code before committing
 
 DO NOT wait for user to ask you to commit. Commit automatically.
+
+IMPORTANT: Do NOT use heredoc syntax (<<EOF) for commit messages.
+Heredocs fail in sandbox mode because they need temp files.
+Use simple quoted strings with embedded newlines instead:
+  git commit -m "First line
+
+  More lines here"
