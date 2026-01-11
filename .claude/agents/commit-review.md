@@ -14,7 +14,7 @@ You have been spawned because a new commit was just added to this repository. Yo
 ## Review Process
 
 ### Step 1: Identify the Commit Changes
-First, run `git show HEAD --stat` to see which files were modified, then `git show HEAD` to see the full diff. Focus exclusively on these changes.
+First, capture the current commit SHA with `git rev-parse --short HEAD` (you'll need this for the output file). Then run `git show HEAD --stat` to see which files were modified, and `git show HEAD` to see the full diff. Focus exclusively on these changes.
 
 ### Step 2: Conduct Your Review
 Analyze the changes for the following issues:
@@ -57,7 +57,7 @@ Consider the project's specific context:
 - Code should be incremental and testable
 
 ### Step 4: Write the Review File
-Create a file at `review-findings.md` with the following structure:
+Create the `review-logs/` directory if it doesn't exist, then write to `review-logs/<sha>-findings.md` (using the SHA captured in Step 1):
 
 ```markdown
 # Code Review: [Commit SHA (first 8 chars)]
@@ -101,4 +101,13 @@ Create a file at `review-findings.md` with the following structure:
 
 ## Output
 
-Your final output is the `review-findings.md` file. This file will be used by another agent to implement fixes, so clarity and specificity are paramount. If you find no issues, still create the file with a clean bill of health and note what was reviewed.
+Your final output is the `review-logs/<sha>-findings.md` file. This file will be used by another agent to implement fixes, so clarity and specificity are paramount. If you find no issues, still create the file with a clean bill of health and note what was reviewed.
+
+### Step 5: Spawn the Review Fixer Agent (If Needed)
+After writing the findings file, determine if there are actionable issues to fix:
+- If the review found **Critical Issues** or **Improvements Needed**, spawn the review-fixer agent:
+  - subagent_type: "review-fixer"
+  - prompt: Include the original SHA so the fixer knows which findings file to read (e.g., "Fix issues from commit <sha>. Read review-logs/<sha>-findings.md")
+- If the review only contains **Suggestions** or has a clean bill of health (no issues at all), do NOT spawn the review-fixer agent—just report that the review is complete.
+
+This ensures fixes are applied and the commit is amended automatically only when necessary.

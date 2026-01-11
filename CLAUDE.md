@@ -119,6 +119,12 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 **Prefer less code.** Achieve the same result with fewer lines. Avoid unnecessary abstractions, helpers for one-time operations, or premature optimization. Simplify existing code when touching it for a feature.
 
+**No bloated comments.** Add comments only when explaining invariants or non-obvious logic. Never add comments that restate what the code does, separators, or decorative formatting.
+
+**Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:
+- Run `just clippy` to ensure no warnings
+- Remove any dead or unused code introduced by your changes
+
 **Commit incrementally.** Commit each small working step toward a larger goal. Include test code in commits. This enables incremental progress verification rather than large, hard-to-debug changesets.
 
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
