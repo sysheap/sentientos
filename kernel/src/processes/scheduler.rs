@@ -157,11 +157,13 @@ impl CpuScheduler {
             debug!("Current thread is already powersave thread - don't queuing back");
             return;
         }
+        let cpu_id = Cpu::cpu_id();
         self.swap_current_with_powersave().with_lock(|mut t| {
-            // Only save state when preempting a Running thread.
-            // If thread is Waiting (suspended itself) or Runnable (woken by another CPU),
-            // its state was already saved when it suspended.
-            if t.is_running() {
+            // Only save state when preempting a Running thread on THIS CPU.
+            // - Running on other CPU: another CPU stole this thread, don't touch it
+            // - Waiting: state was already saved before thread suspended
+            // - Runnable: state was saved, thread was woken by another CPU
+            if t.get_state() == (ThreadState::Running { cpu_id }) {
                 t.set_state(ThreadState::Runnable);
                 t.set_program_counter(Cpu::read_sepc());
                 t.set_register_state(Cpu::read_trap_frame());

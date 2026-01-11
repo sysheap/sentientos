@@ -22,7 +22,10 @@ static CLOCKS_PER_NANO: RuntimeInitializedData<u64> = RuntimeInitializedData::ne
 
 type WakeupClockTime = u64;
 
-static WAKEUP_QUEUE: Spinlock<BTreeMap<WakeupClockTime, Waker>> = Spinlock::new(BTreeMap::new());
+// Use Vec<Waker> to support multiple threads with the same wakeup_time.
+// This prevents waker collision when multiple threads sleep for the same duration.
+static WAKEUP_QUEUE: Spinlock<BTreeMap<WakeupClockTime, alloc::vec::Vec<Waker>>> =
+    Spinlock::new(BTreeMap::new());
 
 pub fn init() {
     let clocks_per_sec = device_tree::THE
@@ -69,7 +72,11 @@ impl Future for Sleep {
         }
         if !self.registered {
             let waker = cx.waker().clone();
-            WAKEUP_QUEUE.lock().insert(self.wakeup_time, waker);
+            WAKEUP_QUEUE
+                .lock()
+                .entry(self.wakeup_time)
+                .or_default()
+                .push(waker);
             self.registered = true;
         }
         Poll::Pending
@@ -80,8 +87,10 @@ pub fn wakeup_wakers() {
     let current = get_current_clocks();
     let mut lg = WAKEUP_QUEUE.lock();
     let threads = lg.split_off_lower_than(&current);
-    for waker in threads.into_values() {
-        waker.wake();
+    for wakers in threads.into_values() {
+        for waker in wakers {
+            waker.wake();
+        }
     }
 }
 

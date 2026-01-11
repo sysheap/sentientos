@@ -325,8 +325,4 @@ impl Thread {
     pub fn process(&self) -> ProcessRef {
         self.process.clone()
     }
-
-    pub fn is_running(&self) -> bool {
-        matches!(self.state, ThreadState::Running { .. })
-    }
 }
