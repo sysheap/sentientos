@@ -4,14 +4,17 @@ use crate::{
     debug, info,
     interrupts::plic::{InterruptSource, PLIC},
     io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
-    processes::{task::Task, thread::ThreadState, waker::TaskWaker},
+    processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
     syscalls::{
         self,
         linux::{LinuxSyscallHandler, LinuxSyscalls},
     },
 };
 use common::syscalls::trap_frame::Register;
-use core::{panic, task::Context};
+use core::{
+    panic,
+    task::{Context, Poll},
+};
 
 #[unsafe(no_mangle)]
 extern "C" fn get_process_satp_value() -> usize {
@@ -20,6 +23,7 @@ extern "C" fn get_process_satp_value() -> usize {
 
 #[unsafe(no_mangle)]
 extern "C" fn handle_timer_interrupt() {
+    timer::wakeup_wakers();
     Cpu::with_scheduler(|mut s| s.schedule());
 }
 
@@ -71,23 +75,26 @@ fn handle_syscall() {
             Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
         }
     } else {
-        let waker = TaskWaker::new();
-        let mut cx = Context::from_waker(&waker);
+        let task_trap_frame = trap_frame.clone();
         let mut task = Task::new(async move {
             let mut handler = LinuxSyscallHandler::new();
-            handler.handle(&trap_frame).await
+            handler.handle(&task_trap_frame).await
         });
-        let result = match task.poll(&mut cx) {
-            core::task::Poll::Ready(result) => result,
-            core::task::Poll::Pending => panic!("Task is pending"),
-        };
-        let ret = match result {
-            Ok(ret) => ret,
-            Err(errno) => -(errno as isize),
-        };
-        trap_frame[Register::a0] = ret as usize;
-        Cpu::write_trap_frame(trap_frame);
-        Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+        let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
+        let mut cx = Context::from_waker(&waker);
+        if let Poll::Ready(result) = task.poll(&mut cx) {
+            let ret = match result {
+                Ok(ret) => ret,
+                Err(errno) => -(errno as isize),
+            };
+            trap_frame[Register::a0] = ret as usize;
+            Cpu::write_trap_frame(trap_frame);
+            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+        } else {
+            Cpu::with_current_thread(|mut t| {
+                t.set_syscall_task_and_suspend(task);
+            });
+        }
     }
 
     let cpu = Cpu::current();

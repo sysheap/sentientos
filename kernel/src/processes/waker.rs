@@ -1,17 +1,23 @@
 use alloc::{sync::Arc, task::Wake};
 use core::task::Waker;
 
-pub struct TaskWaker;
+use crate::processes::thread::ThreadWeakRef;
 
-impl TaskWaker {
-    pub fn new() -> Waker {
-        let task_waker = Arc::new(TaskWaker);
+pub struct ThreadWaker {
+    thread: ThreadWeakRef,
+}
+
+impl ThreadWaker {
+    pub fn new_waker(thread: ThreadWeakRef) -> Waker {
+        let task_waker = Arc::new(ThreadWaker { thread });
         task_waker.into()
     }
 }
 
-impl Wake for TaskWaker {
+impl Wake for ThreadWaker {
     fn wake(self: Arc<Self>) {
-        todo!()
+        if let Some(thread) = self.thread.upgrade() {
+            thread.lock().wake_up();
+        }
     }
 }

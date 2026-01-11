@@ -39,6 +39,8 @@ use crate::klibc::Spinlock;
 pub type ThreadRef = Arc<Spinlock<Thread>>;
 pub type ThreadWeakRef = Weak<Spinlock<Thread>>;
 
+pub type SyscallTask = Task<Result<isize, Errno>>;
+
 fn get_next_tid() -> Tid {
     // PIDs will start from 1
     // 0 is reserved for the powersave process
@@ -84,7 +86,7 @@ pub struct Thread {
     sigaltstack: ContainsUserspacePtr<stack_t>,
     sigmask: sigset_t,
     sigaction: [sigaction; _NSIG as usize],
-    syscall_task: Option<Task>,
+    syscall_task: Option<SyscallTask>,
 }
 
 impl core::fmt::Display for Thread {
@@ -234,6 +236,30 @@ impl Thread {
         &self.process_name
     }
 
+    pub fn set_syscall_task_and_suspend(&mut self, task: SyscallTask) {
+        assert!(self.syscall_task.is_none(), "syscall task is already set");
+        self.syscall_task = Some(task);
+        self.suspend();
+    }
+
+    pub fn wake_up(&mut self) {
+        assert_eq!(
+            self.state,
+            ThreadState::Waiting,
+            "Thread must be suspended to be woken up"
+        );
+        self.state = ThreadState::Runnable;
+    }
+
+    fn suspend(&mut self) {
+        assert_ne!(
+            self.state,
+            ThreadState::Waiting,
+            "Thread should not be already in waiting state"
+        );
+        self.state = ThreadState::Waiting;
+    }
+
     pub fn get_tid(&self) -> Tid {
         self.tid
     }
@@ -274,6 +300,10 @@ impl Thread {
         self.sigaltstack.0 = *sigaltstack;
     }
 
+    pub fn take_syscall_task(&mut self) -> Option<SyscallTask> {
+        self.syscall_task.take()
+    }
+
     pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtr<*mut c_int>) {
         self.clear_child_tid = Some(clear_child_tid);
     }
@@ -286,8 +316,12 @@ impl Thread {
         &self.register_state
     }
 
-    pub fn set_register_state(&mut self, register_state: &TrapFrame) {
-        self.register_state = *register_state;
+    pub fn get_register_state_mut(&mut self) -> &mut TrapFrame {
+        &mut self.register_state
+    }
+
+    pub fn set_register_state(&mut self, register_state: TrapFrame) {
+        self.register_state = register_state.clone();
     }
 
     pub fn get_program_counter(&self) -> usize {

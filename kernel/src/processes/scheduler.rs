@@ -8,15 +8,25 @@ use crate::{
     cpu::Cpu,
     debug, info,
     klibc::elf::ElfFile,
-    processes::{thread::Thread, timer},
+    processes::{
+        thread::{SyscallTask, Thread},
+        timer,
+        waker::ThreadWaker,
+    },
     test::qemu_exit,
 };
 use alloc::sync::Arc;
-use common::{errors::SchedulerError, pid::Tid, unwrap_or_return};
+use common::{errors::SchedulerError, pid::Tid, syscalls::trap_frame::Register, unwrap_or_return};
+use core::task::{Context, Poll};
 
 pub struct CpuScheduler {
     current_thread: ThreadRef,
     powersave_thread: ThreadRef,
+}
+
+enum ProcessMode {
+    KernelSyscallTask(SyscallTask),
+    Userspace,
 }
 
 impl CpuScheduler {
@@ -43,8 +53,15 @@ impl CpuScheduler {
 
     pub fn schedule(&mut self) {
         debug!("Schedule next process");
-        self.check_wakeup_queue();
-        self.prepare_next_process();
+        while let ProcessMode::KernelSyscallTask(task) = self.prepare_next_process() {
+            debug!("Running syscall task");
+            if self.run_syscall_task(task) {
+                // we completed the syscall, lets give the process the chance to run directly
+                break;
+            }
+        }
+
+        debug!("Scheduling userspace process");
         if self.is_current_process_energy_saver() {
             timer::set_timer(50);
         } else {
@@ -52,12 +69,27 @@ impl CpuScheduler {
         }
     }
 
-    fn check_wakeup_queue(&mut self) {
-        let wakeup_threads = timer::return_threads_to_wakeup();
-        for thread in wakeup_threads.into_iter().filter_map(|w| w.upgrade()) {
-            thread.with_lock(|mut t| {
-                t.resume_on_syscall_linux();
+    pub fn run_syscall_task(&mut self, mut task: SyscallTask) -> bool {
+        let waker = ThreadWaker::new_waker(Arc::downgrade(&self.current_thread));
+        let mut cx = Context::from_waker(&waker);
+        if let Poll::Ready(result) = task.poll(&mut cx) {
+            let ret = match result {
+                Ok(ret) => ret,
+                Err(errno) => -(errno as isize),
+            };
+            self.current_thread.with_lock(|mut t| {
+                let trap_frame = t.get_register_state_mut();
+                trap_frame[Register::a0] = ret as usize;
+                let pc = t.get_program_counter();
+                t.set_program_counter(pc + 4); // Skip the ecall instruction
             });
+            self.set_cpu_reg_for_current_thread();
+            true
+        } else {
+            Cpu::with_current_thread(|mut t| {
+                t.set_syscall_task_and_suspend(task);
+            });
+            false
         }
     }
 
@@ -124,13 +156,13 @@ impl CpuScheduler {
             }
 
             t.set_program_counter(Cpu::read_sepc());
-            t.set_register_state(&Cpu::read_trap_frame());
+            t.set_register_state(Cpu::read_trap_frame());
 
             debug!("Saved thread {} back", *t);
         });
     }
 
-    fn prepare_next_process(&mut self) {
+    fn prepare_next_process(&mut self) -> ProcessMode {
         self.queue_current_process_back();
 
         process_table::THE.with_lock(|mut pt| {
@@ -154,15 +186,22 @@ impl CpuScheduler {
             self.current_thread = next_runnable;
         });
 
-        self.set_cpu_reg_for_current_thread();
+        let syscall_task = self.current_thread.with_lock(|mut t| t.take_syscall_task());
+
+        if let Some(task) = syscall_task {
+            ProcessMode::KernelSyscallTask(task)
+        } else {
+            self.set_cpu_reg_for_current_thread();
+            ProcessMode::Userspace
+        }
     }
 
-    fn set_cpu_reg_for_current_thread(&mut self) {
+    pub fn set_cpu_reg_for_current_thread(&mut self) {
         self.current_thread.with_lock(|mut t| {
             let pc = t.get_program_counter();
 
             t.finalize_syscall();
-            Cpu::write_trap_frame(*t.get_register_state());
+            Cpu::write_trap_frame(t.get_register_state().clone());
             Cpu::write_sepc(pc);
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
         });

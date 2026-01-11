@@ -1,4 +1,4 @@
-use alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 use core::{arch::asm, mem::offset_of, ptr::addr_of};
 
 use common::{runtime_initialized::RuntimeInitializedData, syscalls::trap_frame::TrapFrame};
@@ -6,7 +6,11 @@ use common::{runtime_initialized::RuntimeInitializedData, syscalls::trap_frame::
 use crate::{
     klibc::{Spinlock, SpinlockGuard, sizes::KiB},
     memory::page_tables::RootPageTableHolder,
-    processes::{process::Process, scheduler::CpuScheduler, thread::ThreadRef},
+    processes::{
+        process::Process,
+        scheduler::CpuScheduler,
+        thread::{Thread, ThreadRef, ThreadWeakRef},
+    },
     sbi::extensions::ipi_extension::sbi_send_ipi,
 };
 
@@ -181,7 +185,15 @@ impl Cpu {
         Self::with_scheduler(|s| s.get_current_thread().clone())
     }
 
-    pub fn with_current_process<R>(mut f: impl FnMut(SpinlockGuard<'_, Process>) -> R) -> R {
+    pub fn current_thread_weak() -> ThreadWeakRef {
+        Self::with_scheduler(|s| Arc::downgrade(s.get_current_thread()))
+    }
+
+    pub fn with_current_thread<R>(f: impl FnOnce(SpinlockGuard<'_, Thread>) -> R) -> R {
+        Self::with_scheduler(|s| f(s.get_current_thread().lock()))
+    }
+
+    pub fn with_current_process<R>(f: impl FnOnce(SpinlockGuard<'_, Process>) -> R) -> R {
         Self::with_scheduler(|s| f(s.get_current_process().lock()))
     }
 

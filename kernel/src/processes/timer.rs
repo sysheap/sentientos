@@ -2,12 +2,15 @@ use crate::{
     cpu::Cpu,
     debug, device_tree,
     klibc::{Spinlock, btreemap::SplitOffLowerThan},
-    processes::thread::ThreadWeakRef,
     sbi,
 };
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::collections::BTreeMap;
 use common::{big_endian::BigEndian, runtime_initialized::RuntimeInitializedData};
-use core::arch::asm;
+use core::{
+    arch::asm,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
 use headers::{errno::Errno, syscall_types::timespec};
 
 pub const CLINT_BASE: usize = 0x2000000;
@@ -17,8 +20,7 @@ static CLOCKS_PER_NANO: RuntimeInitializedData<u64> = RuntimeInitializedData::ne
 
 type WakeupClockTime = u64;
 
-static WAKEUP_QUEUE: Spinlock<BTreeMap<WakeupClockTime, ThreadWeakRef>> =
-    Spinlock::new(BTreeMap::new());
+static WAKEUP_QUEUE: Spinlock<BTreeMap<WakeupClockTime, Waker>> = Spinlock::new(BTreeMap::new());
 
 pub fn init() {
     let clocks_per_sec = device_tree::THE
@@ -33,21 +35,52 @@ pub fn init() {
     CLOCKS_PER_NANO.initialize(clocks_per_sec / 1000 / 1000);
 }
 
-pub fn register_wakeup(duration: &timespec, thread: ThreadWeakRef) -> Result<(), Errno> {
+pub struct Sleep {
+    wakeup_time: u64,
+    registered: bool,
+}
+
+impl Sleep {
+    fn new(wakeup_time: u64) -> Self {
+        Self {
+            wakeup_time,
+            registered: false,
+        }
+    }
+}
+
+pub fn sleep(duration: &timespec) -> Result<Sleep, Errno> {
     let clocks_per_nano = *CLOCKS_PER_NANO;
     let clocks_per_second = clocks_per_nano * 1000 * 1000;
     let clocks = u64::try_from(duration.tv_sec)? * clocks_per_second
         + u64::try_from(duration.tv_nsec)? * clocks_per_nano;
     let wakeup_time = get_current_clocks() + clocks;
-    WAKEUP_QUEUE.lock().insert(wakeup_time, thread);
-    Ok(())
+    Ok(Sleep::new(wakeup_time))
 }
 
-pub fn return_threads_to_wakeup() -> Vec<ThreadWeakRef> {
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if get_current_clocks() >= self.wakeup_time {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            let waker = cx.waker().clone();
+            WAKEUP_QUEUE.lock().insert(self.wakeup_time, waker);
+            self.registered = true;
+        }
+        Poll::Pending
+    }
+}
+
+pub fn wakeup_wakers() {
     let current = get_current_clocks();
     let mut lg = WAKEUP_QUEUE.lock();
     let threads = lg.split_off_lower_than(&current);
-    threads.into_values().collect()
+    for waker in threads.into_values() {
+        waker.wake();
+    }
 }
 
 pub fn set_timer(milliseconds: u64) {
