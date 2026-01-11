@@ -1,5 +1,5 @@
 use crate::{
-    io::stdin_buf::STDIN_BUFFER,
+    io::stdin_buf::ReadStdin,
     memory::{PAGE_SIZE, page_tables::XWRMode},
     print,
     processes::{process::ProcessRef, timer},
@@ -58,31 +58,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             return Err(Errno::EBADF);
         }
 
-        let mut stdin = STDIN_BUFFER.lock();
+        let data = ReadStdin::new(count).await;
 
-        if stdin.is_empty() {
-            stdin.register_wakeup(self.handler.current_tid());
-            drop(stdin);
-            self.handler
-                .current_thread()
-                .lock()
-                .set_waiting_on_syscall_linux(move || {
-                    let mut stdin = STDIN_BUFFER.lock();
+        assert!(data.len() <= count, "Read more than requested");
 
-                    let copied_buf = stdin.get(count);
+        buf.write_slice(&data)?;
 
-                    buf.write_slice(&copied_buf)?;
-
-                    Ok(copied_buf.len() as isize)
-                });
-            return Ok(0);
-        }
-
-        let copied_buf = stdin.get(count);
-
-        buf.write_slice(&copied_buf)?;
-
-        Ok(copied_buf.len() as isize)
+        Ok(data.len() as isize)
     }
 
     async fn write(

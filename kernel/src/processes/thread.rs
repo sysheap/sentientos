@@ -344,14 +344,6 @@ impl Thread {
         self.in_kernel_mode
     }
 
-    pub fn set_waiting_on_syscall_linux(
-        &mut self,
-        finalizer: impl Fn() -> Result<isize, Errno> + Send + 'static,
-    ) {
-        self.state = ThreadState::Waiting;
-        self.waiting_on_syscall = Some(SyscallFinalizer(Box::new(finalizer)));
-    }
-
     pub fn process(&self) -> ProcessRef {
         self.process.clone()
     }
@@ -364,9 +356,5 @@ impl Thread {
             };
             self.register_state[Register::a0] = ret as usize;
         }
-    }
-
-    pub fn resume_on_syscall_linux(&mut self) {
-        self.state = ThreadState::Runnable;
     }
 }
