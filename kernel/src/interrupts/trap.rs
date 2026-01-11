@@ -10,7 +10,7 @@ use crate::{
         linux::{LinuxSyscallHandler, LinuxSyscalls},
     },
 };
-use common::syscalls::trap_frame::Register;
+use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::{
     panic,
     task::{Context, Poll},
@@ -61,6 +61,50 @@ fn handle_external_interrupt() {
     drop(plic);
 }
 
+// Check if we still own the thread (syscall might have set it to Waiting or another CPU
+// might have stolen it). If we don't own it, save state and reschedule. Returns true if
+// we should continue executing on this CPU.
+fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> bool {
+    Cpu::with_scheduler(|mut s| {
+        let cpu_id = Cpu::cpu_id();
+        let should_reschedule = s.get_current_thread().with_lock(|mut t| {
+            match t.get_state() {
+                ThreadState::Running {
+                    cpu_id: running_cpu,
+                } if running_cpu == cpu_id => {
+                    // We still own the thread, continue on this CPU
+                    false
+                }
+                ThreadState::Running { cpu_id: other_cpu } => {
+                    // Another CPU stole this thread - indicates a race condition bug.
+                    // The other CPU is running with stale register state.
+                    panic!(
+                        "Thread {} was stolen by CPU {} while CPU {} was still in syscall handler",
+                        t.get_tid(),
+                        other_cpu,
+                        cpu_id
+                    );
+                }
+                ThreadState::Waiting | ThreadState::Runnable => {
+                    // Syscall put us in Waiting (and possibly got woken to Runnable).
+                    // Save state before rescheduling.
+                    let sepc = Cpu::read_sepc() + 4; // Skip ecall
+                    t.set_register_state(trap_frame);
+                    t.set_program_counter(sepc);
+                    true
+                }
+            }
+        });
+
+        if should_reschedule {
+            s.schedule();
+            false
+        } else {
+            true
+        }
+    })
+}
+
 fn handle_syscall() {
     let mut trap_frame = Cpu::read_trap_frame();
     let nr = trap_frame[Register::a7];
@@ -68,13 +112,18 @@ fn handle_syscall() {
     let ret = trap_frame[Register::a2];
 
     if (1 << 63) & nr > 0 {
-        // We might need to get the current cpu again in handle_syscall
+        // legacy syscalls - not compatible with linux
+        // will be removed in the future
         if let Some(ret) = syscalls::handle_syscall(nr, arg, ret) {
             trap_frame[Register::a0] = ret as usize;
-            Cpu::write_trap_frame(trap_frame);
-            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+
+            if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
+                Cpu::write_trap_frame(trap_frame);
+                Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+            }
         }
     } else {
+        // Normal syscall - async
         let task_trap_frame = trap_frame.clone();
         let mut task = Task::new(async move {
             let mut handler = LinuxSyscallHandler::new();
@@ -83,26 +132,34 @@ fn handle_syscall() {
         let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
         let mut cx = Context::from_waker(&waker);
         if let Poll::Ready(result) = task.poll(&mut cx) {
+            // Syscall completed synchronously
             let ret = match result {
                 Ok(ret) => ret,
                 Err(errno) => -(errno as isize),
             };
             trap_frame[Register::a0] = ret as usize;
-            Cpu::write_trap_frame(trap_frame);
-            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+
+            if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
+                Cpu::write_trap_frame(trap_frame);
+                Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip ecall
+            }
         } else {
-            Cpu::with_current_thread(|mut t| {
-                t.set_syscall_task_and_suspend(task);
+            // Syscall pending - suspend and reschedule atomically.
+            // We must hold the scheduler lock across suspend+schedule to prevent
+            // another CPU from waking and stealing this thread before we reschedule.
+            Cpu::with_scheduler(|mut s| {
+                // Save register state BEFORE suspending.
+                // When thread suspends, queue_current_process_back won't save registers
+                // (since state is Waiting, not Running), so we must save them here.
+                let sepc = Cpu::read_sepc();
+                s.get_current_thread().with_lock(|mut t| {
+                    t.set_register_state(trap_frame);
+                    t.set_program_counter(sepc);
+                    t.set_syscall_task_and_suspend(task);
+                });
+                s.schedule();
             });
         }
-    }
-
-    let cpu = Cpu::current();
-
-    let mut scheduler = cpu.scheduler().lock();
-    // In case our current process was set to waiting state we need to reschedule
-    if scheduler.get_current_thread().lock().get_state() == ThreadState::Waiting {
-        scheduler.schedule();
     }
 }
 

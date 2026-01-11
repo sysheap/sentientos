@@ -119,6 +119,8 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 **Prefer less code.** Achieve the same result with fewer lines. Avoid unnecessary abstractions, helpers for one-time operations, or premature optimization. Simplify existing code when touching it for a feature.
 
+**Fail fast with assertions.** Use `assert!` instead of `debug_assert!`. An inconsistent state in the kernel should panic immediately rather than continue with corrupted data. Crashing early makes bugs easier to diagnose and prevents cascading failures.
+
 **No bloated comments.** Add comments only when explaining invariants or non-obvious logic. Never add comments that restate what the code does, separators, or decorative formatting.
 
 **Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:

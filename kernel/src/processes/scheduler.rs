@@ -86,9 +86,11 @@ impl CpuScheduler {
             self.set_cpu_reg_for_current_thread();
             true
         } else {
-            Cpu::with_current_thread(|mut t| {
-                t.set_syscall_task_and_suspend(task);
-            });
+            // Use self.current_thread directly instead of Cpu::with_current_thread
+            // to avoid trying to acquire scheduler lock while already holding it
+            self.current_thread
+                .lock()
+                .set_syscall_task_and_suspend(task);
             false
         }
     }
@@ -156,13 +158,14 @@ impl CpuScheduler {
             return;
         }
         self.swap_current_with_powersave().with_lock(|mut t| {
-            if t.get_state() == ThreadState::Running {
+            // Only save state when preempting a Running thread.
+            // If thread is Waiting (suspended itself) or Runnable (woken by another CPU),
+            // its state was already saved when it suspended.
+            if t.is_running() {
                 t.set_state(ThreadState::Runnable);
+                t.set_program_counter(Cpu::read_sepc());
+                t.set_register_state(Cpu::read_trap_frame());
             }
-
-            t.set_program_counter(Cpu::read_sepc());
-            t.set_register_state(Cpu::read_trap_frame());
-
             debug!("Saved thread {} back", *t);
         });
     }
@@ -183,12 +186,19 @@ impl CpuScheduler {
                 "Current thread must be powersave thread to not have any dangling references"
             );
 
-            // next_runnable already sets the state to ThreadState::Running
-            let next_runnable = pt.next_runnable().unwrap_or(self.powersave_thread.clone());
-
-            debug!("Next runnable is {}", *next_runnable.lock());
-
-            self.current_thread = next_runnable;
+            // next_runnable already sets the state to ThreadState::Running { cpu_id }
+            if let Some(next) = pt.next_runnable() {
+                debug!("Next runnable is {}", *next.lock());
+                self.current_thread = next;
+            } else {
+                // No runnable threads, use powersave and mark it as running on this CPU
+                self.powersave_thread.with_lock(|mut t| {
+                    t.set_state(ThreadState::Running {
+                        cpu_id: Cpu::cpu_id(),
+                    });
+                });
+                debug!("Next runnable is powersave");
+            }
         });
 
         let syscall_task = self.current_thread.with_lock(|mut t| t.take_syscall_task());
@@ -201,10 +211,19 @@ impl CpuScheduler {
         }
     }
 
-    pub fn set_cpu_reg_for_current_thread(&mut self) {
+    pub fn set_cpu_reg_for_current_thread(&self) {
         self.current_thread.with_lock(|t| {
-            let pc = t.get_program_counter();
+            let cpu_id = Cpu::cpu_id();
+            // Assert thread is running on this CPU - fail fast on corruption
+            assert!(
+                t.get_state() == ThreadState::Running { cpu_id },
+                "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
+                t.get_tid(),
+                t.get_state(),
+                cpu_id
+            );
 
+            let pc = t.get_program_counter();
             Cpu::write_trap_frame(t.get_register_state().clone());
             Cpu::write_sepc(pc);
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());

@@ -73,11 +73,17 @@ pub struct Thread {
 
 ```rust
 pub enum ThreadState {
-    Running,   // Currently executing on a CPU
-    Runnable,  // Ready to run, in run queue
-    Waiting,   // Blocked (sleeping, waiting for I/O, or being killed)
+    Running { cpu_id: usize },  // Currently executing on specified CPU
+    Runnable,                   // Ready to run, in run queue
+    Waiting,                    // Blocked (sleeping, waiting for I/O, or being killed)
 }
 ```
+
+The `cpu_id` in `Running` is critical for multi-CPU correctness. It ensures:
+- A thread can only be scheduled on one CPU at a time
+- The scheduler atomically claims threads by setting `Running { cpu_id }`
+- Race conditions between CPUs are prevented (thread woken by waker on CPU1
+  while CPU0 is about to return to userspace with it)
 
 ### Thread Creation
 
