@@ -4,7 +4,7 @@ extern crate userspace;
 
 fn main() {
     println!("Hello from Loop");
-    for i in 0..10 {
+    for i in 0..5 {
         println!("Looping... {}", i);
         sleep(Duration::from_secs(1));
     }

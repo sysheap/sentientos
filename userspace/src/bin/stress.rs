@@ -1,16 +1,34 @@
 use common::syscalls::{sys_execute, sys_wait};
 
-use std::vec::Vec;
+use std::{env, process::exit, vec::Vec};
 
 extern crate alloc;
 extern crate userspace;
 
-const INSTANCES: usize = 32;
+const DEFAULT_INSTANCES: usize = 32;
 
 fn main() {
-    println!("Starting loop {INSTANCES} times");
-    let mut pids = Vec::with_capacity(INSTANCES);
-    for _ in 0..INSTANCES {
+    let args: Vec<String> = env::args().collect();
+
+    let instances: usize = if args.len() > 1 {
+        match args[1].parse() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                eprintln!("Usage: {} [count]", args[0]);
+                eprintln!(
+                    "  count: number of processes to spawn (default: {})",
+                    DEFAULT_INSTANCES
+                );
+                exit(1);
+            }
+        }
+    } else {
+        DEFAULT_INSTANCES
+    };
+
+    println!("Starting loop {} times", instances);
+    let mut pids = Vec::with_capacity(instances);
+    for _ in 0..instances {
         let pid = sys_execute("loop", &[]).expect("Process must be successfully startable");
         pids.push(pid);
     }
