@@ -11,6 +11,7 @@
 #![feature(map_try_insert)]
 #![feature(new_range_api)]
 #![feature(ptr_metadata)]
+#![feature(ptr_mask)]
 #![feature(macro_metavar_expr_concat)]
 #![feature(str_from_raw_parts)]
 #![feature(macro_metavar_expr)]

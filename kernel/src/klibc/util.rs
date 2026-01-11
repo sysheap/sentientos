@@ -1,8 +1,51 @@
-use core::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Rem, Shl, Shr, Sub};
-
-use common::util::align_up;
+use core::{
+    fmt::Display,
+    ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Rem, Shl, Shr, Sub},
+};
 
 use crate::memory::PAGE_SIZE;
+
+pub fn align_up_page_size(value: usize) -> usize {
+    align_up(value, PAGE_SIZE)
+}
+
+pub const fn align_up(value: usize, alignment: usize) -> usize {
+    let remainder = value % alignment;
+    if remainder == 0 {
+        value
+    } else {
+        value + alignment - remainder
+    }
+}
+
+pub fn align_down_ptr<T>(ptr: *const T, alignment: usize) -> *const T {
+    ptr.mask(!(alignment - 1))
+}
+
+#[cfg(miri)]
+pub fn align_down(value: usize, alignment: usize) -> usize {
+    value & !(alignment - 1)
+}
+
+pub struct PrintMemorySizeHumanFriendly(pub usize);
+
+impl Display for PrintMemorySizeHumanFriendly {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut size = self.0 as f64;
+        for format in ["", "KiB", "MiB", "GiB"] {
+            if size < 1024.0 {
+                return write!(f, "{size:.2} {format}");
+            }
+            size /= 1024.0;
+        }
+        write!(f, "{size:.2} TiB")
+    }
+}
+
+pub fn copy_slice<T: Copy>(src: &[T], dst: &mut [T]) {
+    assert!(dst.len() >= src.len());
+    dst[..src.len()].copy_from_slice(src);
+}
 
 pub const fn minimum_amount_of_pages(value: usize) -> usize {
     align_up(value, PAGE_SIZE) / PAGE_SIZE
@@ -167,8 +210,6 @@ impl<T, const N: usize> InBytes for [T; N] {
 
 #[cfg(test)]
 mod tests {
-    use common::util::copy_slice;
-
     use crate::memory::PAGE_SIZE;
 
     #[test_case]
@@ -189,7 +230,7 @@ mod tests {
     fn copy_from_slice() {
         let src = [1, 2, 3, 4, 5];
         let mut dst = [0, 0, 0, 0, 0, 0, 0];
-        copy_slice(&src, &mut dst);
+        super::copy_slice(&src, &mut dst);
         assert_eq!(dst, [1, 2, 3, 4, 5, 0, 0]);
     }
 

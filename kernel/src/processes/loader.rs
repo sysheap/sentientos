@@ -1,6 +1,8 @@
 use alloc::{string::ToString, vec::Vec};
-use common::{errors::LoaderError, util::align_up, writable_buffer::WritableBuffer};
+use common::errors::LoaderError;
 use headers::syscall_types::{AT_NULL, AT_PAGESZ};
+
+use crate::klibc::{util::align_up, writable_buffer::WritableBuffer};
 
 use crate::{
     debug,

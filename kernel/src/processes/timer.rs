@@ -1,11 +1,13 @@
 use crate::{
     cpu::Cpu,
     debug, device_tree,
-    klibc::{Spinlock, btreemap::SplitOffLowerThan},
+    klibc::{
+        Spinlock, big_endian::BigEndian, btreemap::SplitOffLowerThan,
+        runtime_initialized::RuntimeInitializedData,
+    },
     sbi,
 };
 use alloc::collections::BTreeMap;
-use common::{big_endian::BigEndian, runtime_initialized::RuntimeInitializedData};
 use core::{
     arch::asm,
     pin::Pin,

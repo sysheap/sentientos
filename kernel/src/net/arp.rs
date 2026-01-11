@@ -1,11 +1,12 @@
 use core::{fmt::Display, net::Ipv4Addr};
 
-use common::big_endian::BigEndian;
-
 use crate::{
     assert::static_assert_size,
     debug,
-    klibc::util::{BufferExtension, ByteInterpretable},
+    klibc::{
+        big_endian::BigEndian,
+        util::{BufferExtension, ByteInterpretable},
+    },
     net::{
         ARP_CACHE,
         ethernet::{EtherTypes, EthernetHeader},

@@ -12,7 +12,7 @@ macro_rules! getter_address {
             // When running under Miri we don't have any sections
             // Just choose any value which does not collide with any
             // other mappings
-            common::util::align_down(u32::MAX as usize, $crate::memory::PAGE_SIZE)
+            $crate::klibc::util::align_down(u32::MAX as usize, $crate::memory::PAGE_SIZE)
         }
     };
 }
@@ -44,7 +44,7 @@ macro_rules! sections {
         use $crate::memory::page_tables::XWRMode;
         use $crate::memory::PAGE_SIZE;
         use $crate::debugging;
-        use common::util::align_up;
+        use $crate::klibc::util::align_up;
 
         pub struct LinkerInformation;
 

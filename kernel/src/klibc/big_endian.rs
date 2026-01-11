@@ -1,6 +1,7 @@
 use core::fmt::{Debug, Display};
 
-use crate::{consumable_buffer::FromU8Buffer, numbers::Number};
+use super::consumable_buffer::FromU8Buffer;
+use common::numbers::Number;
 
 #[derive(PartialEq, Eq, Clone, Copy, Default)]
 #[repr(transparent)]
@@ -18,10 +19,6 @@ impl<T: Number> BigEndian<T> {
 
     pub fn get(&self) -> T {
         T::from_be(self.0)
-    }
-
-    pub fn get_original(&self) -> T {
-        self.0
     }
 }
 

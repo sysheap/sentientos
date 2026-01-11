@@ -1,5 +1,5 @@
+use crate::klibc::util::copy_slice;
 use alloc::boxed::Box;
-use common::util::copy_slice;
 use core::ops::{Add, Deref, DerefMut};
 
 pub const PAGE_SIZE: usize = 4096;

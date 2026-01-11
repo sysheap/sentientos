@@ -1,4 +1,4 @@
-use crate::util::align_up;
+use super::util::align_up;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumableBuffer<'a> {
@@ -113,6 +113,12 @@ impl<'a> ConsumableBuffer<'a> {
 
 pub trait FromU8Buffer: Copy {
     fn from_u8_buffer(buffer: &[u8]) -> Self;
+}
+
+impl<T: common::numbers::Number> FromU8Buffer for T {
+    fn from_u8_buffer(buffer: &[u8]) -> Self {
+        T::from_le_bytes(buffer)
+    }
 }
 
 pub trait FromU8BufferUnsized: Copy {

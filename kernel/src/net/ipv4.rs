@@ -1,10 +1,11 @@
 use core::net::Ipv4Addr;
 
-use common::big_endian::BigEndian;
-
 use crate::{
     assert::static_assert_size,
-    klibc::util::{BufferExtension, ByteInterpretable},
+    klibc::{
+        big_endian::BigEndian,
+        util::{BufferExtension, ByteInterpretable},
+    },
 };
 
 #[derive(Debug, Clone)]

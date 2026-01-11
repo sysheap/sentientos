@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
-use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
-use common::{
+use crate::klibc::{
     consumable_buffer::ConsumableBuffer,
     leb128::{SignedLEB128, UnsignedLEB128},
 };
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 
 /// This parser is far from complete (nor compliant probably)
 /// The documentation of the eh_frame is very sparse and I did

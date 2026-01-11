@@ -1,8 +1,10 @@
 use core::fmt::Debug;
 
-use crate::device_tree::{self};
+use crate::{
+    device_tree::{self},
+    klibc::big_endian::BigEndian,
+};
 use alloc::vec::Vec;
-use common::big_endian::BigEndian;
 
 #[derive(Debug)]
 pub struct PCIInformation {

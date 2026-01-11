@@ -1,7 +1,10 @@
-use crate::{assert::static_assert_size, debug, info};
-use common::{
-    big_endian::BigEndian, consumable_buffer::ConsumableBuffer,
-    runtime_initialized::RuntimeInitializedData,
+use crate::{
+    assert::static_assert_size,
+    debug, info,
+    klibc::{
+        big_endian::BigEndian, consumable_buffer::ConsumableBuffer,
+        runtime_initialized::RuntimeInitializedData,
+    },
 };
 use core::{
     fmt::{Debug, Display},
@@ -360,8 +363,9 @@ mod tests {
     use crate::{
         device_tree::{DeviceTree, Header},
         info,
+        klibc::big_endian::BigEndian,
     };
-    use common::{big_endian::BigEndian, include_bytes_align_as};
+    use common::include_bytes_align_as;
 
     const DTB: &[u8] = include_bytes_align_as!(Header, "test/test_data/dtb");
 

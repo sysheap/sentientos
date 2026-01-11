@@ -5,11 +5,12 @@ use core::{
     ptr::{NonNull, null_mut},
 };
 
-use common::util::align_up;
-
 use crate::{
     assert::static_assert_size,
-    klibc::{Spinlock, util::minimum_amount_of_pages},
+    klibc::{
+        Spinlock,
+        util::{align_up, minimum_amount_of_pages},
+    },
 };
 
 use super::{PAGE_SIZE, page_allocator::PageAllocator};

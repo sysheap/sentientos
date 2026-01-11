@@ -7,10 +7,10 @@ use crate::{
         unwinder::{RegisterRule, Unwinder},
     },
     info,
+    klibc::runtime_initialized::RuntimeInitializedData,
     memory::linker_information::LinkerInformation,
 };
 use alloc::vec::Vec;
-use common::runtime_initialized::RuntimeInitializedData;
 // Needed for the native backtrace impl for debugging purposes
 // use core::ffi::c_void;
 // use unwinding::abi::{

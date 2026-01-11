@@ -1,8 +1,9 @@
-use common::util::align_up_page_size;
-
-use crate::memory::{
-    page::{Pages, PinnedHeapPages},
-    page_tables::RootPageTableHolder,
+use crate::{
+    klibc::util::align_up_page_size,
+    memory::{
+        page::{Pages, PinnedHeapPages},
+        page_tables::RootPageTableHolder,
+    },
 };
 
 const BRK_SIZE: Pages = Pages(4);

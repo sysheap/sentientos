@@ -1,4 +1,4 @@
-use crate::util::copy_slice;
+use super::util::copy_slice;
 
 pub struct WritableBuffer<'a> {
     buf: &'a mut [u8],
@@ -33,9 +33,5 @@ impl<'a> WritableBuffer<'a> {
         copy_slice(value, target);
         self.offset += value.len();
         Ok(())
-    }
-
-    pub fn buf(&self) -> &[u8] {
-        self.buf
     }
 }
