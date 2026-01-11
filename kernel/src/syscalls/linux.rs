@@ -2,7 +2,7 @@ use crate::{
     io::stdin_buf::STDIN_BUFFER,
     memory::{PAGE_SIZE, page_tables::XWRMode},
     print,
-    processes::{process::ProcessRef, thread::ThreadRef, timer},
+    processes::{process::ProcessRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
 };
 use alloc::{string::String, vec::Vec};
@@ -259,13 +259,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
             return Err(Errno::EINVAL);
         }
-        self.handler.current_thread().with_lock(|mut t| {
-            t.set_waiting_on_syscall_linux(|| Ok(0));
-        });
-        timer::register_wakeup(
-            &duration,
-            ThreadRef::downgrade(self.handler.current_thread()),
-        )?;
+        timer::sleep(&duration)?.await;
         Ok(0)
     }
 
