@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": ["Edit", "Write"]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "setsid paplay /usr/share/sounds/freedesktop/stereo/complete.oga"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "setsid paplay /usr/share/sounds/freedesktop/stereo/message.oga"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat .claude/hooks/doc-check.txt"
+          }
+        ]
+      }
+    ]
+  }
+}
