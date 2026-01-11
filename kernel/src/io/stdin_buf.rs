@@ -1,48 +1,35 @@
-use crate::{debug, klibc::Spinlock, processes::process_table};
-use alloc::{
-    collections::{BTreeSet, VecDeque},
-    vec::Vec,
+use crate::klibc::Spinlock;
+use alloc::{collections::VecDeque, vec::Vec};
+use core::{
+    cmp::min,
+    pin::Pin,
+    task::{Context, Poll, Waker},
 };
-use common::pid::Tid;
-use core::cmp::min;
 
 pub static STDIN_BUFFER: Spinlock<StdinBuffer> = Spinlock::new(StdinBuffer::new());
 
 pub struct StdinBuffer {
     data: VecDeque<u8>,
-    wakeup_queue: BTreeSet<Tid>,
+    wakeup_queue: Vec<Waker>,
 }
 
 impl StdinBuffer {
     const fn new() -> Self {
         StdinBuffer {
             data: VecDeque::new(),
-            wakeup_queue: BTreeSet::new(),
+            wakeup_queue: Vec::new(),
         }
     }
 
-    pub fn register_wakeup(&mut self, tid: Tid) {
-        self.wakeup_queue.insert(tid);
+    fn register_wakeup(&mut self, waker: Waker) {
+        self.wakeup_queue.push(waker);
     }
 
     pub fn push(&mut self, byte: u8) {
         self.data.push_back(byte);
-
-        if self.wakeup_queue.is_empty() {
-            return;
+        while let Some(waker) = self.wakeup_queue.pop() {
+            waker.wake();
         }
-
-        debug!("Waking up following tids={:?}", self.wakeup_queue);
-        process_table::THE.with_lock(|pt| {
-            while let Some(tid) = &self.wakeup_queue.pop_first() {
-                if let Some(thread) = pt.get_thread(*tid) {
-                    thread.with_lock(|mut t| {
-                        t.resume_on_syscall_linux();
-                        debug!("Resume on syscall set on thread={}", *t);
-                    })
-                }
-            }
-        });
     }
 
     pub fn pop(&mut self) -> Option<u8> {
@@ -57,6 +44,37 @@ impl StdinBuffer {
 
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+}
+
+pub struct ReadStdin {
+    max_count: usize,
+    is_registered: bool,
+}
+
+impl ReadStdin {
+    pub fn new(max_count: usize) -> Self {
+        Self {
+            max_count,
+            is_registered: false,
+        }
+    }
+}
+
+impl Future for ReadStdin {
+    type Output = Vec<u8>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut stdin = STDIN_BUFFER.lock();
+        if !stdin.is_empty() {
+            return Poll::Ready(stdin.get(self.max_count));
+        }
+        if !self.is_registered {
+            let waker = cx.waker().clone();
+            stdin.register_wakeup(waker);
+            self.is_registered = true;
+        }
+        Poll::Pending
     }
 }
 
