@@ -111,14 +111,19 @@ impl CpuScheduler {
     }
 
     pub fn let_current_thread_wait_for(&self, tid: Tid) -> bool {
-        let wait_for_thread = unwrap_or_return!(process_table::THE.lock().get_thread(tid), false);
+        // Hold process_table lock for the entire operation to prevent a race condition:
+        // Without this, the target thread could be killed between get_thread() and
+        // add_notify_on_die(), causing the waiter to never be woken up.
+        process_table::THE.with_lock(|pt| {
+            let wait_for_thread = unwrap_or_return!(pt.get_thread(tid), false);
 
-        self.current_thread.with_lock(|mut t| {
-            t.set_state(ThreadState::Waiting);
-            wait_for_thread.lock().add_notify_on_die(t.get_tid());
-        });
+            self.current_thread.with_lock(|mut t| {
+                t.set_state(ThreadState::Waiting);
+                wait_for_thread.lock().add_notify_on_die(t.get_tid());
+            });
 
-        true
+            true
+        })
     }
 
     pub fn send_ctrl_c(&mut self) {
