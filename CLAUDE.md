@@ -134,4 +134,4 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
-**Network port conflict.** Only one QEMU instance with `--net` can run at a time (port 1234). See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.
+**Network port.** System tests use dynamic port allocation for networking. When running QEMU manually with `--net`, it defaults to port 1234. Use `--net PORT` to specify a different port. See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.

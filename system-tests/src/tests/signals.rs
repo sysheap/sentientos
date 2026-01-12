@@ -1,9 +1,7 @@
-use serial_test::file_serial;
 use tokio::io::AsyncWriteExt;
 
 use crate::infra::qemu::{QemuInstance, QemuOptions};
 
-#[file_serial]
 #[tokio::test]
 async fn should_exit_program() -> anyhow::Result<()> {
     let mut sentientos =

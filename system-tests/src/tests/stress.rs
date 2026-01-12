@@ -1,10 +1,7 @@
 use std::time::{Duration, Instant};
 
-use serial_test::file_serial;
-
 use crate::infra::qemu::QemuInstance;
 
-#[file_serial]
 #[tokio::test]
 async fn stress() -> anyhow::Result<()> {
     let mut sentientos = QemuInstance::start().await?;
