@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use std::net::UdpSocket;
 use std::process::{ExitStatus, Stdio};
 use tokio::{
     io::AsyncWriteExt,
@@ -6,6 +7,11 @@ use tokio::{
 };
 
 use super::{PROMPT, read_asserter::ReadAsserter};
+
+fn find_available_port() -> anyhow::Result<u16> {
+    let socket = UdpSocket::bind("127.0.0.1:0")?;
+    Ok(socket.local_addr()?.port())
+}
 
 pub struct QemuOptions {
     add_network_card: bool,
@@ -31,13 +37,17 @@ impl QemuOptions {
         self
     }
 
-    fn apply(self, command: &mut Command) {
+    fn apply(self, command: &mut Command) -> Option<u16> {
+        let mut network_port = None;
         if self.add_network_card {
-            command.arg("--net");
+            let port = find_available_port().expect("Failed to allocate network port");
+            command.args(["--net", &port.to_string()]);
+            network_port = Some(port);
         }
         if self.use_smp {
             command.arg("--smp");
         }
+        network_port
     }
 }
 
@@ -45,6 +55,7 @@ pub struct QemuInstance {
     instance: Child,
     stdin: ChildStdin,
     stdout: ReadAsserter<ChildStdout>,
+    network_port: Option<u16>,
 }
 
 impl QemuInstance {
@@ -61,7 +72,7 @@ impl QemuInstance {
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
 
-        options.apply(&mut command);
+        let network_port = options.apply(&mut command);
 
         command.arg("target/riscv64gc-unknown-none-elf/release/kernel");
 
@@ -93,6 +104,7 @@ impl QemuInstance {
             instance,
             stdin,
             stdout,
+            network_port,
         })
     }
 
@@ -102,6 +114,10 @@ impl QemuInstance {
 
     pub fn stdin(&mut self) -> &mut ChildStdin {
         &mut self.stdin
+    }
+
+    pub fn network_port(&self) -> Option<u16> {
+        self.network_port
     }
 
     pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String> {

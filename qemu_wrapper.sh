@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --gdb          Let qemu listen on :1234 for gdb connections"
             echo "  --log          Log qemu events to /tmp/sentientos.log"
             echo "  --capture      Capture network traffic into network.pcap"
-            echo "  --net          Enable network card"
+            echo "  --net PORT     Enable network card with host port PORT (default: 1234)"
             echo "  -h, --help     Show this help message"
             echo "  --wait         Wait cpu until gdb is attached"
             exit 0
@@ -39,8 +39,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --net)
-            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::1234-:1234 -device virtio-net-pci,netdev=netdev1"
             shift
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                NET_PORT="$1"
+                shift
+            else
+                NET_PORT="1234"
+            fi
+            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::${NET_PORT}-:1234 -device virtio-net-pci,netdev=netdev1"
             ;;
         --smp)
             QEMU_CMD+=" -smp $(nproc)"

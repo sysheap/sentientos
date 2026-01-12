@@ -1,9 +1,7 @@
-use serial_test::file_serial;
 use tokio::io::AsyncWriteExt;
 
 use crate::infra::qemu::{QemuInstance, QemuOptions};
 
-#[file_serial]
 #[tokio::test]
 async fn udp() -> anyhow::Result<()> {
     let mut sentientos =
@@ -14,8 +12,9 @@ async fn udp() -> anyhow::Result<()> {
         .await
         .expect("udp program must succeed to start");
 
+    let port = sentientos.network_port().expect("Network must be enabled");
     let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
-    socket.connect("127.0.0.1:1234").await?;
+    socket.connect(format!("127.0.0.1:{}", port)).await?;
 
     socket.send("42\n".as_bytes()).await?;
     sentientos.stdout().assert_read_until("42\n").await;
