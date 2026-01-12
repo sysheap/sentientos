@@ -129,6 +129,8 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 **Commit incrementally.** Commit each small working step toward a larger goal. Include test code in commits. This enables incremental progress verification rather than large, hard-to-debug changesets.
 
+**Run commit-review after every commit.** After creating a commit, always use the Task tool with `subagent_type: commit-review` to review your changes. Do not skip this step.
+
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
 **Network port conflict.** Only one QEMU instance with `--net` can run at a time (port 1234). See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.
