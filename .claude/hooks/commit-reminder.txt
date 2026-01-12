@@ -9,6 +9,7 @@ Before stopping, check if you made code changes:
 4. Commit incrementally - each small working step, not one big commit
 5. Run `just clippy` before committing to ensure no warnings
 6. Remove any dead/unused code before committing
+7. After committing, run the commit-review agent (Task tool with subagent_type: commit-review)
 
 DO NOT wait for user to ask you to commit. Commit automatically.
 
