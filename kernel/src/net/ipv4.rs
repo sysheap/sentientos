@@ -103,3 +103,76 @@ impl IpV4Header {
         self.calculate_checksum() == 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use core::net::Ipv4Addr;
+
+    use crate::klibc::big_endian::BigEndian;
+
+    use super::IpV4Header;
+
+    #[test_case]
+    fn checksum_of_zero_header() {
+        let header = IpV4Header {
+            version_and_ihl: BigEndian::from_little_endian(0),
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(0),
+            identification: BigEndian::from_little_endian(0),
+            flags_and_offset: BigEndian::from_little_endian(0),
+            ttl: BigEndian::from_little_endian(0),
+            upper_protocol: BigEndian::from_little_endian(0),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: Ipv4Addr::new(0, 0, 0, 0),
+            destination_ip: Ipv4Addr::new(0, 0, 0, 0),
+        };
+
+        assert_eq!(header.calculate_checksum(), 0xFFFF);
+    }
+
+    #[test_case]
+    fn checksum_validates_correctly() {
+        let mut header = IpV4Header {
+            version_and_ihl: BigEndian::from_little_endian((4 << 4) | 5),
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(40),
+            identification: BigEndian::from_little_endian(0x1234),
+            flags_and_offset: BigEndian::from_little_endian(0),
+            ttl: BigEndian::from_little_endian(64),
+            upper_protocol: BigEndian::from_little_endian(17),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: Ipv4Addr::new(192, 168, 1, 100),
+            destination_ip: Ipv4Addr::new(192, 168, 1, 1),
+        };
+
+        let checksum = header.calculate_checksum();
+        header.header_checksum = BigEndian::from_little_endian(checksum);
+
+        assert_eq!(header.calculate_checksum(), 0);
+    }
+
+    #[test_case]
+    fn checksum_detects_corruption() {
+        let mut header = IpV4Header {
+            version_and_ihl: BigEndian::from_little_endian((4 << 4) | 5),
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(40),
+            identification: BigEndian::from_little_endian(0xABCD),
+            flags_and_offset: BigEndian::from_little_endian(0),
+            ttl: BigEndian::from_little_endian(128),
+            upper_protocol: BigEndian::from_little_endian(17),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: Ipv4Addr::new(10, 0, 2, 15),
+            destination_ip: Ipv4Addr::new(10, 0, 2, 2),
+        };
+
+        let checksum = header.calculate_checksum();
+        header.header_checksum = BigEndian::from_little_endian(checksum);
+
+        assert_eq!(header.calculate_checksum(), 0);
+
+        header.ttl = BigEndian::from_little_endian(64);
+
+        assert_ne!(header.calculate_checksum(), 0);
+    }
+}
