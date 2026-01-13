@@ -131,6 +131,8 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 **Run commit-review after every commit.** After creating a commit, always use the Task tool with `subagent_type: commit-review` to review your changes. Do not skip this step.
 
+**Run review-fixer after commit-review.** If the commit-review agent finds issues, immediately use the Task tool with `subagent_type: review-fixer` to address them. Then amend the original commit with `git commit --amend` to keep a clean history during development.
+
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
 **Network port conflict.** Only one QEMU instance with `--net` can run at a time (port 1234). See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.
