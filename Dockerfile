@@ -33,7 +33,7 @@ COPY flake.nix flake.lock rust-toolchain ./
 
 # Build the CI devShell to populate /nix/store
 # This is the expensive operation we want to cache in the image
-RUN nix develop .#ci --command true
+# RUN nix develop .#ci --command true
 
 # Create helper script to run commands in nix develop environment
 RUN printf '#!/bin/bash\nset -e\ncd "${GITHUB_WORKSPACE:-$(pwd)}"\nexec nix develop .#ci --command "$@"\n' > /usr/local/bin/nix-shell-run && \
