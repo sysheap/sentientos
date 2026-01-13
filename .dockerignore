@@ -1,0 +1,20 @@
+# Build artifacts
+target/
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Testing
+system-tests/
+
+# Documentation
+doc/
+*.md
+
+# Editor
+.vscode/
+.idea/
