@@ -7,6 +7,7 @@ RISC-V 64-bit hobby OS kernel written in Rust. No third-party runtime dependenci
 ```bash
 just run          # Build and run in QEMU
 just test         # Run unit tests + system tests
+just ci           # Run all CI checks (clippy, fmt, tests, miri)
 just build        # Build kernel with userspace
 just system-test  # Run only system tests
 just unit-test    # Run only unit tests

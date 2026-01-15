@@ -30,6 +30,20 @@ run: build
 
 test: unit-test system-test
 
+ci: build
+    @echo "Running CI checks..."
+    @echo "==> Clippy"
+    just clippy
+    @echo "==> Format check"
+    cargo fmt --check
+    @echo "==> Unit tests"
+    just unit-test
+    @echo "==> Miri"
+    just miri
+    @echo "==> System tests"
+    just system-test
+    @echo "All CI checks passed!"
+
 unit-test: build-userspace
     cargo test --release
 
