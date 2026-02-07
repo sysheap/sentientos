@@ -12,18 +12,3 @@
 
 # Review agent logs (local only)
 /review-logs/
-
-# Claude Code creates these empty files in working dir (bug)
-# https://github.com/anthropics/claude-code/issues/17087
-/.bash_profile
-/.bashrc
-/.claude/commands
-/.gitconfig
-/.gitmodules
-/.idea
-/.mcp.json
-/.profile
-/.ripgreprc
-/.vscode
-/.zprofile
-/.zshrc
