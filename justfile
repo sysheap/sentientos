@@ -61,6 +61,7 @@ fetch-deps:
     cargo fetch --manifest-path ./system-tests/Cargo.toml
 
 attach:
+    @test -f .gdb-port || { echo "Error: .gdb-port not found. Is QEMU running with --gdb?"; exit 1; }
     {{gdb}} -ex "target remote :$(cat .gdb-port)" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel
 
 debug: build
