@@ -17,9 +17,9 @@ use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
     errno::Errno,
     syscall_types::{
-        _NSIG, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
-        sigaction, sigset_t, stack_t, timespec,
+        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC,
+        PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP,
+        TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
     },
 };
 
@@ -31,6 +31,7 @@ linux_syscalls! {
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
     SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
+    SYSCALL_NR_CLOCK_NANOSLEEP => clock_nanosleep(clockid: c_int, flags: c_int, request: *const timespec, remain: Option<*mut timespec>);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_PRCTL => prctl();
@@ -238,6 +239,26 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _rem: LinuxUserspaceArg<Option<*const timespec>>,
     ) -> Result<isize, Errno> {
         let duration = duration.validate_ptr()?;
+        if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
+            return Err(Errno::EINVAL);
+        }
+        timer::sleep(&duration)?.await;
+        Ok(0)
+    }
+
+    async fn clock_nanosleep(
+        &mut self,
+        clockid: c_int,
+        flags: c_int,
+        request: LinuxUserspaceArg<*const timespec>,
+        _remain: LinuxUserspaceArg<Option<*mut timespec>>,
+    ) -> Result<isize, Errno> {
+        assert!(
+            clockid == CLOCK_MONOTONIC as c_int || clockid == CLOCK_REALTIME as c_int,
+            "clock_nanosleep: unsupported clockid {clockid}"
+        );
+        assert!(flags == 0, "clock_nanosleep: unsupported flags {flags}");
+        let duration = request.validate_ptr()?;
         if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
             return Err(Errno::EINVAL);
         }
