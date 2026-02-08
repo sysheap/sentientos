@@ -64,6 +64,7 @@
           pkgs.qemu
           pkgs.cargo-nextest
           pkgs.just
+          pkgs.python3
           rustToolchain
           riscv-toolchain.buildPackages.gcc
           riscv-toolchain.buildPackages.binutils
