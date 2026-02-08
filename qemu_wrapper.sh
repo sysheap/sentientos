@@ -4,6 +4,8 @@ set -e
 
 cd "$(dirname "$0")"
 
+rm -f .gdb-port
+
 QEMU_CMD="qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
