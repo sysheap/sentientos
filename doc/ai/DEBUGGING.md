@@ -167,13 +167,13 @@ The `./qemu_wrapper.sh` script provides flags for debugging:
 | `--gdb` | Enable GDB server on port 1234 |
 | `--wait` | Pause CPU until GDB attaches |
 | `--log` | Log QEMU events to `/tmp/sentientos.log` |
-| `--net [PORT]` | Enable VirtIO network (default port 1234) |
+| `--net [PORT]` | Enable VirtIO network (default: dynamic port) |
 | `--smp` | Enable all CPU cores |
 | `--capture` | Capture network traffic to `network.pcap` |
 
 Flags are set in `.cargo/config.toml` for `just run`.
 
-**Note:** When running manually with `--net` without a port argument, only one QEMU instance can run at a time due to port 1234 conflict. System tests use dynamic port allocation to avoid this.
+**Note:** When `--net` is used without a port argument, a dynamic port is allocated automatically, allowing multiple QEMU instances to run simultaneously.
 
 ### Manual GDB
 
