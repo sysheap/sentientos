@@ -164,7 +164,7 @@ The `./qemu_wrapper.sh` script provides flags for debugging:
 
 | Flag | Description |
 |------|-------------|
-| `--gdb` | Enable GDB server on port 1234 |
+| `--gdb [PORT]` | Enable GDB server (default: dynamic port, written to `.gdb-port`) |
 | `--wait` | Pause CPU until GDB attaches |
 | `--log` | Log QEMU events to `/tmp/sentientos.log` |
 | `--net [PORT]` | Enable VirtIO network (default: dynamic port) |
@@ -173,7 +173,7 @@ The `./qemu_wrapper.sh` script provides flags for debugging:
 
 Flags are set in `.cargo/config.toml` for `just run`.
 
-**Note:** When `--net` is used without a port argument, a dynamic port is allocated automatically, allowing multiple QEMU instances to run simultaneously.
+**Note:** When `--net` or `--gdb` is used without a port argument, a dynamic port is allocated automatically, allowing multiple QEMU instances to run simultaneously. The GDB port is written to `.gdb-port` in the project root.
 
 ### Manual GDB
 
@@ -184,7 +184,7 @@ cargo run --release -- --wait
 
 Terminal 2:
 ```bash
-pwndbg -ex "target remote :1234" target/riscv64gc-unknown-none-elf/release/kernel
+pwndbg -ex "target remote :$(cat .gdb-port)" target/riscv64gc-unknown-none-elf/release/kernel
 ```
 
 ### Useful GDB Commands

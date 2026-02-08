@@ -4,6 +4,7 @@
 /network.pcap
 /src/kernel/network.pcap
 /.gdb_history
+/.gdb-port
 /symbols
 /.direnv
 /.gdb_sources
