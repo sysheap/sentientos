@@ -61,16 +61,16 @@ fetch-deps:
     cargo fetch --manifest-path ./system-tests/Cargo.toml
 
 attach:
-    {{gdb}} -ex "target remote :1234" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel
+    {{gdb}} -ex "target remote :$(cat .gdb-port)" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel
 
 debug: build
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel' \; attach
-
-debuguf BIN FUNC: build
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/kernel/compiled_userspace/{{BIN}}'\; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'while [ ! -f .gdb-port ]; do sleep 0.1; done; {{gdb}} -ex "target remote :$(cat .gdb-port)" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel' \; attach
 
 debugf FUNC: build
-    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v '{{gdb}} -ex "target remote :1234" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel'\; attach
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'while [ ! -f .gdb-port ]; do sleep 0.1; done; {{gdb}} -ex "target remote :$(cat .gdb-port)" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/target/riscv64gc-unknown-none-elf/release/kernel' \; attach
+
+debuguf BIN FUNC: build
+    tmux new-session -d '{{debugReleaseCommand}}' \; split-window -v 'while [ ! -f .gdb-port ]; do sleep 0.1; done; {{gdb}} -ex "target remote :$(cat .gdb-port)" -ex "hbreak {{FUNC}}" -ex "c" $(pwd)/kernel/compiled_userspace/{{BIN}}' \; attach
 
 disassm: build
     riscv64-unknown-linux-musl-objdump -d --demangle --disassembler-color=on visualize-jumps=extended-color target/riscv64gc-unknown-none-elf/release/kernel

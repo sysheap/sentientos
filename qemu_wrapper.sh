@@ -19,14 +19,20 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --gdb)
-            QEMU_CMD+=" -s"
             shift
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                GDB_PORT="$1"
+                shift
+            else
+                GDB_PORT=$(python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()")
+            fi
+            QEMU_CMD+=" -gdb tcp::${GDB_PORT}"
             ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS] <KERNEL_PATH>"
             echo ""
             echo "Options:"
-            echo "  --gdb          Let qemu listen on :1234 for gdb connections"
+            echo "  --gdb [PORT]   Enable GDB server (default: dynamic port)"
             echo "  --log          Log qemu events to /tmp/sentientos.log"
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net [PORT]   Enable network card with host port PORT (default: dynamic)"
@@ -83,6 +89,11 @@ echo "Executing: $QEMU_CMD"
 
 if [[ -n "$NET_PORT" ]]; then
     echo "Network host port: $NET_PORT" >&2
+fi
+
+if [[ -n "$GDB_PORT" ]]; then
+    echo "GDB port: $GDB_PORT" >&2
+    echo "$GDB_PORT" > .gdb-port
 fi
 
 exec bash -c "$QEMU_CMD"
