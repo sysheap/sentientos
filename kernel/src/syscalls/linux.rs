@@ -239,7 +239,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _rem: LinuxUserspaceArg<Option<*const timespec>>,
     ) -> Result<isize, Errno> {
         let duration = duration.validate_ptr()?;
-        if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
+        if duration.tv_sec < 0 || !(0..=999999999).contains(&duration.tv_nsec) {
             return Err(Errno::EINVAL);
         }
         timer::sleep(&duration)?.await;
@@ -259,7 +259,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         );
         assert!(flags == 0, "clock_nanosleep: unsupported flags {flags}");
         let duration = request.validate_ptr()?;
-        if duration.tv_sec < 0 || !(0..999999999).contains(&duration.tv_nsec) {
+        if duration.tv_sec < 0 || !(0..=999999999).contains(&duration.tv_nsec) {
             return Err(Errno::EINVAL);
         }
         timer::sleep(&duration)?.await;
