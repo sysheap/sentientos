@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  ci:
+  build:
     runs-on: [self-hosted, nix]
     steps:
       - uses: actions/checkout@v6
@@ -16,5 +16,74 @@ jobs:
         run: |
           direnv allow .
           direnv export gha >> "$GITHUB_ENV"
-      - name: Run CI
-        run: just ci
+      - name: Build
+        run: just build
+
+  fmt:
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
+      - name: Check formatting
+        run: cargo fmt --check
+
+  clippy:
+    needs: build
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
+      - name: Clippy
+        run: just clippy
+
+  unit-test:
+    needs: build
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
+      - name: Unit tests
+        run: just unit-test
+
+  miri:
+    needs: build
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
+      - name: Miri
+        run: just miri
+
+  system-test:
+    needs: build
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
+      - name: System tests
+        run: just system-test
