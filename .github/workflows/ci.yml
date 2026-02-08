@@ -10,6 +10,8 @@ jobs:
     runs-on: [self-hosted, nix]
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - name: Load environment
         run: |
           direnv allow .
