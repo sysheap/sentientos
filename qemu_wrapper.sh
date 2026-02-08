@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --gdb          Let qemu listen on :1234 for gdb connections"
             echo "  --log          Log qemu events to /tmp/sentientos.log"
             echo "  --capture      Capture network traffic into network.pcap"
-            echo "  --net PORT     Enable network card with host port PORT (default: 1234)"
+            echo "  --net [PORT]   Enable network card with host port PORT (default: dynamic)"
             echo "  -h, --help     Show this help message"
             echo "  --wait         Wait cpu until gdb is attached"
             exit 0
@@ -44,7 +44,7 @@ while [[ $# -gt 0 ]]; do
                 NET_PORT="$1"
                 shift
             else
-                NET_PORT="1234"
+                NET_PORT=$(python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()")
             fi
             QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::${NET_PORT}-:1234 -device virtio-net-pci,netdev=netdev1"
             ;;
@@ -80,5 +80,9 @@ QEMU_CMD+=" -kernel $KERNEL_PATH"
 
 # Execute the QEMU command
 echo "Executing: $QEMU_CMD"
+
+if [[ -n "$NET_PORT" ]]; then
+    echo "Network host port: $NET_PORT" >&2
+fi
 
 exec bash -c "$QEMU_CMD"
