@@ -94,31 +94,20 @@
           done
         '';
 
-        # helper to build devShells
-        mkDevShell =
-          {
-            extraInputs ? [ ],
-          }:
-          pkgs.mkShell (
-            commonEnv
-            // {
-              nativeBuildInputs = extraInputs ++ basePackages;
-              shellHook = hook;
-            }
-          );
       in
       {
-        devShells.default = mkDevShell {
-          extraInputs = [
-            pkgs.gdb
-            pkgs.tmux
-            pwndbg.packages.${system}.default
-            pkgs.typos-lsp
-          ];
-        };
-
-        devShells.ci = mkDevShell {
-        };
+        devShells.default = pkgs.mkShell (
+          commonEnv
+          // {
+            nativeBuildInputs = [
+              pkgs.gdb
+              pkgs.tmux
+              pwndbg.packages.${system}.default
+              pkgs.typos-lsp
+            ] ++ basePackages;
+            shellHook = hook;
+          }
+        );
       }
     );
 }
