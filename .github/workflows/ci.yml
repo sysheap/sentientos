@@ -10,5 +10,9 @@ jobs:
     runs-on: [self-hosted, nix]
     steps:
       - uses: actions/checkout@v6
+      - name: Load environment
+        run: |
+          direnv allow .
+          direnv export gha >> "$GITHUB_ENV"
       - name: Run CI
         run: just ci
