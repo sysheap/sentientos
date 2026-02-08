@@ -1,0 +1,11 @@
+name: Setup
+description: Load Nix environment via direnv (requires checkout first)
+
+runs:
+  using: composite
+  steps:
+    - name: Load environment
+      shell: bash
+      run: |
+        direnv allow .
+        direnv export gha >> "$GITHUB_ENV"
