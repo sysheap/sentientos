@@ -73,6 +73,7 @@ impl QemuInstance {
 pub struct QemuOptions {
     add_network_card: bool,  // Enable VirtIO network
     use_smp: bool,           // Enable multi-core (default: true)
+    enable_gdb: bool,        // Enable GDB server (auto-set by SENTIENTOS_ENABLE_GDB env var)
 }
 
 // Usage
@@ -80,6 +81,7 @@ QemuInstance::start_with(
     QemuOptions::default()
         .add_network_card(true)
         .use_smp(false)
+        .enable_gdb(true)
 ).await?
 ```
 
@@ -250,6 +252,66 @@ System tests use:
 | system-tests/src/infra/read_asserter.rs | Stdout assertion helper |
 | kernel/src/test/mod.rs | Unit test framework |
 | kernel/src/test/qemu_exit.rs | QEMU exit signaling |
+
+## Debugging Flaky Tests
+
+System tests can fail intermittently due to kernel race conditions. Use the deadlock-hunt infrastructure to reproduce and diagnose.
+
+### Quick Commands
+
+```bash
+just deadlock-hunt       # Loop ALL tests with GDB enabled, 1hr timeout, sequential
+just loop-system-test X  # Loop a specific test until failure
+just stress-system-test  # Run all tests 5x
+```
+
+### How It Works
+
+- **Env var `SENTIENTOS_ENABLE_GDB=1`** makes all `QemuInstance::start()` calls pass `--gdb` to QEMU and use a 1-hour `ReadAsserter` timeout (instead of 30s)
+- **Nextest profile `deadlock-hunt`** (`system-tests/.config/nextest.toml`) sets 1-hour slow-timeout and `test-threads = 1` (sequential execution required — `.gdb-port` file is shared)
+- **`.gdb-port`** is written by `qemu_wrapper.sh` when `--gdb` is passed. The GDB MCP server reads this file automatically.
+
+### Procedure
+
+1. **Run `just deadlock-hunt`** — each iteration takes ~13s normally
+2. **When an iteration stalls** (>15s with no progress), the kernel is stuck
+3. **Attach GDB** via MCP: `gdb_connect` (reads `.gdb-port`)
+4. **List CPU harts**: `gdb_threads`
+5. **Get backtraces**: `gdb_select_thread N` + `gdb_backtrace` for each hart
+
+### Diagnosing the Hang
+
+| All CPUs in `powersave` | Lost wakeup — all threads are Waiting, no one will wake them |
+|---|---|
+| CPUs in `Spinlock::lock()` | Classic deadlock — identify which locks and who holds them |
+| One CPU stuck, rest idle | Single thread in infinite loop or waiting on I/O |
+
+### Key Lock Addresses (for GDB)
+
+| Lock | File |
+|------|------|
+| `QEMU_UART` | `kernel/src/io/uart.rs` |
+| `STDIN_BUFFER` | `kernel/src/io/stdin_buf.rs` |
+| `PLIC` | `kernel/src/interrupts/plic.rs` |
+| `WAKEUP_QUEUE` | `kernel/src/processes/timer.rs` |
+| `ProcessTable (THE)` | `kernel/src/processes/process_table.rs` |
+| Per-CPU scheduler | `kernel/src/cpu.rs` (Cpu.scheduler field) |
+
+### Known Race Condition Patterns
+
+**Lost wakeup in async syscalls:** The waker fires between `task.poll()` returning `Pending` and `set_syscall_task_and_suspend()` setting state to `Waiting`. Since `wake_up()` only transitions `Waiting → Runnable`, the wakeup is dropped. Fixed with `wakeup_pending` flag in `kernel/src/processes/thread.rs`.
+
+**Interrupt during lock hold:** Spinlocks don't disable interrupts. If an interrupt handler tries to acquire a lock already held on the same CPU, self-deadlock occurs.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `system-tests/.config/nextest.toml` | Timeout profiles (default + deadlock-hunt) |
+| `qemu-infra/src/read_asserter.rs` | Configurable per-read timeout |
+| `qemu-infra/src/qemu.rs` | QemuOptions with `enable_gdb` and env var support |
+| `kernel/src/processes/thread.rs` | Thread state, `wake_up()`, `wakeup_pending` flag |
+| `kernel/src/interrupts/trap.rs` | Syscall handler with race window between poll and suspend |
 
 ## Tips for AI
 
