@@ -1,6 +1,7 @@
 /target
 /target-userspace
 qemu-infra/target/
+qemu-infra/Cargo.lock
 mcp-server/target/
 /log.txt
 /network.pcap
