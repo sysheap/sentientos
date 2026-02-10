@@ -25,6 +25,19 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
     }
 
     pub async fn assert_read_until(&mut self, needle: &str) -> Vec<u8> {
+        let timeout = Duration::from_secs(5);
+        match tokio::time::timeout(timeout, self.read_until_inner(needle)).await {
+            Ok(result) => result,
+            Err(_) => {
+                let buffered = String::from_utf8_lossy(self.buffer.peek());
+                panic!(
+                    "Timeout after {timeout:?} waiting for needle: {needle:?}\nBuffered output:\n{buffered}"
+                );
+            }
+        }
+    }
+
+    async fn read_until_inner(&mut self, needle: &str) -> Vec<u8> {
         loop {
             if let Some(front) = self.buffer.find_and_remove(needle) {
                 return front;

@@ -19,6 +19,10 @@ impl SearchableBuffer {
         self.buffer.extend_from_slice(data);
     }
 
+    pub fn peek(&self) -> &[u8] {
+        &self.buffer
+    }
+
     pub fn drain(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.buffer)
     }
