@@ -78,8 +78,13 @@ impl core::fmt::Display for Thread {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "tid={} process_name={} pc={:#x} state={:?} in_kernel_mode={}",
-            self.tid, self.process_name, self.program_counter, self.state, self.in_kernel_mode,
+            "tid={} process_name={} pc={:#x} state={:?} wakeup_pending={} in_kernel_mode={}",
+            self.tid,
+            self.process_name,
+            self.program_counter,
+            self.state,
+            self.wakeup_pending,
+            self.in_kernel_mode,
         )
     }
 }
@@ -232,11 +237,12 @@ impl Thread {
     pub fn wake_up(&mut self) {
         if self.state == ThreadState::Waiting {
             self.state = ThreadState::Runnable;
-        } else {
-            // Waker fired while thread is Running/Runnable. Record it so
-            // set_syscall_task_and_suspend() knows not to sleep.
+        } else if matches!(self.state, ThreadState::Running { .. }) {
+            // Waker fired while thread is Running (between poll() and suspend()).
+            // Record it so set_syscall_task_and_suspend() knows not to sleep.
             self.wakeup_pending = true;
         }
+        // If Runnable, the thread will be scheduled and re-poll naturally.
     }
 
     fn suspend(&mut self) {
@@ -286,6 +292,10 @@ impl Thread {
 
     pub fn set_sigaltstack(&mut self, sigaltstack: &sigaltstack) {
         self.sigaltstack.0 = *sigaltstack;
+    }
+
+    pub fn clear_wakeup_pending(&mut self) {
+        self.wakeup_pending = false;
     }
 
     pub fn take_syscall_task(&mut self) -> Option<SyscallTask> {
