@@ -14,6 +14,7 @@ clippy: build-userspace
     cd userspace && cargo clippy -- -D warnings
     cargo clippy -- -D warnings
     cargo clippy --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --no-deps -- -D warnings
+    cargo clippy --manifest-path mcp-server/Cargo.toml --target x86_64-unknown-linux-gnu --no-deps -- -D warnings
     cargo clippy --tests
 
 clean:
@@ -56,9 +57,13 @@ loop-system-test TEST: build
 miri: build-cargo
     MIRIFLAGS="-Zmiri-env-forward=RUST_BACKTRACE -Zmiri-strict-provenance" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
+mcp-server:
+    cargo build --release --manifest-path mcp-server/Cargo.toml --target x86_64-unknown-linux-gnu
+
 fetch-deps:
     cargo fetch
     cargo fetch --manifest-path ./system-tests/Cargo.toml
+    cargo fetch --manifest-path ./mcp-server/Cargo.toml
 
 attach:
     @test -f .gdb-port || { echo "Error: .gdb-port not found. Is QEMU running with --gdb?"; exit 1; }
