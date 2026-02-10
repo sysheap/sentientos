@@ -1,5 +1,7 @@
 /target
 /target-userspace
+qemu-infra/target/
+mcp-server/target/
 /log.txt
 /network.pcap
 /src/kernel/network.pcap

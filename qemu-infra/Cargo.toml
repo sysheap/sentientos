@@ -1,0 +1,9 @@
+[package]
+name = "qemu-infra"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+anyhow = { version = "1.0.94", features = ["backtrace"] }
+tokio = { version = "1.43.1", features = ["full"] }
