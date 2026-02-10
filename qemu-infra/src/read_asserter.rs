@@ -13,6 +13,7 @@ pub struct ReadAsserter<Reader: AsyncRead + Unpin> {
     // Otherwise the output could be interleaved, especially with
     // write_all
     stderr: tokio::io::Stderr,
+    timeout: Duration,
 }
 
 impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
@@ -21,11 +22,17 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
             reader,
             buffer: SearchableBuffer::new(Vec::with_capacity(DEFAULT_BUFFER_SIZE)),
             stderr: tokio::io::stderr(),
+            timeout: Duration::from_secs(30),
         }
     }
 
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     pub async fn assert_read_until(&mut self, needle: &str) -> Vec<u8> {
-        let timeout = Duration::from_secs(30);
+        let timeout = self.timeout;
         match tokio::time::timeout(timeout, self.read_until_inner(needle)).await {
             Ok(result) => result,
             Err(_) => {
