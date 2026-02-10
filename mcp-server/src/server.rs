@@ -1,16 +1,13 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use qemu_infra::qemu::{project_root, QemuInstance, QemuOptions};
+use qemu_infra::qemu::{QemuInstance, QemuOptions, project_root};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars, tool, tool_handler, tool_router,
 };
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::{io::AsyncWriteExt, process::Command, sync::Mutex};
 
 #[derive(Clone)]
 pub struct QemuMcpServer {
@@ -83,7 +80,9 @@ pub struct RunSystemTestsParams {
 
 #[tool_router]
 impl QemuMcpServer {
-    #[tool(description = "Boot QEMU with the SentientOS kernel. Returns boot log. Errors if already running unless force=true.")]
+    #[tool(
+        description = "Boot QEMU with the SentientOS kernel. Returns boot log. Errors if already running unless force=true."
+    )]
     async fn boot_qemu(
         &self,
         Parameters(params): Parameters<BootParams>,
@@ -122,7 +121,9 @@ impl QemuMcpServer {
         text_result(format!("QEMU booted successfully.{port_info}"))
     }
 
-    #[tool(description = "Shutdown the running QEMU instance. Sends 'exit' to the shell and waits for QEMU to exit.")]
+    #[tool(
+        description = "Shutdown the running QEMU instance. Sends 'exit' to the shell and waits for QEMU to exit."
+    )]
     async fn shutdown_qemu(&self) -> Result<CallToolResult, McpError> {
         let mut guard = self.qemu.lock().await;
         let mut instance = guard
@@ -135,13 +136,10 @@ impl QemuMcpServer {
             .await
             .map_err(|e| mcp_err(format!("Failed to send exit: {e}")))?;
 
-        let status = tokio::time::timeout(
-            Duration::from_secs(5),
-            instance.wait_for_qemu_to_exit(),
-        )
-        .await
-        .map_err(|_| mcp_err("Timed out waiting for QEMU to exit (5s)"))?
-        .map_err(|e| mcp_err(format!("Error waiting for QEMU exit: {e}")))?;
+        let status = tokio::time::timeout(Duration::from_secs(5), instance.wait_for_qemu_to_exit())
+            .await
+            .map_err(|_| mcp_err("Timed out waiting for QEMU to exit (5s)"))?
+            .map_err(|e| mcp_err(format!("Error waiting for QEMU exit: {e}")))?;
 
         text_result(format!("QEMU shut down. Exit status: {status}"))
     }
@@ -161,7 +159,9 @@ impl QemuMcpServer {
         }
     }
 
-    #[tool(description = "Run a userspace program in SentientOS. Waits for shell prompt and returns output.")]
+    #[tool(
+        description = "Run a userspace program in SentientOS. Waits for shell prompt and returns output."
+    )]
     async fn run_program(
         &self,
         Parameters(params): Parameters<RunProgramParams>,
@@ -171,18 +171,18 @@ impl QemuMcpServer {
             .as_mut()
             .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
 
-        let output = tokio::time::timeout(
-            Duration::from_secs(10),
-            instance.run_prog(&params.program),
-        )
-        .await
-        .map_err(|_| mcp_err("Timed out waiting for program output (10s)"))?
-        .map_err(|e| mcp_err(format!("Failed to run program: {e}")))?;
+        let output =
+            tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.program))
+                .await
+                .map_err(|_| mcp_err("Timed out waiting for program output (10s)"))?
+                .map_err(|e| mcp_err(format!("Failed to run program: {e}")))?;
 
         text_result(output)
     }
 
-    #[tool(description = "Send a shell command to SentientOS. Waits for shell prompt and returns output.")]
+    #[tool(
+        description = "Send a shell command to SentientOS. Waits for shell prompt and returns output."
+    )]
     async fn send_command(
         &self,
         Parameters(params): Parameters<SendCommandParams>,
@@ -192,18 +192,18 @@ impl QemuMcpServer {
             .as_mut()
             .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
 
-        let output = tokio::time::timeout(
-            Duration::from_secs(10),
-            instance.run_prog(&params.command),
-        )
-        .await
-        .map_err(|_| mcp_err("Timed out waiting for command output (10s)"))?
-        .map_err(|e| mcp_err(format!("Failed to send command: {e}")))?;
+        let output =
+            tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.command))
+                .await
+                .map_err(|_| mcp_err("Timed out waiting for command output (10s)"))?
+                .map_err(|e| mcp_err(format!("Failed to send command: {e}")))?;
 
         text_result(output)
     }
 
-    #[tool(description = "Send raw input to QEMU stdin and wait for a custom marker string in output. For interactive programs.")]
+    #[tool(
+        description = "Send raw input to QEMU stdin and wait for a custom marker string in output. For interactive programs."
+    )]
     async fn send_input(
         &self,
         Parameters(params): Parameters<SendInputParams>,
@@ -232,13 +232,10 @@ impl QemuMcpServer {
             .as_mut()
             .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
 
-        tokio::time::timeout(
-            Duration::from_secs(5),
-            instance.ctrl_c_and_assert_prompt(),
-        )
-        .await
-        .map_err(|_| mcp_err("Timed out waiting for prompt after Ctrl+C (5s)"))?
-        .map_err(|e| mcp_err(format!("Failed to send Ctrl+C: {e}")))?;
+        tokio::time::timeout(Duration::from_secs(5), instance.ctrl_c_and_assert_prompt())
+            .await
+            .map_err(|_| mcp_err("Timed out waiting for prompt after Ctrl+C (5s)"))?
+            .map_err(|e| mcp_err(format!("Failed to send Ctrl+C: {e}")))?;
 
         text_result("Ctrl+C sent, shell prompt received.")
     }
@@ -315,7 +312,9 @@ impl QemuMcpServer {
         text_result(result)
     }
 
-    #[tool(description = "Run system tests (runs 'just system-test'). Optionally run a specific test by name.")]
+    #[tool(
+        description = "Run system tests (runs 'just system-test'). Optionally run a specific test by name."
+    )]
     async fn run_system_tests(
         &self,
         Parameters(params): Parameters<RunSystemTestsParams>,

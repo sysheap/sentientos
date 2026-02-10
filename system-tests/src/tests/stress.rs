@@ -8,9 +8,7 @@ async fn stress() -> anyhow::Result<()> {
 
     // Spawn 8 concurrent processes to stress test the scheduler
     let start = Instant::now();
-    sentientos
-        .run_prog_waiting_for("stress 8", "Done!")
-        .await?;
+    sentientos.run_prog_waiting_for("stress 8", "Done!").await?;
     let elapsed = start.elapsed();
 
     // Each loop instance runs 5 iterations with 1-second sleeps.

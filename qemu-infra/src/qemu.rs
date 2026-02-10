@@ -1,6 +1,8 @@
-use std::net::UdpSocket;
-use std::path::PathBuf;
-use std::process::{ExitStatus, Stdio};
+use std::{
+    net::UdpSocket,
+    path::PathBuf,
+    process::{ExitStatus, Stdio},
+};
 
 use anyhow::anyhow;
 use tokio::{
