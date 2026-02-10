@@ -12,6 +12,7 @@ just build        # Build kernel with userspace
 just system-test  # Run only system tests
 just unit-test    # Run only unit tests
 just clippy       # Run linter
+just mcp-server   # Build MCP server
 just disassm      # Disassemble kernel
 just addr2line 0x1234  # Get source line for kernel address
 ```
@@ -23,6 +24,8 @@ kernel/           # Main kernel (RISC-V 64-bit, no_std)
 userspace/        # Userspace programs (musl libc)
 common/           # Shared no_std library
 system-tests/     # Integration tests (run on x86, test via QEMU)
+qemu-infra/       # Shared QEMU communication library (used by system-tests + mcp-server)
+mcp-server/       # MCP server for AI agent interaction with QEMU
 headers/          # Linux C header bindings via bindgen
 doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 ```
@@ -106,7 +109,8 @@ Kernel unit tests use `#[test_case]` macro (custom test framework).
 | Scheduler | kernel/src/processes/scheduler.rs |
 | Page tables | kernel/src/memory/page_tables.rs |
 | Trap handler | kernel/src/interrupts/trap.rs |
-| System test infra | system-tests/src/infra/qemu.rs |
+| QEMU infra | qemu-infra/src/qemu.rs |
+| MCP server | mcp-server/src/server.rs |
 | Log config | kernel/src/logging/configuration.rs |
 
 ## Detailed Documentation
@@ -115,6 +119,44 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 - Per-CPU struct architecture (`kernel/src/cpu.rs`) for multi-core support
 - Async syscall model
 - Memory layout and page tables
+
+## MCP Server
+
+The MCP server (`mcp-server/`) lets AI agents interact with SentientOS running in QEMU over the Model Context Protocol.
+
+### Build & Run
+```bash
+just mcp-server                    # Build
+./mcp-server/target/x86_64-unknown-linux-gnu/release/mcp-server  # Run (stdio transport)
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `boot_qemu` | Start QEMU with SentientOS. Options: network, smp, force. |
+| `shutdown_qemu` | Send exit to shell and wait for QEMU to exit. |
+| `get_status` | Check if QEMU is running. |
+| `run_program` | Run a userspace program, return output. |
+| `send_command` | Send shell command, return output. |
+| `send_input` | Send raw input, wait for custom marker. |
+| `send_ctrl_c` | Send Ctrl+C, wait for prompt. |
+| `read_output` | Non-blocking read of available output. |
+| `build_kernel` | Run `just build`, optionally `just clippy`. |
+| `run_system_tests` | Run `just system-test` or a specific test. |
+
+### Claude Code Integration
+Add to `.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "sentientos": {
+      "command": "./mcp-server/target/x86_64-unknown-linux-gnu/release/mcp-server",
+      "cwd": "/path/to/qemu-mcp"
+    }
+  }
+}
+```
 
 ## Development Guidelines
 
