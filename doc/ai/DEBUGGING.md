@@ -235,6 +235,61 @@ just disassm | less
 just disassm > kernel.dis
 ```
 
+## GDB MCP Server (Programmatic Debugging)
+
+A Python MCP server (`gdb_mcp_server/`) exposes GDB debugging as tools for AI assistants like Claude Code.
+
+### Architecture
+
+```
+Claude Code <--stdio--> GDB MCP Server <--pygdbmi (MI)--> GDB <--TCP--> QEMU GDB stub
+```
+
+### Setup
+
+Dependencies are provided via Nix (`pygdbmi`, `mcp`). The server is configured in `.mcp.json`.
+
+### Usage
+
+1. Start QEMU: `just run`
+2. Claude Code automatically starts the MCP server via `.mcp.json`
+3. Use `gdb_connect` to attach to the running kernel
+4. Debug with `gdb_breakpoint`, `gdb_continue`, `gdb_backtrace`, etc.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `gdb_connect` | Start GDB, load kernel symbols, connect to QEMU |
+| `gdb_disconnect` | Stop GDB session |
+| `gdb_backtrace` | Get stack trace |
+| `gdb_breakpoint` | Set breakpoint (hardware by default for RISC-V) |
+| `gdb_continue` | Resume execution |
+| `gdb_step` | Step into |
+| `gdb_next` | Step over |
+| `gdb_print` | Evaluate expression |
+| `gdb_execute` | Run arbitrary GDB CLI command |
+| `gdb_registers` | Read CPU registers |
+| `gdb_locals` | Get local variables |
+| `gdb_examine` | Examine memory |
+| `gdb_breakpoint_list` | List breakpoints |
+| `gdb_breakpoint_delete` | Delete breakpoint |
+| `gdb_interrupt` | Pause running kernel |
+| `gdb_finish` | Run until function returns |
+| `gdb_threads` | List threads/harts |
+| `gdb_select_thread` | Switch hart |
+| `gdb_frame` | Select stack frame |
+
+### Manual Testing
+
+```bash
+# With MCP inspector
+mcp dev "python -m gdb_mcp_server"
+
+# Direct run
+python -m gdb_mcp_server
+```
+
 ## Common Debug Scenarios
 
 ### Crash/Panic
