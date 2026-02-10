@@ -63,6 +63,7 @@ pub struct Thread {
     register_state: TrapFrame,
     program_counter: usize,
     state: ThreadState,
+    wakeup_pending: bool,
     in_kernel_mode: bool,
     process: ProcessRef,
     notify_on_die: BTreeSet<Tid>,
@@ -191,6 +192,7 @@ impl Thread {
             register_state,
             program_counter,
             state: ThreadState::Runnable,
+            wakeup_pending: false,
             in_kernel_mode,
             process,
             notify_on_die: BTreeSet::new(),
@@ -217,15 +219,23 @@ impl Thread {
     pub fn set_syscall_task_and_suspend(&mut self, task: SyscallTask) {
         assert!(self.syscall_task.is_none(), "syscall task is already set");
         self.syscall_task = Some(task);
-        self.suspend();
+        if self.wakeup_pending {
+            // A waker fired between poll() returning Pending and now.
+            // The thread is still Running so wake_up() couldn't transition
+            // it to Runnable. Don't suspend — stay schedulable.
+            self.wakeup_pending = false;
+        } else {
+            self.suspend();
+        }
     }
 
     pub fn wake_up(&mut self) {
-        // Only transition from Waiting to Runnable.
-        // Spurious wakes (already Runnable/Running) are ignored - this can happen
-        // if another CPU already scheduled this thread before the waker fired.
         if self.state == ThreadState::Waiting {
             self.state = ThreadState::Runnable;
+        } else {
+            // Waker fired while thread is Running/Runnable. Record it so
+            // set_syscall_task_and_suspend() knows not to sleep.
+            self.wakeup_pending = true;
         }
     }
 
