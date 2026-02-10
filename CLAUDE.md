@@ -146,17 +146,7 @@ just mcp-server                    # Build
 | `run_system_tests` | Run `just system-test` or a specific test. |
 
 ### Claude Code Integration
-Add to `.claude/settings.json`:
-```json
-{
-  "mcpServers": {
-    "sentientos": {
-      "command": "./mcp-server/target/x86_64-unknown-linux-gnu/release/mcp-server",
-      "cwd": "/path/to/qemu-mcp"
-    }
-  }
-}
-```
+Already configured in `.mcp.json` at the project root. Claude Code picks it up automatically on startup.
 
 ## Development Guidelines
 
