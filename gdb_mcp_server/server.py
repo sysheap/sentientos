@@ -67,9 +67,13 @@ def gdb_connect(
         if port is None:
             return "Error: No port specified and .gdb-port not found. Is QEMU running?"
 
-    startup = session.start(gdb_path)
-    responses = session.connect_remote(port, kernel_path)
-    all_responses = startup + responses
+    try:
+        startup = session.start(gdb_path)
+        responses = session.connect_remote(port, kernel_path)
+        all_responses = startup + responses
+    except Exception as e:
+        session.stop()
+        return f"Error starting GDB: {e}"
 
     err = _format_error(all_responses)
     if err:
@@ -124,7 +128,8 @@ def gdb_next() -> str:
 @mcp.tool()
 def gdb_print(expression: str) -> str:
     """Evaluate an expression (variable, register, memory dereference, etc.)."""
-    return _run_mi(f"-data-evaluate-expression \"{expression}\"")
+    escaped = expression.replace('"', '\\"')
+    return _run_mi(f"-data-evaluate-expression \"{escaped}\"")
 
 
 @mcp.tool()
@@ -146,7 +151,10 @@ def gdb_registers() -> str:
 def gdb_locals(frame: int | None = None) -> str:
     """Get local variables in the current or specified stack frame."""
     if frame is not None:
-        session.execute_mi(f"-stack-select-frame {frame}")
+        responses = session.execute_mi(f"-stack-select-frame {frame}")
+        err = _format_error(responses)
+        if err:
+            return f"Error selecting frame {frame}: {err}"
     return _run_mi("-stack-list-locals --all-values")
 
 
@@ -203,4 +211,8 @@ def gdb_select_thread(thread_id: int) -> str:
 @mcp.tool()
 def gdb_frame(frame_number: int) -> str:
     """Select a stack frame for inspection."""
-    return _run_mi(f"-stack-select-frame {frame_number}")
+    responses = session.execute_mi(f"-stack-select-frame {frame_number}")
+    err = _format_error(responses)
+    if err:
+        return f"Error: {err}"
+    return _run_mi("-stack-info-frame")
