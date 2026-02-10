@@ -49,9 +49,6 @@ def _run_cli(command: str, timeout_sec: int = 30) -> str:
     return _format_responses(responses)
 
 
-# --- Tier 1: Core ---
-
-
 @mcp.tool()
 def gdb_connect(
     port: int | None = None,
@@ -138,9 +135,6 @@ def gdb_execute(command: str, timeout_sec: int = 30) -> str:
     return _run_cli(command, timeout_sec=timeout_sec)
 
 
-# --- Tier 2: Inspection ---
-
-
 @mcp.tool()
 def gdb_registers() -> str:
     """Read all CPU registers."""
@@ -174,9 +168,6 @@ def gdb_breakpoint_list() -> str:
 def gdb_breakpoint_delete(number: int) -> str:
     """Delete a breakpoint by its number."""
     return _run_mi(f"-break-delete {number}")
-
-
-# --- Tier 3: Advanced ---
 
 
 @mcp.tool()
