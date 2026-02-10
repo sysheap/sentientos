@@ -1,6 +1,6 @@
 [profile.default]
-slow-timeout = { period = "2s", terminate-after = 2 }
+slow-timeout = { period = "10s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = "test(stress)"
-slow-timeout = { period = "10s", terminate-after = 2 }
+slow-timeout = { period = "30s", terminate-after = 2 }

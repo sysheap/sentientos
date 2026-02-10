@@ -49,7 +49,7 @@ unit-test: build-userspace
     cargo test --release
 
 system-test: build
-    cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu
+    cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --stress-count 5
 
 loop-system-test TEST: build
     while true; do cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu {{TEST}} || break; done
