@@ -57,6 +57,10 @@ stress-system-test: build
 loop-system-test TEST: build
     while true; do cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu {{TEST}} || break; done
 
+deadlock-hunt: build
+    #!/usr/bin/env bash
+    i=0; while true; do i=$((i+1)); echo "==> Deadlock hunt iteration $i at $(date)"; SENTIENTOS_ENABLE_GDB=1 cargo nextest run --release --manifest-path system-tests/Cargo.toml --target x86_64-unknown-linux-gnu --profile deadlock-hunt || break; done
+
 miri: build-cargo
     MIRIFLAGS="-Zmiri-env-forward=RUST_BACKTRACE -Zmiri-strict-provenance" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 

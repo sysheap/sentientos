@@ -2,6 +2,7 @@ use std::{
     net::UdpSocket,
     path::PathBuf,
     process::{ExitStatus, Stdio},
+    time::Duration,
 };
 
 use anyhow::anyhow;
@@ -34,13 +35,16 @@ pub fn project_root() -> anyhow::Result<PathBuf> {
 pub struct QemuOptions {
     add_network_card: bool,
     use_smp: bool,
+    enable_gdb: bool,
 }
 
 impl Default for QemuOptions {
     fn default() -> Self {
+        let enable_gdb = std::env::var("SENTIENTOS_ENABLE_GDB").is_ok();
         Self {
             add_network_card: false,
             use_smp: true,
+            enable_gdb,
         }
     }
 }
@@ -54,6 +58,10 @@ impl QemuOptions {
         self.use_smp = value;
         self
     }
+    pub fn enable_gdb(mut self, value: bool) -> Self {
+        self.enable_gdb = value;
+        self
+    }
 
     fn apply(self, command: &mut Command) -> Option<u16> {
         let mut network_port = None;
@@ -64,6 +72,9 @@ impl QemuOptions {
         }
         if self.use_smp {
             command.arg("--smp");
+        }
+        if self.enable_gdb {
+            command.arg("--gdb");
         }
         network_port
     }
@@ -93,6 +104,7 @@ impl QemuInstance {
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
 
+        let gdb_enabled = options.enable_gdb;
         let network_port = options.apply(&mut command);
 
         command.arg("target/riscv64gc-unknown-none-elf/release/kernel");
@@ -110,6 +122,9 @@ impl QemuInstance {
             .ok_or(anyhow!("Could not get stdout"))?;
 
         let mut stdout = ReadAsserter::new(stdout);
+        if gdb_enabled {
+            stdout = stdout.with_timeout(Duration::from_secs(3600));
+        }
 
         stdout
             .assert_read_until("Hello World from SentientOS!")
