@@ -64,6 +64,18 @@ just debug        # Start QEMU + GDB in tmux
 just debugf FUNC  # Debug with breakpoint on function
 ```
 
+### GDB MCP Server (Programmatic Debugging)
+
+An MCP server exposes GDB as tools for Claude Code. Start QEMU first (`just run`), then use the `gdb_*` tools.
+
+```
+gdb_mcp_server/       # Python MCP server (pygdbmi + FastMCP)
+    server.py         # Tool definitions
+    gdb_session.py    # GDBSession wrapping pygdbmi
+```
+
+Key tools: `gdb_connect`, `gdb_backtrace`, `gdb_breakpoint`, `gdb_continue`, `gdb_step`, `gdb_next`, `gdb_print`, `gdb_registers`, `gdb_execute`.
+
 ## Testing Strategy
 
 ### System Tests (Preferred for AI iteration)

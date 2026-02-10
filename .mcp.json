@@ -3,6 +3,11 @@
     "sentientos": {
       "command": "./mcp-server/target/x86_64-unknown-linux-gnu/release/mcp-server",
       "cwd": "/home/sysheap/src/qemu-mcp"
+    },
+    "gdb": {
+      "command": "python",
+      "args": ["-m", "gdb_mcp_server"],
+      "cwd": "."
     }
   }
 }
