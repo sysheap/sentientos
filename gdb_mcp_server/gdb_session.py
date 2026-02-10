@@ -35,7 +35,7 @@ class GDBSession:
         for cmd in [
             "set architecture riscv:rv64",
             "set pagination off",
-            "set auto-load safe-path /",
+            f"set auto-load safe-path {os.getcwd()}",
             f"file {kernel_path}",
             f"target remote :{port}",
         ]:
@@ -48,8 +48,9 @@ class GDBSession:
 
     def execute_cli(self, command: str, timeout_sec: int = 30) -> list[dict]:
         gdb = self._require_gdb()
+        escaped = command.replace('"', '\\"')
         return gdb.write(
-            f"-interpreter-exec console \"{command}\"", timeout_sec=timeout_sec
+            f"-interpreter-exec console \"{escaped}\"", timeout_sec=timeout_sec
         )
 
     def interrupt(self):
