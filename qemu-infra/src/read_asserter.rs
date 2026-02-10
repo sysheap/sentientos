@@ -10,7 +10,7 @@ pub struct ReadAsserter<Reader: AsyncRead + Unpin> {
     reader: Reader,
     buffer: SearchableBuffer,
     // It is important to only keep one stderr instance
-    // Otherwise the output could be interlaved, especially with
+    // Otherwise the output could be interleaved, especially with
     // write_all
     stderr: tokio::io::Stderr,
 }
@@ -35,6 +35,7 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
                 .read(&mut local_buffer)
                 .await
                 .expect("Read must succeed.");
+            assert!(bytes > 0, "Reader reached EOF while waiting for: {needle}");
             let input = &local_buffer[0..bytes];
             self.print_to_stderr(input).await;
             self.buffer.append(input);
