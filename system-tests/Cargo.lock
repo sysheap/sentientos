@@ -161,6 +161,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "qemu-infra"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -231,6 +239,7 @@ name = "system-tests"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "qemu-infra",
  "tokio",
 ]
 
