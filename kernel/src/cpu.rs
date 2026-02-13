@@ -107,7 +107,7 @@ impl Cpu {
             "If we have more cpu's we need to use hart_mask_base, that is not implemented yet."
         );
         let mut mask = 0;
-        for id in (1..=self.number_cpus).filter(|i| *i != self.cpu_id) {
+        for id in (0..self.number_cpus).filter(|i| *i != self.cpu_id) {
             mask |= 1 << id;
         }
         sbi_send_ipi(mask, 0).assert_success();
