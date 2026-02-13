@@ -203,7 +203,8 @@ mod tests {
     #[test_case]
     fn force_unlock_allows_reacquire() {
         let spinlock = Spinlock::new(42);
-        let _lock = spinlock.lock();
+        let lock = spinlock.lock();
+        core::mem::forget(lock);
         unsafe {
             spinlock.force_unlock();
         }
