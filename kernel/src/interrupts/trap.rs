@@ -40,25 +40,30 @@ fn handle_external_interrupt() {
         "Plic interrupt should be uart."
     );
 
-    let uart = QEMU_UART.lock();
-    while let Some(input) = uart.read() {
-        match input {
-            3 => {
-                Cpu::with_scheduler(|mut s| {
-                    s.send_ctrl_c();
-                });
-            }
-            4 => crate::debugging::dump_current_state(),
-            _ => {
-                STDIN_BUFFER.lock().push(input);
+    let mut ctrl_c = false;
+    let mut ctrl_d = false;
+    {
+        let uart = QEMU_UART.lock();
+        while let Some(input) = uart.read() {
+            match input {
+                3 => ctrl_c = true,
+                4 => ctrl_d = true,
+                _ => STDIN_BUFFER.lock().push(input),
             }
         }
     }
-    drop(uart);
 
     plic.complete_interrupt(plic_interrupt);
-
     drop(plic);
+
+    if ctrl_c {
+        Cpu::with_scheduler(|mut s| {
+            s.send_ctrl_c();
+        });
+    }
+    if ctrl_d {
+        crate::debugging::dump_current_state();
+    }
 }
 
 // Check if we still own the thread (syscall might have set it to Waiting or another CPU
