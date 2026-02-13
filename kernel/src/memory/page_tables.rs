@@ -688,8 +688,10 @@ impl PageTableEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::RootPageTableHolder;
+    use super::{MappingEntry, PageTable, PageTableEntry, RootPageTableHolder, XWRMode};
+    use crate::klibc::elf::ProgramHeaderFlags;
     use alloc::string::ToString;
+    use core::ptr::null_mut;
 
     #[test_case]
     fn check_drop_of_page_table_holder() {
@@ -698,8 +700,134 @@ mod tests {
             0x1000,
             0x2000,
             0x3000,
-            super::XWRMode::ReadOnly,
+            XWRMode::ReadOnly,
             "Test".to_string(),
+        );
+    }
+
+    #[test_case]
+    fn page_table_entry_validity_bit() {
+        let mut entry = PageTableEntry(null_mut());
+        assert!(!entry.get_validity());
+        entry.set_validity(true);
+        assert!(entry.get_validity());
+        entry.set_validity(false);
+        assert!(!entry.get_validity());
+    }
+
+    #[test_case]
+    fn page_table_entry_xwr_modes() {
+        let modes = [
+            XWRMode::PointerToNextLevel,
+            XWRMode::ReadOnly,
+            XWRMode::ReadWrite,
+            XWRMode::ExecuteOnly,
+            XWRMode::ReadExecute,
+            XWRMode::ReadWriteExecute,
+        ];
+        for mode in modes {
+            let mut entry = PageTableEntry(null_mut());
+            entry.set_xwr_mode(mode);
+            assert_eq!(entry.get_xwr_mode(), mode);
+        }
+    }
+
+    #[test_case]
+    fn page_table_entry_user_mode_bit() {
+        let mut entry = PageTableEntry(null_mut());
+        assert!(!entry.get_user_mode_accessible());
+        entry.set_user_mode_accessible(true);
+        assert!(entry.get_user_mode_accessible());
+        entry.set_user_mode_accessible(false);
+        assert!(!entry.get_user_mode_accessible());
+    }
+
+    #[test_case]
+    fn page_table_entry_bits_are_independent() {
+        let mut entry = PageTableEntry(null_mut());
+        entry.set_validity(true);
+        entry.set_xwr_mode(XWRMode::ReadWrite);
+        entry.set_user_mode_accessible(true);
+        assert!(entry.get_validity());
+        assert_eq!(entry.get_xwr_mode(), XWRMode::ReadWrite);
+        assert!(entry.get_user_mode_accessible());
+    }
+
+    #[test_case]
+    fn page_table_entry_is_leaf() {
+        let mut entry = PageTableEntry(null_mut());
+        entry.set_xwr_mode(XWRMode::PointerToNextLevel);
+        assert!(!entry.is_leaf());
+        for mode in [
+            XWRMode::ReadOnly,
+            XWRMode::ReadWrite,
+            XWRMode::ExecuteOnly,
+            XWRMode::ReadExecute,
+            XWRMode::ReadWriteExecute,
+        ] {
+            entry.set_xwr_mode(mode);
+            assert!(entry.is_leaf());
+        }
+    }
+
+    #[test_case]
+    fn page_table_entry_leaf_address_roundtrip() {
+        let mut entry = PageTableEntry(null_mut());
+        let addr = 0x8020_0000usize;
+        entry.set_leaf_address(addr);
+        let got = entry.get_physical_address() as usize;
+        assert_eq!(got, addr);
+    }
+
+    #[test_case]
+    fn page_table_entry_leaf_address_preserves_low_bits() {
+        let mut entry = PageTableEntry(null_mut());
+        entry.set_validity(true);
+        entry.set_xwr_mode(XWRMode::ReadWrite);
+        entry.set_user_mode_accessible(true);
+        entry.set_leaf_address(0x8020_0000);
+        assert!(entry.get_validity());
+        assert_eq!(entry.get_xwr_mode(), XWRMode::ReadWrite);
+        assert!(entry.get_user_mode_accessible());
+    }
+
+    #[test_case]
+    fn mapping_entry_overlap_detection() {
+        let m = MappingEntry::new(100..200, "test".to_string(), XWRMode::ReadOnly);
+        // Contained
+        assert!(m.contains(&(120..180)));
+        // Left overlap
+        assert!(m.contains(&(50..150)));
+        // Right overlap
+        assert!(m.contains(&(150..250)));
+        // Enclosing
+        assert!(m.contains(&(50..250)));
+    }
+
+    #[test_case]
+    fn mapping_entry_no_overlap() {
+        let m = MappingEntry::new(100..200, "test".to_string(), XWRMode::ReadOnly);
+        assert!(!m.contains(&(0..99)));
+        assert!(!m.contains(&(201..300)));
+    }
+
+    #[test_case]
+    fn is_mapped_after_map() {
+        let mut pt = RootPageTableHolder::empty();
+        pt.map_userspace(0x1000, 0x2000, 0x1000, XWRMode::ReadWrite, "A".to_string());
+        assert!(pt.is_mapped(0x1000..0x1FFF));
+        assert!(!pt.is_mapped(0x3000..0x3FFF));
+    }
+
+    #[test_case]
+    fn xwr_mode_from_program_header_flags() {
+        assert_eq!(XWRMode::from(ProgramHeaderFlags::R), XWRMode::ReadOnly);
+        assert_eq!(XWRMode::from(ProgramHeaderFlags::RW), XWRMode::ReadWrite);
+        assert_eq!(XWRMode::from(ProgramHeaderFlags::RX), XWRMode::ReadExecute);
+        assert_eq!(XWRMode::from(ProgramHeaderFlags::X), XWRMode::ExecuteOnly);
+        assert_eq!(
+            XWRMode::from(ProgramHeaderFlags::RWX),
+            XWRMode::ReadWriteExecute
         );
     }
 }
