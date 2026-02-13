@@ -54,3 +54,42 @@ impl Brk {
         self.brk_current
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Brk;
+
+    #[test_case]
+    fn brk_within_range() {
+        let mut brk = Brk {
+            brk_start: 0x1000,
+            brk_current: 0x1000,
+            brk_end: 0x5000,
+        };
+        assert_eq!(brk.brk(0x2000), 0x2000);
+        assert_eq!(brk.brk(0x4FFF), 0x4FFF);
+    }
+
+    #[test_case]
+    fn brk_out_of_range_returns_current() {
+        let mut brk = Brk {
+            brk_start: 0x1000,
+            brk_current: 0x2000,
+            brk_end: 0x5000,
+        };
+        // Below start
+        assert_eq!(brk.brk(0x0500), 0x2000);
+        // At end (exclusive boundary)
+        assert_eq!(brk.brk(0x5000), 0x2000);
+        // Above end
+        assert_eq!(brk.brk(0x9000), 0x2000);
+    }
+
+    #[test_case]
+    fn brk_empty() {
+        let mut brk = Brk::empty();
+        assert_eq!(brk.brk(0), 0);
+        // brk_end is 1, so 0 is within [0, 1)
+        assert_eq!(brk.brk(0x1000), 0);
+    }
+}
