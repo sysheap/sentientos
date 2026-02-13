@@ -14,10 +14,6 @@ const NO_OWNER: usize = usize::MAX;
 pub struct Spinlock<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
-    // We can manually disarm the spinlock to not check for locks
-    // in the future. This is highly unsafe and only useful to
-    // unlock the uart spinlock in case of a panic.
-    disarmed: AtomicBool,
     owner_cpu: AtomicUsize,
 }
 
@@ -26,7 +22,6 @@ impl<T> Spinlock<T> {
         Self {
             locked: AtomicBool::new(false),
             data: UnsafeCell::new(data),
-            disarmed: AtomicBool::new(false),
             owner_cpu: AtomicUsize::new(NO_OWNER),
         }
     }
@@ -49,11 +44,6 @@ impl<T> Spinlock<T> {
     }
 
     pub fn lock(&self) -> SpinlockGuard<'_, T> {
-        // Disarmed path: skip locking and owner tracking entirely.
-        // Only used during panic (see panic.rs) where we must not spin.
-        if self.disarmed.load(Ordering::SeqCst) {
-            return SpinlockGuard { spinlock: self };
-        }
         self.detect_same_cpu_deadlock();
         let mut spin_count: u64 = 0;
         while self
@@ -122,10 +112,11 @@ impl<T> Spinlock<T> {
     }
 
     /// # Safety
-    /// This is actual never save and should only be used
-    /// in very space places (like stdout protection)
-    pub unsafe fn disarm(&self) {
-        self.disarmed.store(true, Ordering::SeqCst);
+    /// Forcibly releases the lock regardless of who holds it.
+    /// Only safe during panic when the holder will never resume.
+    pub unsafe fn force_unlock(&self) {
+        self.owner_cpu.store(NO_OWNER, Ordering::Relaxed);
+        self.locked.store(false, Ordering::Release);
     }
 }
 
@@ -210,11 +201,11 @@ mod tests {
     }
 
     #[test_case]
-    fn check_disarm() {
+    fn force_unlock_allows_reacquire() {
         let spinlock = Spinlock::new(42);
         let _lock = spinlock.lock();
         unsafe {
-            spinlock.disarm();
+            spinlock.force_unlock();
         }
         let _lock2 = spinlock.lock();
     }
