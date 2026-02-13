@@ -180,7 +180,7 @@ mod tests {
         let mut value = get_test_data();
 
         unsafe {
-            QEMU_UART.disarm();
+            QEMU_UART.force_unlock();
         }
 
         crate::println!("value at {:p}", &value);

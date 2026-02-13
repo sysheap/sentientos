@@ -35,7 +35,7 @@ fn panic(info: &PanicInfo) -> ! {
     }
 
     unsafe {
-        QEMU_UART.disarm();
+        QEMU_UART.force_unlock();
     }
 
     println!("\nKERNEL Panic");
