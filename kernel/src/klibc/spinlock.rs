@@ -49,11 +49,13 @@ impl<T> Spinlock<T> {
     }
 
     pub fn lock(&self) -> SpinlockGuard<'_, T> {
+        // Disarmed path: skip locking and owner tracking entirely.
+        // Only used during panic (see panic.rs) where we must not spin.
         if self.disarmed.load(Ordering::SeqCst) {
             return SpinlockGuard { spinlock: self };
         }
         self.detect_same_cpu_deadlock();
-        let mut spin_count: u32 = 0;
+        let mut spin_count: u64 = 0;
         while self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -69,6 +71,9 @@ impl<T> Spinlock<T> {
 
     #[cfg(not(test))]
     fn detect_same_cpu_deadlock(&self) {
+        // The gap between loading `locked` and `owner_cpu` is benign: if the
+        // lock is released in between, we just skip the check (no deadlock).
+        // A false positive requires owner_cpu == our id, meaning we do hold it.
         if self.locked.load(Ordering::Relaxed) {
             let cpu_id = Cpu::cpu_id();
             assert_ne!(
@@ -83,7 +88,7 @@ impl<T> Spinlock<T> {
     fn detect_same_cpu_deadlock(&self) {}
 
     #[cfg(not(test))]
-    fn warn_possible_deadlock(&self, spin_count: u32) {
+    fn warn_possible_deadlock(&self, spin_count: u64) {
         if spin_count.is_multiple_of(10_000_000) {
             let cpu_id = Cpu::cpu_id();
             let owner = self.owner_cpu.load(Ordering::Relaxed);
@@ -97,7 +102,7 @@ impl<T> Spinlock<T> {
     }
 
     #[cfg(test)]
-    fn warn_possible_deadlock(&self, _spin_count: u32) {}
+    fn warn_possible_deadlock(&self, _spin_count: u64) {}
 
     #[cfg(not(test))]
     fn set_owner(&self) {
