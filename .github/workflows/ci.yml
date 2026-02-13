@@ -16,6 +16,7 @@ jobs:
       - run: just build
 
   fmt:
+    needs: build
     runs-on: [self-hosted, nix]
     steps:
       - uses: actions/checkout@v6
