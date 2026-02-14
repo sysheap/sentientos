@@ -19,7 +19,7 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
-        if $crate::logging::configuration::should_log_module(module_path!()) {
+        if const { $crate::logging::configuration::should_log_module(module_path!()) } {
             $crate::println!("[CPU {}][debug][{}] {}", $crate::Cpu::cpu_id(), module_path!(), format_args!($($arg)*));
         }
     };
