@@ -55,9 +55,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*mut u8>,
         count: usize,
     ) -> Result<isize, headers::errno::Errno> {
-        if fd != 0 {
-            return Err(Errno::EBADF);
-        }
+        Self::validate_read_fd(fd)?;
 
         let data = ReadStdin::new(count).await;
 
@@ -74,9 +72,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*const u8>,
         count: usize,
     ) -> Result<isize, Errno> {
-        if fd != 1 && fd != 2 {
-            return Err(Errno::EBADF);
-        }
+        Self::validate_write_fd(fd)?;
 
         let string = buf.validate_str(count)?;
 
@@ -374,9 +370,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         iov: LinuxUserspaceArg<*const iovec>,
         iovcnt: c_int,
     ) -> Result<isize, headers::errno::Errno> {
-        if fd != 1 && fd != 2 {
-            return Err(Errno::EBADF);
-        }
+        Self::validate_write_fd(fd)?;
 
         let iov = iov.validate_slice(iovcnt as usize)?;
         let mut data = Vec::new();
@@ -411,5 +405,19 @@ impl LinuxSyscallHandler {
         Self {
             handler: SyscallHandler::new(),
         }
+    }
+
+    fn validate_read_fd(fd: c_int) -> Result<(), Errno> {
+        if fd != 0 {
+            return Err(Errno::EBADF);
+        }
+        Ok(())
+    }
+
+    fn validate_write_fd(fd: c_int) -> Result<(), Errno> {
+        if fd != 1 && fd != 2 {
+            return Err(Errno::EBADF);
+        }
+        Ok(())
     }
 }
