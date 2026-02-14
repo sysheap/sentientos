@@ -76,33 +76,27 @@ Userspace programs call libc directly. A thin `sentientos-sys` crate with
 type-safe wrappers (e.g. `fn send_udp(fd: Fd, buf: &[u8]) -> Result<usize>`)
 would reduce boilerplate and catch misuse at compile time.
 
-**R-11 — Replace UART offset arithmetic with an MMIO register struct.**
-`uart.rs` constructs each register as `MMIO::new(base + N)`. A single
-`UartRegisters` struct with named fields (thr, rbr, ier, fcr, lcr, lsr)
-computed from a base address would make register access type-safe and
-self-documenting.
-
-**R-12 — Consolidate the ARP path.**
+**R-11 — Consolidate the ARP path.**
 `arp.rs` and the ARP cache in `net/mod.rs` are split across files with the cache
 accessed via a global static. Colocating the cache with the ARP protocol handler
 in a single `ArpCache` struct would improve cohesion.
 
-**R-13 — Extract virtqueue setup from device init.**
+**R-12 — Extract virtqueue setup from device init.**
 Virtqueue allocation and descriptor ring setup in the VirtIO network driver is
 device-independent. Extracting a reusable `VirtQueue::new(index, size)`
 constructor prepares for future VirtIO block or console drivers.
 
-**R-14 — Add ethernet frame type dispatch.**
+**R-13 — Add ethernet frame type dispatch.**
 Incoming frames are dispatched by checking the ethertype field inline. A small
 dispatch table (`0x0800 → handle_ipv4`, `0x0806 → handle_arp`) would make adding
 new L3 protocols trivial.
 
-**R-15 — Use per-CPU scheduler queues.**
+**R-14 — Use per-CPU scheduler queues.**
 The scheduler uses a single global run queue protected by a spinlock. On SMP
 this serializes all scheduling decisions. Per-CPU queues with work-stealing
 would reduce contention (relevant once the core count grows).
 
-**R-16 — Introduce a PacketBuffer / scatter-gather type.**
+**R-15 — Introduce a PacketBuffer / scatter-gather type.**
 Network TX currently concatenates `Vec<u8>` slices to build full frames.
 A zero-copy scatter-gather list (`&[IoSlice]`) passed down the stack would avoid
 intermediate allocations and match how real NICs consume descriptors.
