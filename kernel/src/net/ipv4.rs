@@ -69,34 +69,8 @@ impl IpV4Header {
         Ok((ipv4_header, rest))
     }
 
-    /// Code taken from the RFC at https://www.rfc-editor.org/rfc/rfc1071#section-4
     pub fn calculate_checksum(&self) -> u16 {
-        let bytes = self.as_slice();
-
-        // Represents the offset but the name is from the RFC
-        let mut addr = 0;
-        let mut count = bytes.len();
-
-        let mut sum = 0u32;
-
-        while count > 1 {
-            // We still have big endian byte order!
-            sum += (bytes[addr + 1] as u16 | ((bytes[addr] as u16) << 8)) as u32;
-            addr += 2;
-            count -= 2;
-        }
-
-        if count > 0 {
-            sum += bytes[addr] as u32;
-        }
-
-        while sum >> 16 != 0 {
-            sum = (sum & 0xffff) + (sum >> 16);
-        }
-
-        let checksum = !sum;
-
-        checksum as u16
+        super::checksum::ones_complement_checksum(&[self.as_slice()])
     }
 
     fn checksum_correct(&self) -> bool {

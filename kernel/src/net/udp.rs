@@ -139,47 +139,18 @@ impl UdpHeader {
     }
 
     fn compute_checksum(data: &[u8], udp_header: &UdpHeader, ip_header: &IpV4Header) -> u16 {
-        let mut sum = 0u32;
-
         assert_eq!(
             data.len(),
             udp_header.length.get() as usize - UdpHeader::UDP_HEADER_SIZE
         );
 
-        let ip = ip_header.source_ip.to_bits();
-        sum += ip >> 16;
-        sum += ip & 0xffff;
-        let ip = ip_header.destination_ip.to_bits();
-        sum += ip >> 16;
-        sum += ip & 0xffff;
-        sum += Self::UDP_PROTOCOL_TYPE as u32;
-        sum += udp_header.length.get() as u32;
+        let mut pseudo_header = [0u8; 12];
+        pseudo_header[0..4].copy_from_slice(&ip_header.source_ip.octets());
+        pseudo_header[4..8].copy_from_slice(&ip_header.destination_ip.octets());
+        pseudo_header[9] = Self::UDP_PROTOCOL_TYPE;
+        pseudo_header[10..12].copy_from_slice(&udp_header.length.get().to_be_bytes());
 
-        let mut add_buffer = |data: &[u8]| {
-            let mut addr = 0;
-            let mut count = data.len();
-
-            while count > 1 {
-                sum += (((data[addr] as u16) << 8) | (data[addr + 1] as u16)) as u32;
-                if sum & 0x80000000 != 0 {
-                    sum = (sum & 0xffff) | (sum >> 16);
-                }
-                addr += 2;
-                count -= 2;
-            }
-
-            if count > 0 {
-                sum += (data[addr] as u32) << 8;
-            }
-        };
-        add_buffer(udp_header.as_slice());
-        add_buffer(data);
-
-        while sum >> 16 != 0 {
-            sum = (sum & 0xffff) + (sum >> 16);
-        }
-
-        !(sum as u16)
+        super::checksum::ones_complement_checksum(&[&pseudo_header, udp_header.as_slice(), data])
     }
 }
 

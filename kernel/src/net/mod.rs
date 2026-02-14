@@ -12,6 +12,7 @@ use crate::{
 use self::{ethernet::EthernetHeader, mac::MacAddress, sockets::OpenSockets};
 
 mod arp;
+mod checksum;
 mod ethernet;
 mod ipv4;
 pub mod mac;
