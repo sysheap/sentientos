@@ -11,6 +11,7 @@ pub mod heap;
 pub mod linker_information;
 pub mod page;
 mod page_allocator;
+pub mod page_table_entry;
 pub mod page_tables;
 mod runtime_mappings;
 
