@@ -62,9 +62,7 @@ pub struct Thread {
     process: ProcessRef,                       // Parent process
     notify_on_die: BTreeSet<Tid>,              // Threads to wake on exit
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
-    sigaltstack: ContainsUserspacePtr<stack_t>,
-    sigmask: sigset_t,                         // Blocked signals
-    sigaction: [sigaction; _NSIG],             // Signal handlers
+    signal_state: SignalState,                 // Signal handlers, mask, altstack
     syscall_task: Option<SyscallTask>,         // Pending async syscall
 }
 ```

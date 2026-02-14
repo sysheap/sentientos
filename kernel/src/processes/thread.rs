@@ -57,6 +57,31 @@ pub enum ThreadState {
 }
 
 #[derive(Debug)]
+struct SignalState {
+    sigaltstack: ContainsUserspacePtr<stack_t>,
+    sigmask: sigset_t,
+    sigaction: [sigaction; _NSIG as usize],
+}
+
+impl SignalState {
+    fn new() -> Self {
+        Self {
+            sigaltstack: ContainsUserspacePtr(sigaltstack {
+                ss_sp: null_mut(),
+                ss_flags: 0,
+                ss_size: 0,
+            }),
+            sigmask: sigset_t { sig: [0] },
+            sigaction: [sigaction {
+                sa_handler: None,
+                sa_flags: 0,
+                sa_mask: sigset_t { sig: [0] },
+            }; _NSIG as usize],
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Thread {
     tid: Tid,
     process_name: Arc<String>,
@@ -68,9 +93,7 @@ pub struct Thread {
     process: ProcessRef,
     notify_on_die: BTreeSet<Tid>,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
-    sigaltstack: ContainsUserspacePtr<stack_t>,
-    sigmask: sigset_t,
-    sigaction: [sigaction; _NSIG as usize],
+    signal_state: SignalState,
     syscall_task: Option<SyscallTask>,
 }
 
@@ -202,17 +225,7 @@ impl Thread {
             process,
             notify_on_die: BTreeSet::new(),
             clear_child_tid: None,
-            sigaltstack: ContainsUserspacePtr(sigaltstack {
-                ss_sp: null_mut(),
-                ss_flags: 0,
-                ss_size: 0,
-            }),
-            sigmask: sigset_t { sig: [0] },
-            sigaction: [sigaction {
-                sa_handler: None,
-                sa_flags: 0,
-                sa_mask: sigset_t { sig: [0] },
-            }; _NSIG as usize],
+            signal_state: SignalState::new(),
             syscall_task: None,
         }))
     }
@@ -266,7 +279,7 @@ impl Thread {
             return Err(Errno::EINVAL);
         }
         Ok(core::mem::replace(
-            &mut self.sigaction[sig as usize],
+            &mut self.signal_state.sigaction[sig as usize],
             sigaction,
         ))
     }
@@ -275,23 +288,23 @@ impl Thread {
         if sig >= _NSIG {
             return Err(Errno::EINVAL);
         }
-        Ok(self.sigaction[sig as usize])
+        Ok(self.signal_state.sigaction[sig as usize])
     }
 
     pub fn get_sigset(&self) -> sigset_t {
-        self.sigmask
+        self.signal_state.sigmask
     }
 
     pub fn set_sigset(&mut self, sigmask: sigset_t) -> sigset_t {
-        core::mem::replace(&mut self.sigmask, sigmask)
+        core::mem::replace(&mut self.signal_state.sigmask, sigmask)
     }
 
     pub fn get_sigaltstack(&self) -> sigaltstack {
-        self.sigaltstack.0
+        self.signal_state.sigaltstack.0
     }
 
     pub fn set_sigaltstack(&mut self, sigaltstack: &sigaltstack) {
-        self.sigaltstack.0 = *sigaltstack;
+        self.signal_state.sigaltstack.0 = *sigaltstack;
     }
 
     pub fn clear_wakeup_pending(&mut self) {
