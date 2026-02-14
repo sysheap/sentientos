@@ -59,21 +59,11 @@ impl UdpHeader {
             checksum: BigEndian::from_little_endian(0),
         };
 
-        let mut ip_header = IpV4Header {
-            version_and_ihl: BigEndian::from_little_endian((4 << 4) | 5), // ip version v4 and header length 5 * 4byte
-            tos: BigEndian::from_little_endian(0),
-            total_packet_length: BigEndian::from_little_endian(
-                u16::try_from(IpV4Header::HEADER_SIZE + Self::UDP_HEADER_SIZE + data.len())
-                    .expect("Size must not exceed u16"),
-            ),
-            identification: BigEndian::from_little_endian(0),
-            flags_and_offset: BigEndian::from_big_endian(0), // DF Bits set (don't fragment)
-            ttl: BigEndian::from_little_endian(128),
-            upper_protocol: BigEndian::from_little_endian(Self::UDP_PROTOCOL_TYPE),
-            header_checksum: BigEndian::from_little_endian(0),
-            source_ip: super::IP_ADDR,
+        let mut ip_header = IpV4Header::new(
             destination_ip,
-        };
+            Self::UDP_PROTOCOL_TYPE,
+            Self::UDP_HEADER_SIZE + data.len(),
+        );
 
         udp_header.checksum =
             BigEndian::from_little_endian(Self::compute_checksum(data, &udp_header, &ip_header));
