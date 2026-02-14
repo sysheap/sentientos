@@ -116,24 +116,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             None
         };
 
-        let to = to.validate_ptr()?;
-        if let Some(to) = to {
-            assert_eq!(to.tv_sec, 0, "ppoll with timeout not yet implemented");
-            assert_eq!(to.tv_nsec, 0, "ppoll with timeout not yet implemented");
-        }
-
-        let fds = fds.validate_slice(n as usize)?;
-
-        for fd in fds {
-            assert!(
-                matches!(fd.fd, 0..=2),
-                "Only stdin, stdout, and stderr is supported currently"
-            );
-            assert_eq!(
-                fd.events, 0,
-                "No further events are supported at the moment"
-            );
-        }
+        Self::validate_poll_timeout(to.validate_ptr()?);
+        Self::validate_poll_fds(&fds.validate_slice(n as usize)?);
 
         if let Some(mask) = old_mask {
             self.handler
@@ -404,6 +388,26 @@ impl LinuxSyscallHandler {
     pub fn new() -> Self {
         Self {
             handler: SyscallHandler::new(),
+        }
+    }
+
+    fn validate_poll_timeout(to: Option<timespec>) {
+        if let Some(to) = to {
+            assert_eq!(to.tv_sec, 0, "ppoll with timeout not yet implemented");
+            assert_eq!(to.tv_nsec, 0, "ppoll with timeout not yet implemented");
+        }
+    }
+
+    fn validate_poll_fds(fds: &[pollfd]) {
+        for fd in fds {
+            assert!(
+                matches!(fd.fd, 0..=2),
+                "Only stdin, stdout, and stderr is supported currently"
+            );
+            assert_eq!(
+                fd.events, 0,
+                "No further events are supported at the moment"
+            );
         }
     }
 

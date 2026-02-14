@@ -107,13 +107,7 @@ The scheduler uses a single global run queue protected by a spinlock. On SMP
 this serializes all scheduling decisions. Per-CPU queues with work-stealing
 would reduce contention (relevant once the core count grows).
 
-**R-17 — Shrink the ppoll syscall handler.**
-`ppoll()` in `syscalls/linux.rs:104-149` mixes fd validation, timeout parsing,
-stdin polling, and socket polling in one block. Splitting into
-`poll_stdin()` / `poll_socket()` helpers would clarify the logic and make it
-easier to extend for new fd types.
-
-**R-18 — Introduce a PacketBuffer / scatter-gather type.**
+**R-17 — Introduce a PacketBuffer / scatter-gather type.**
 Network TX currently concatenates `Vec<u8>` slices to build full frames.
 A zero-copy scatter-gather list (`&[IoSlice]`) passed down the stack would avoid
 intermediate allocations and match how real NICs consume descriptors.
