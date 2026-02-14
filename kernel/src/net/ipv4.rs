@@ -46,7 +46,7 @@ impl IpV4Header {
                 u16::try_from(Self::HEADER_SIZE + payload_size).expect("Size must not exceed u16"),
             ),
             identification: BigEndian::from_little_endian(0),
-            flags_and_offset: BigEndian::from_big_endian(0),
+            flags_and_offset: BigEndian::from_little_endian(0),
             ttl: BigEndian::from_little_endian(128),
             upper_protocol: BigEndian::from_little_endian(protocol),
             header_checksum: BigEndian::from_little_endian(0),

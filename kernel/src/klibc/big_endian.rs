@@ -8,6 +8,7 @@ use common::numbers::Number;
 pub struct BigEndian<T: Number>(T);
 
 impl<T: Number> BigEndian<T> {
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn from_big_endian(value: T) -> Self {
         Self(value)
     }
