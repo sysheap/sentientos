@@ -3,6 +3,7 @@ mod connect4;
 mod coreutils;
 mod net;
 mod panic;
+mod sesh;
 mod signals;
 mod sleep;
 mod stress;
