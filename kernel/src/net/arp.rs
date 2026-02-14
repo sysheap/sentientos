@@ -1,19 +1,25 @@
 use core::{fmt::Display, net::Ipv4Addr};
 
+use alloc::collections::BTreeMap;
+
 use crate::{
     assert::static_assert_size,
     debug,
     klibc::{
+        Spinlock,
         big_endian::BigEndian,
         util::{BufferExtension, ByteInterpretable},
     },
-    net::{
-        ARP_CACHE,
-        ethernet::{EtherTypes, EthernetHeader},
-    },
+    net::ethernet::{EtherTypes, EthernetHeader},
 };
 
 use super::{IP_ADDR, current_mac_address, mac::MacAddress};
+
+static ARP_CACHE: Spinlock<BTreeMap<Ipv4Addr, MacAddress>> = Spinlock::new(BTreeMap::new());
+
+pub fn cache_lookup(ip: &Ipv4Addr) -> Option<MacAddress> {
+    ARP_CACHE.lock().get(ip).copied()
+}
 
 const ARP_REQUEST: u16 = 1;
 const ARP_RESPONSE: u16 = 2;
