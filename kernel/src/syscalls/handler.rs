@@ -13,7 +13,7 @@ use crate::{
     debug,
     io::stdin_buf::STDIN_BUFFER,
     memory::page_tables::XWRMode,
-    net::{OPEN_UDP_SOCKETS, arp, udp::UdpHeader},
+    net::{self, arp, udp::UdpHeader},
     print, println,
     processes::{process::ProcessRef, thread::ThreadRef},
 };
@@ -119,7 +119,7 @@ impl KernelSyscalls for SyscallHandler {
         &mut self,
         port: UserspaceArgument<u16>,
     ) -> Result<UDPDescriptor, SysSocketError> {
-        let socket = match OPEN_UDP_SOCKETS.lock().try_get_socket(*port) {
+        let socket = match net::open_sockets().lock().try_get_socket(*port) {
             None => return Err(SysSocketError::PortAlreadyUsed),
             Some(socket) => socket,
         };

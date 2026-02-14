@@ -13,7 +13,7 @@ use crate::{
     net::ethernet::{EtherTypes, EthernetHeader},
 };
 
-use super::{IP_ADDR, current_mac_address, mac::MacAddress};
+use super::{current_mac_address, mac::MacAddress};
 
 static ARP_CACHE: Spinlock<BTreeMap<Ipv4Addr, MacAddress>> = Spinlock::new(BTreeMap::new());
 
@@ -58,7 +58,7 @@ impl ArpPacket {
             ),
             operation: BigEndian::from_little_endian(ARP_RESPONSE),
             source_mac_address: current_mac_address(),
-            source_ip_address: IP_ADDR,
+            source_ip_address: super::ip_addr(),
             destination_mac_address,
             destination_ip_address,
         }
@@ -80,7 +80,7 @@ pub fn process_and_respond(data: &[u8]) {
     assert!(arp_header.operation.get() == ARP_REQUEST);
     debug!("Received: {:#}", arp_header);
 
-    if arp_header.destination_ip_address != super::IP_ADDR {
+    if arp_header.destination_ip_address != super::ip_addr() {
         return;
     }
 

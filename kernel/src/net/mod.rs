@@ -19,17 +19,33 @@ pub mod mac;
 pub mod sockets;
 pub mod udp;
 
-static NETWORK_DEVICE: Spinlock<Option<NetworkDevice>> = Spinlock::new(None);
-static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
-pub static OPEN_UDP_SOCKETS: Spinlock<LazyCell<OpenSockets>> =
-    Spinlock::new(LazyCell::new(OpenSockets::new));
+struct NetworkStack {
+    device: Spinlock<Option<NetworkDevice>>,
+    ip_addr: Ipv4Addr,
+    open_sockets: Spinlock<LazyCell<OpenSockets>>,
+}
+
+static NETWORK_STACK: NetworkStack = NetworkStack {
+    device: Spinlock::new(None),
+    ip_addr: Ipv4Addr::new(10, 0, 2, 15),
+    open_sockets: Spinlock::new(LazyCell::new(OpenSockets::new)),
+};
+
+pub fn ip_addr() -> Ipv4Addr {
+    NETWORK_STACK.ip_addr
+}
+
+pub fn open_sockets() -> &'static Spinlock<LazyCell<OpenSockets>> {
+    &NETWORK_STACK.open_sockets
+}
 
 pub fn assign_network_device(device: NetworkDevice) {
-    *NETWORK_DEVICE.lock() = Some(device);
+    *NETWORK_STACK.device.lock() = Some(device);
 }
 
 pub fn receive_and_process_packets() {
-    let packets = NETWORK_DEVICE
+    let packets = NETWORK_STACK
+        .device
         .lock()
         .as_mut()
         .expect("There must be a configured network device.")
@@ -41,7 +57,8 @@ pub fn receive_and_process_packets() {
 }
 
 pub fn send_packet(packet: Vec<u8>) {
-    NETWORK_DEVICE
+    NETWORK_STACK
+        .device
         .lock()
         .as_mut()
         .expect("There must be a configured network device.")
@@ -50,7 +67,8 @@ pub fn send_packet(packet: Vec<u8>) {
 }
 
 pub fn current_mac_address() -> MacAddress {
-    NETWORK_DEVICE
+    NETWORK_STACK
+        .device
         .lock()
         .as_ref()
         .expect("There must be a configured network device.")
@@ -80,7 +98,7 @@ fn process_ipv4_packet(data: &[u8]) {
     let (ipv4_header, rest) = IpV4Header::process(data).expect("IPv4 packet must be processed.");
     let (udp_header, data) =
         UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
-    OPEN_UDP_SOCKETS.lock().put_data(
+    open_sockets().lock().put_data(
         ipv4_header.source_ip,
         udp_header.source_port(),
         udp_header.destination_port(),
