@@ -18,7 +18,15 @@ pub enum XWRMode {
 
 impl From<u8> for XWRMode {
     fn from(value: u8) -> Self {
-        unsafe { core::mem::transmute(value) }
+        match value {
+            0b000 => Self::PointerToNextLevel,
+            0b001 => Self::ReadOnly,
+            0b011 => Self::ReadWrite,
+            0b100 => Self::ExecuteOnly,
+            0b101 => Self::ReadExecute,
+            0b111 => Self::ReadWriteExecute,
+            _ => panic!("Invalid XWR mode: {value:#05b}"),
+        }
     }
 }
 
@@ -118,11 +126,10 @@ impl PageTableEntry {
         })
     }
 
-    pub(super) fn get_target_page_table(&self) -> &'static mut PageTable {
+    pub(super) fn get_target_page_table(&self) -> *mut PageTable {
         assert!(!self.is_leaf());
         assert!(!self.get_physical_address().is_null());
-        let physical_address = self.get_physical_address();
-        unsafe { &mut *physical_address }
+        self.get_physical_address()
     }
 }
 
