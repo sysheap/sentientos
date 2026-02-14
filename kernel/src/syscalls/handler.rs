@@ -13,7 +13,7 @@ use crate::{
     debug,
     io::stdin_buf::STDIN_BUFFER,
     memory::page_tables::XWRMode,
-    net::{ARP_CACHE, OPEN_UDP_SOCKETS, udp::UdpHeader},
+    net::{OPEN_UDP_SOCKETS, arp, udp::UdpHeader},
     print, println,
     processes::{process::ProcessRef, thread::ThreadRef},
 };
@@ -142,9 +142,7 @@ impl KernelSyscalls for SyscallHandler {
 
             // Get mac address of receiver
             // Since we already received a packet we should have it in the cache
-            let destination_mac = *ARP_CACHE
-                .lock()
-                .get(&recv_ip)
+            let destination_mac = arp::cache_lookup(&recv_ip)
                 .expect("There must be a receiver mac already in the arp cache.");
             let constructed_packet = UdpHeader::create_udp_packet(
                 recv_ip,

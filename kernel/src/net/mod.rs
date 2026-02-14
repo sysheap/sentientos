@@ -1,6 +1,6 @@
 use core::{cell::LazyCell, net::Ipv4Addr};
 
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::vec::Vec;
 
 use crate::{
     debug,
@@ -11,7 +11,7 @@ use crate::{
 
 use self::{ethernet::EthernetHeader, mac::MacAddress, sockets::OpenSockets};
 
-mod arp;
+pub mod arp;
 mod checksum;
 mod ethernet;
 mod ipv4;
@@ -21,7 +21,6 @@ pub mod udp;
 
 static NETWORK_DEVICE: Spinlock<Option<NetworkDevice>> = Spinlock::new(None);
 static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);
-pub static ARP_CACHE: Spinlock<BTreeMap<Ipv4Addr, MacAddress>> = Spinlock::new(BTreeMap::new());
 pub static OPEN_UDP_SOCKETS: Spinlock<LazyCell<OpenSockets>> =
     Spinlock::new(LazyCell::new(OpenSockets::new));
 
