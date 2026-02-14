@@ -8,7 +8,7 @@ pub fn get_number_of_harts() -> usize {
     let mut harts = 0;
 
     loop {
-        if sbi::sbi_call_1(EID, FID_GET_STATUS, harts as u64).is_error() {
+        if sbi::sbi_call(EID, FID_GET_STATUS, harts as u64, 0, 0).is_error() {
             break;
         }
         harts += 1;
@@ -18,7 +18,7 @@ pub fn get_number_of_harts() -> usize {
 }
 
 pub fn start_hart(hart_id: usize, start_addr: usize, opaque: usize) -> SbiRet {
-    sbi::sbi_call_3(
+    sbi::sbi_call(
         EID,
         FID_HART_START,
         hart_id as u64,
