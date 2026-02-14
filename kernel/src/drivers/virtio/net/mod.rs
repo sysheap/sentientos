@@ -47,7 +47,18 @@ pub struct NetworkDevice {
     mac_address: MacAddress,
 }
 
+const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
+const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
+const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
+
 impl NetworkDevice {
+    pub fn is_virtio_net(device: &PCIDevice) -> bool {
+        let cs = device.configuration_space();
+        cs.vendor_id().read() == VIRTIO_VENDOR_ID
+            && VIRTIO_DEVICE_ID.contains(&cs.device_id().read())
+            && cs.subsystem_id().read() == VIRTIO_NETWORK_SUBSYSTEM_ID
+    }
+
     pub fn initialize(mut pci_device: PCIDevice) -> Result<Self, &'static str> {
         let capabilities = pci_device.capabilities();
         let mut virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities

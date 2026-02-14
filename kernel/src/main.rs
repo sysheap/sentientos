@@ -127,10 +127,13 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     let mut pci_devices = enumerate_devices(&pci_information);
 
-    if let Some(network_device) = pci_devices.network_devices.pop() {
-        let network_device = drivers::virtio::net::NetworkDevice::initialize(network_device)
+    let virtio_net = pci_devices
+        .iter()
+        .position(drivers::virtio::net::NetworkDevice::is_virtio_net);
+    if let Some(index) = virtio_net {
+        let device = pci_devices.swap_remove(index);
+        let network_device = drivers::virtio::net::NetworkDevice::initialize(device)
             .expect("Initialization must work.");
-
         net::assign_network_device(network_device);
     }
 
