@@ -114,8 +114,7 @@ pub struct Thread {
     state: ThreadState,                     # Running/Runnable/Waiting
     process: ProcessRef,                    # Parent process
     syscall_task: Option<Task>,             # Async syscall task
-    sigaction: [Option<SigAction>; 32],     # Signal handlers
-    sigmask: u64,                           # Blocked signals
+    signal_state: SignalState,              # Signal handlers, mask, altstack
 }
 ```
 
