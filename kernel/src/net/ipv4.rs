@@ -38,6 +38,23 @@ const UDP_PROTOCOL_TYPE_UDP: u8 = 17;
 impl IpV4Header {
     pub const HEADER_SIZE: usize = core::mem::size_of::<Self>();
 
+    pub fn new(destination_ip: Ipv4Addr, protocol: u8, payload_size: usize) -> Self {
+        Self {
+            version_and_ihl: BigEndian::from_little_endian((4 << 4) | 5),
+            tos: BigEndian::from_little_endian(0),
+            total_packet_length: BigEndian::from_little_endian(
+                u16::try_from(Self::HEADER_SIZE + payload_size).expect("Size must not exceed u16"),
+            ),
+            identification: BigEndian::from_little_endian(0),
+            flags_and_offset: BigEndian::from_big_endian(0),
+            ttl: BigEndian::from_little_endian(128),
+            upper_protocol: BigEndian::from_little_endian(protocol),
+            header_checksum: BigEndian::from_little_endian(0),
+            source_ip: super::IP_ADDR,
+            destination_ip,
+        }
+    }
+
     pub fn process(data: &[u8]) -> Result<(&IpV4Header, &[u8]), IpV4ParseError> {
         if data.len() < core::mem::size_of::<IpV4Header>() {
             return Err(IpV4ParseError::PacketTooSmall);
