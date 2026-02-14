@@ -24,6 +24,7 @@ async fn should_not_exit_sesh() -> anyhow::Result<()> {
     let mut sentientos = QemuInstance::start().await?;
 
     sentientos.stdin().write_all(&[0x03]).await?;
+    sentientos.stdin().flush().await?;
 
     let output = sentientos.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
