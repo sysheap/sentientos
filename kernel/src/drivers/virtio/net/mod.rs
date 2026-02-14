@@ -258,31 +258,28 @@ impl NetworkDevice {
 
         transmit_queue.set_notify(transmit_notify);
 
-        common_cfg.queue_select().write(0);
-        common_cfg
-            .queue_desc()
-            .write(receive_queue.descriptor_area_physical_address());
-        common_cfg
-            .queue_driver()
-            .write(receive_queue.driver_area_physical_address());
-        common_cfg
-            .queue_device()
-            .write(receive_queue.device_area_physical_address());
-        common_cfg.queue_enable().write(1);
-
-        common_cfg.queue_select().write(1);
-        common_cfg
-            .queue_desc()
-            .write(transmit_queue.descriptor_area_physical_address());
-        common_cfg
-            .queue_driver()
-            .write(transmit_queue.driver_area_physical_address());
-        common_cfg
-            .queue_device()
-            .write(transmit_queue.device_area_physical_address());
-        common_cfg.queue_enable().write(1);
+        Self::configure_queue_on_device(common_cfg, &receive_queue, 0);
+        Self::configure_queue_on_device(common_cfg, &transmit_queue, 1);
 
         (receive_queue, transmit_queue)
+    }
+
+    fn configure_queue_on_device(
+        common_cfg: &MMIO<virtio_pci_common_cfg>,
+        queue: &VirtQueue<EXPECTED_QUEUE_SIZE>,
+        index: u16,
+    ) {
+        common_cfg.queue_select().write(index);
+        common_cfg
+            .queue_desc()
+            .write(queue.descriptor_area_physical_address());
+        common_cfg
+            .queue_driver()
+            .write(queue.driver_area_physical_address());
+        common_cfg
+            .queue_device()
+            .write(queue.device_area_physical_address());
+        common_cfg.queue_enable().write(1);
     }
 
     fn fill_receive_buffers(receive_queue: &mut VirtQueue<EXPECTED_QUEUE_SIZE>) {
