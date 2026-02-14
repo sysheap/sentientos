@@ -13,8 +13,11 @@ use lookup::lookup;
 
 pub use devic_tree_parser::parse;
 
-use self::allocator::{PCIAllocatedSpace, PCIAllocator};
-pub use self::devic_tree_parser::{PCIBitField, PCIInformation, PCIRange};
+use self::allocator::PCIAllocator;
+pub use self::{
+    allocator::PCIAllocatedSpace,
+    devic_tree_parser::{PCIBitField, PCIInformation, PCIRange},
+};
 
 pub static PCI_ALLOCATOR_64_BIT: Spinlock<PCIAllocator> = Spinlock::new(PCIAllocator::new());
 
