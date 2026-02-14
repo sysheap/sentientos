@@ -50,7 +50,7 @@ impl IpV4Header {
             ttl: BigEndian::from_little_endian(128),
             upper_protocol: BigEndian::from_little_endian(protocol),
             header_checksum: BigEndian::from_little_endian(0),
-            source_ip: super::IP_ADDR,
+            source_ip: super::ip_addr(),
             destination_ip,
         }
     }
@@ -70,7 +70,7 @@ impl IpV4Header {
         );
 
         assert!(
-            ipv4_header.destination_ip == super::IP_ADDR,
+            ipv4_header.destination_ip == super::ip_addr(),
             "Destination ip address is not ours."
         );
 
