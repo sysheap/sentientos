@@ -5,7 +5,7 @@ pub struct RuntimeInitializedData<T> {
     data: UnsafeCell<MaybeUninit<T>>,
 }
 
-unsafe impl<T> Sync for RuntimeInitializedData<T> {}
+unsafe impl<T: Sync> Sync for RuntimeInitializedData<T> {}
 
 impl<T> RuntimeInitializedData<T> {
     #[allow(clippy::new_without_default)]

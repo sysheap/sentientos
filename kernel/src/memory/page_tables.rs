@@ -109,7 +109,10 @@ impl Drop for RootPageTableHolder {
             if !first_level_entry.get_validity() || first_level_entry.is_leaf() {
                 continue;
             }
-            let second_level_table = first_level_entry.get_target_page_table();
+            let second_level_ptr = first_level_entry.get_target_page_table();
+            // SAFETY: The pointer is valid because we checked validity above, and we
+            // own these page tables (Drop guarantees exclusive access).
+            let second_level_table = unsafe { &*second_level_ptr };
             for second_level_entry in second_level_table.0.iter() {
                 if !second_level_entry.get_validity() || second_level_entry.is_leaf() {
                     continue;
@@ -118,9 +121,11 @@ impl Drop for RootPageTableHolder {
                 if third_level_table.is_null() {
                     continue;
                 }
+                // SAFETY: Each third-level table was allocated with Box::new in map().
                 let _ = unsafe { Box::from_raw(third_level_table) };
             }
-            let _ = unsafe { Box::from_raw(second_level_table) };
+            // SAFETY: Each second-level table was allocated with Box::new in map().
+            let _ = unsafe { Box::from_raw(second_level_ptr) };
         }
         let _ = unsafe { Box::from_raw(self.root_table) };
         self.root_table = null_mut();
@@ -250,15 +255,16 @@ impl RootPageTableHolder {
             return None;
         }
 
-        let second_level_entry = first_level_entry
-            .get_target_page_table()
+        // SAFETY: The pointer is valid because we checked the entry's validity bit above,
+        // and &self guarantees no concurrent mutation.
+        let second_level_entry = unsafe { &*first_level_entry.get_target_page_table() }
             .get_entry_for_virtual_address(address, 1);
         if !second_level_entry.get_validity() {
             return None;
         }
 
-        let third_level_entry = second_level_entry
-            .get_target_page_table()
+        // SAFETY: Same as above — validity checked, &self guarantees no concurrent mutation.
+        let third_level_entry = unsafe { &*second_level_entry.get_target_page_table() }
             .get_entry_for_virtual_address(address, 0);
         if !third_level_entry.get_validity() {
             return None;
@@ -364,8 +370,9 @@ impl RootPageTableHolder {
                     first_level_entry.set_validity(true);
                 }
 
-                let second_level_entry = first_level_entry
-                    .get_target_page_table()
+                // SAFETY: We just ensured the entry is valid and points to an allocated table.
+                // &mut self guarantees exclusive access to the page table hierarchy.
+                let second_level_entry = unsafe { &mut *first_level_entry.get_target_page_table() }
                     .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 1);
                 assert!(
                     !second_level_entry.get_validity()
@@ -399,8 +406,9 @@ impl RootPageTableHolder {
                 first_level_entry.set_validity(true);
             }
 
-            let second_level_entry = first_level_entry
-                .get_target_page_table()
+            // SAFETY: We just ensured the entry is valid and points to an allocated table.
+            // &mut self guarantees exclusive access to the page table hierarchy.
+            let second_level_entry = unsafe { &mut *first_level_entry.get_target_page_table() }
                 .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 1);
             if second_level_entry.get_physical_address().is_null() {
                 let page = Box::leak(Box::new(PageTable::zero()));
@@ -408,8 +416,8 @@ impl RootPageTableHolder {
                 second_level_entry.set_validity(true);
             }
 
-            let third_level_entry = second_level_entry
-                .get_target_page_table()
+            // SAFETY: Same as above — entry is valid and allocated.
+            let third_level_entry = unsafe { &mut *second_level_entry.get_target_page_table() }
                 .get_entry_for_virtual_address_mut(virtual_address_with_offset(offset), 0);
 
             assert!(!third_level_entry.get_validity());

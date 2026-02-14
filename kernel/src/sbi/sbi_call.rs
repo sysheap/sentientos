@@ -25,13 +25,21 @@ pub struct SbiRet {
 }
 
 impl SbiRet {
-    unsafe fn new(error: i64, value: i64) -> Self {
-        unsafe {
-            Self {
-                error: core::mem::transmute::<i64, SbiError>(error),
-                value,
-            }
-        }
+    fn new(error: i64, value: i64) -> Self {
+        let error = match error {
+            0 => SbiError::SBI_SUCCESS,
+            -1 => SbiError::SBI_ERR_FAILED,
+            -2 => SbiError::SBI_ERR_NOT_SUPPORTED,
+            -3 => SbiError::SBI_ERR_INVALID_PARAM,
+            -4 => SbiError::SBI_ERR_DENIED,
+            -5 => SbiError::SBI_ERR_INVALID_ADDRESS,
+            -6 => SbiError::SBI_ERR_ALREADY_AVAILABLE,
+            -7 => SbiError::SBI_ERR_ALREADY_STARTED,
+            -8 => SbiError::SBI_ERR_ALREADY_STOPPED,
+            -9 => SbiError::SBI_ERR_NO_SHMEM,
+            _ => panic!("Unknown SBI error code: {error}"),
+        };
+        Self { error, value }
     }
 
     pub fn assert_success(&self) {
@@ -70,6 +78,6 @@ pub fn sbi_call(eid: u64, fid: u64, arg0: u64, arg1: u64, arg2: u64) -> SbiRet {
             lateout("a0") error,
             lateout("a1") value,
         );
-        SbiRet::new(error, value)
     }
+    SbiRet::new(error, value)
 }
