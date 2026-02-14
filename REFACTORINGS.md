@@ -42,20 +42,14 @@ interfaces are possible.
 `NetworkStack` struct passed by reference would improve testability and make
 per-interface state possible.
 
-**R-06 — Make PCI enumeration generic.**
-`pci/mod.rs:237-243` hardcodes VirtIO vendor/device ID filtering and only
-populates `network_devices`. A generic approach — e.g. a
-`register_driver(vendor, device, init_fn)` API — would support block devices,
-GPU, etc. without modifying the PCI scanner.
-
-**R-07 — Create a shared userspace input library.**
+**R-06 — Create a shared userspace input library.**
 `userspace/src/util.rs:10-40` and `userspace/src/bin/udp.rs:30-54` contain
 near-identical `read_line()` loops with the same DELETE handling, backspace
 escape sequence, and newline logic. The `DELETE` constant is defined twice.
 Move the canonical implementation into `userspace/src/util.rs` and have all
 programs use it.
 
-**R-08 — Separate Process–Thread ownership.**
+**R-07 — Separate Process–Thread ownership.**
 `Process` holds `BTreeMap<Tid, ThreadWeakRef>` while each `Thread` holds a
 strong `ProcessRef` (`Arc<Spinlock<Process>>`). This bidirectional reference
 makes lifetime reasoning difficult. Consider making the scheduler the sole owner
@@ -65,38 +59,38 @@ of threads, with processes holding only Tid sets.
 
 ## Low Impact
 
-**R-09 — Merge system-tests into the workspace.**
+**R-08 — Merge system-tests into the workspace.**
 `system-tests/` is a standalone workspace and must be built/tested separately.
 Merging it into the root workspace (with a `default-members` exclude so
 `cargo test` in the kernel still works) would unify dependency management and
 simplify CI.
 
-**R-10 — Add a minimal userspace syscall wrapper crate.**
+**R-09 — Add a minimal userspace syscall wrapper crate.**
 Userspace programs call libc directly. A thin `sentientos-sys` crate with
 type-safe wrappers (e.g. `fn send_udp(fd: Fd, buf: &[u8]) -> Result<usize>`)
 would reduce boilerplate and catch misuse at compile time.
 
-**R-11 — Consolidate the ARP path.**
+**R-10 — Consolidate the ARP path.**
 `arp.rs` and the ARP cache in `net/mod.rs` are split across files with the cache
 accessed via a global static. Colocating the cache with the ARP protocol handler
 in a single `ArpCache` struct would improve cohesion.
 
-**R-12 — Extract virtqueue setup from device init.**
+**R-11 — Extract virtqueue setup from device init.**
 Virtqueue allocation and descriptor ring setup in the VirtIO network driver is
 device-independent. Extracting a reusable `VirtQueue::new(index, size)`
 constructor prepares for future VirtIO block or console drivers.
 
-**R-13 — Add ethernet frame type dispatch.**
+**R-12 — Add ethernet frame type dispatch.**
 Incoming frames are dispatched by checking the ethertype field inline. A small
 dispatch table (`0x0800 → handle_ipv4`, `0x0806 → handle_arp`) would make adding
 new L3 protocols trivial.
 
-**R-14 — Use per-CPU scheduler queues.**
+**R-13 — Use per-CPU scheduler queues.**
 The scheduler uses a single global run queue protected by a spinlock. On SMP
 this serializes all scheduling decisions. Per-CPU queues with work-stealing
 would reduce contention (relevant once the core count grows).
 
-**R-15 — Introduce a PacketBuffer / scatter-gather type.**
+**R-14 — Introduce a PacketBuffer / scatter-gather type.**
 Network TX currently concatenates `Vec<u8>` slices to build full frames.
 A zero-copy scatter-gather list (`&[IoSlice]`) passed down the stack would avoid
 intermediate allocations and match how real NICs consume descriptors.

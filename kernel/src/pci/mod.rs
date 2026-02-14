@@ -28,10 +28,6 @@ const GENERAL_DEVICE_TYPE_MASK: u8 = !0x80;
 
 const CAPABILITY_POINTER_MASK: u8 = !0x3;
 
-const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
-const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
-const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
-
 pub mod command_register {
     pub const IO_SPACE: u16 = 1 << 0;
     pub const MEMORY_SPACE: u16 = 1 << 1;
@@ -203,20 +199,8 @@ impl PCIDevice {
     }
 }
 
-pub struct PciDeviceAddresses {
-    pub network_devices: Vec<PCIDevice>,
-}
-
-impl PciDeviceAddresses {
-    fn new() -> Self {
-        Self {
-            network_devices: Vec::new(),
-        }
-    }
-}
-
-pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses {
-    let mut pci_devices = PciDeviceAddresses::new();
+pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
+    let mut pci_devices = Vec::new();
     for bus in 0..255 {
         for device in 0..32 {
             for function in 0..8 {
@@ -235,15 +219,7 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> PciDeviceAddresses
                         "PCI Device {:#x}:{:#x} found at {:#x} ({})",
                         vendor_id, device_id, address, name
                     );
-
-                    // Add virtio devices to device list
-                    if vendor_id == VIRTIO_VENDOR_ID
-                        && VIRTIO_DEVICE_ID.contains(&device_id)
-                        && device.configuration_space.subsystem_id().read()
-                            == VIRTIO_NETWORK_SUBSYSTEM_ID
-                    {
-                        pci_devices.network_devices.push(device);
-                    }
+                    pci_devices.push(device);
                 }
             }
         }
