@@ -10,17 +10,36 @@ const DONT_LOG_FOLLOWING_MODULES: &[&str] = &[
     "kernel::io::stdin_buf",
 ];
 
-// TODO: This should be made compile-time, such that this thing doesn't need to be queried at runtime.
-pub fn should_log_module(module_name: &str) -> bool {
-    for &dont_log_module in DONT_LOG_FOLLOWING_MODULES {
-        if module_name.starts_with(dont_log_module) {
+const fn const_starts_with(haystack: &str, needle: &str) -> bool {
+    let h = haystack.as_bytes();
+    let n = needle.as_bytes();
+    if n.len() > h.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < n.len() {
+        if h[i] != n[i] {
             return false;
         }
+        i += 1;
     }
-    for &log_module in LOG_FOLLOWING_MODULES {
-        if module_name.starts_with(log_module) {
+    true
+}
+
+pub const fn should_log_module(module_name: &str) -> bool {
+    let mut i = 0;
+    while i < DONT_LOG_FOLLOWING_MODULES.len() {
+        if const_starts_with(module_name, DONT_LOG_FOLLOWING_MODULES[i]) {
+            return false;
+        }
+        i += 1;
+    }
+    i = 0;
+    while i < LOG_FOLLOWING_MODULES.len() {
+        if const_starts_with(module_name, LOG_FOLLOWING_MODULES[i]) {
             return true;
         }
+        i += 1;
     }
     false
 }
