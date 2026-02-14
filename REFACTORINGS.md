@@ -70,17 +70,12 @@ Userspace programs call libc directly. A thin `sentientos-sys` crate with
 type-safe wrappers (e.g. `fn send_udp(fd: Fd, buf: &[u8]) -> Result<usize>`)
 would reduce boilerplate and catch misuse at compile time.
 
-**R-10 — Add ethernet frame type dispatch.**
-Incoming frames are dispatched by checking the ethertype field inline. A small
-dispatch table (`0x0800 → handle_ipv4`, `0x0806 → handle_arp`) would make adding
-new L3 protocols trivial.
-
-**R-11 — Use per-CPU scheduler queues.**
+**R-10 — Use per-CPU scheduler queues.**
 The scheduler uses a single global run queue protected by a spinlock. On SMP
 this serializes all scheduling decisions. Per-CPU queues with work-stealing
 would reduce contention (relevant once the core count grows).
 
-**R-12 — Introduce a PacketBuffer / scatter-gather type.**
+**R-11 — Introduce a PacketBuffer / scatter-gather type.**
 Network TX currently concatenates `Vec<u8>` slices to build full frames.
 A zero-copy scatter-gather list (`&[IoSlice]`) passed down the stack would avoid
 intermediate allocations and match how real NICs consume descriptors.

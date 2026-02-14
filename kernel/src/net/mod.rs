@@ -71,21 +71,19 @@ fn process_packet(packet: Vec<u8>) {
     let ether_type = ethernet_header.ether_type();
 
     match ether_type {
-        ethernet::EtherTypes::Arp => {
-            arp::process_and_respond(rest);
-        }
-        ethernet::EtherTypes::IPv4 => {
-            let (ipv4_header, rest) =
-                IpV4Header::process(rest).expect("IPv4 packet must be processed.");
-            // We already asserted that it must be UDP in the IpV4Header::process method
-            let (udp_header, data) =
-                UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
-            OPEN_UDP_SOCKETS.lock().put_data(
-                ipv4_header.source_ip,
-                udp_header.source_port(),
-                udp_header.destination_port(),
-                data,
-            );
-        }
+        ethernet::EtherTypes::Arp => arp::process_and_respond(rest),
+        ethernet::EtherTypes::IPv4 => process_ipv4_packet(rest),
     }
+}
+
+fn process_ipv4_packet(data: &[u8]) {
+    let (ipv4_header, rest) = IpV4Header::process(data).expect("IPv4 packet must be processed.");
+    let (udp_header, data) =
+        UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
+    OPEN_UDP_SOCKETS.lock().put_data(
+        ipv4_header.source_ip,
+        udp_header.source_port(),
+        udp_header.destination_port(),
+        data,
+    );
 }
