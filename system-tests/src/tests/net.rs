@@ -23,6 +23,7 @@ async fn udp() -> anyhow::Result<()> {
         .stdin()
         .write_all("Hello from SentientOS!\n".as_bytes())
         .await?;
+    sentientos.stdin().flush().await?;
 
     let mut buf = [0; 128];
     let bytes = socket.recv(&mut buf).await?;

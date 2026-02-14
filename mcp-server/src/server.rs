@@ -135,6 +135,11 @@ impl QemuMcpServer {
             .write_all(b"exit\n")
             .await
             .map_err(|e| mcp_err(format!("Failed to send exit: {e}")))?;
+        instance
+            .stdin()
+            .flush()
+            .await
+            .map_err(|e| mcp_err(format!("Failed to flush exit: {e}")))?;
 
         let status = tokio::time::timeout(Duration::from_secs(5), instance.wait_for_qemu_to_exit())
             .await
