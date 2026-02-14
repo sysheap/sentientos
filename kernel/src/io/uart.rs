@@ -4,6 +4,18 @@ use crate::klibc::{MMIO, Spinlock};
 
 pub const UART_BASE_ADDRESS: usize = 0x1000_0000;
 
+const THR_OFFSET: usize = 0;
+const IER_OFFSET: usize = 1;
+const FCR_OFFSET: usize = 2;
+const LCR_OFFSET: usize = 3;
+const LSR_OFFSET: usize = 5;
+const LCR_WORD_LEN_8BIT: u8 = 0b11;
+const LCR_DLAB: u8 = 1 << 7;
+const FCR_ENABLE: u8 = 1;
+const IER_RX_AVAILABLE: u8 = 1;
+const LSR_DATA_READY: u8 = 1;
+const BAUD_DIVISOR: u16 = 592;
+
 pub static QEMU_UART: Spinlock<Uart> = Spinlock::new(Uart::new(UART_BASE_ADDRESS));
 
 unsafe impl Sync for Uart {}
@@ -11,72 +23,43 @@ unsafe impl Send for Uart {}
 
 pub struct Uart {
     transmitter: MMIO<u8>,
-    lcr: MMIO<u8>,
+    lsr: MMIO<u8>,
     is_init: bool,
 }
 
 impl Uart {
     const fn new(uart_base_address: usize) -> Self {
         Self {
-            transmitter: MMIO::new(uart_base_address),
-            lcr: MMIO::new(uart_base_address + 5),
+            transmitter: MMIO::new(uart_base_address + THR_OFFSET),
+            lsr: MMIO::new(uart_base_address + LSR_OFFSET),
             is_init: false,
         }
     }
 
     pub fn init(&mut self) {
-        let mut lcr: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 3);
-        let mut fifo: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 2);
-        let mut ier: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);
-        let lcr_value = 0b11;
-        // Set word length to 8 bit
-        lcr.write(lcr_value);
-        // Enable fifo
-        fifo.write(0b1);
-        // Enable receiver buffer interrupts
-        ier.write(0b1);
+        let mut lcr: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + LCR_OFFSET);
+        let mut fcr: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + FCR_OFFSET);
+        let mut ier: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + IER_OFFSET);
 
-        // If we cared about the divisor, the code below would set the divisor
-        // from a global clock rate of 22.729 MHz (22,729,000 cycles per second)
-        // to a signaling rate of 2400 (BAUD). We usually have much faster signalling
-        // rates nowadays, but this demonstrates what the divisor actually does.
-        // The formula given in the NS16500A specification for calculating the divisor
-        // is:
-        // divisor = ceil( (clock_hz) / (baud_sps x 16) )
-        // So, we substitute our values and get:
-        // divisor = ceil( 22_729_000 / (2400 x 16) )
-        // divisor = ceil( 22_729_000 / 38_400 )
-        // divisor = ceil( 591.901 ) = 592
+        lcr.write(LCR_WORD_LEN_8BIT);
+        fcr.write(FCR_ENABLE);
+        ier.write(IER_RX_AVAILABLE);
 
-        // The divisor register is two bytes (16 bits), so we need to split the value
-        // 592 into two bytes. Typically, we would calculate this based on measuring
-        // the clock rate, but again, for our purposes [qemu], this doesn't really do
-        // anything.
-        let divisor: u16 = 592;
-        let divisor_least: u8 = (divisor & 0xff) as u8;
-        let divisor_most: u8 = (divisor >> 8) as u8;
+        // Set baud rate via divisor latch.
+        // divisor = ceil(22_729_000 / (2400 * 16)) = 592
+        let divisor_least: u8 = (BAUD_DIVISOR & 0xff) as u8;
+        let divisor_most: u8 = (BAUD_DIVISOR >> 8) as u8;
 
-        // Notice that the divisor register DLL (divisor latch least) and DLM (divisor
-        // latch most) have the same base address as the receiver/transmitter and the
-        // interrupt enable register. To change what the base address points to, we
-        // open the "divisor latch" by writing 1 into the Divisor Latch Access Bit
-        // (DLAB), which is bit index 7 of the Line Control Register (LCR) which
-        // is at base_address + 3.
-        lcr.write(lcr_value | (1 << 7));
+        // Open divisor latch (DLAB bit in LCR) to access DLL/DLM registers
+        lcr.write(LCR_WORD_LEN_8BIT | LCR_DLAB);
 
-        let mut dll: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS);
-        let mut dlm: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + 1);
-
-        // Now, base addresses 0 and 1 point to DLL and DLM, respectively.
-        // Put the lower 8 bits of the divisor into DLL
+        let mut dll: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + THR_OFFSET);
+        let mut dlm: MMIO<u8> = MMIO::new(UART_BASE_ADDRESS + IER_OFFSET);
         dll.write(divisor_least);
         dlm.write(divisor_most);
 
-        // Now that we've written the divisor, we never have to touch this again. In
-        // hardware, this will divide the global clock (22.729 MHz) into one suitable
-        // for 2,400 signals per second. So, to once again get access to the
-        // RBR/THR/IER registers, we need to close the DLAB bit by clearing it to 0.
-        lcr.write(lcr_value);
+        // Close divisor latch to restore normal register access
+        lcr.write(LCR_WORD_LEN_8BIT);
 
         self.is_init = true;
     }
@@ -86,7 +69,7 @@ impl Uart {
     }
 
     pub fn read(&self) -> Option<u8> {
-        if self.lcr.read() & 1 == 0 {
+        if self.lsr.read() & LSR_DATA_READY == 0 {
             return None;
         }
         Some(self.transmitter.read())
