@@ -68,7 +68,7 @@ impl<'a> Backtrace<'a> {
         }
     }
 
-    fn next(&self, regs: &mut CallerSavedRegs) -> Result<usize, BacktraceNextError> {
+    fn next(&self, regs: &mut CalleeSavedRegs) -> Result<usize, BacktraceNextError> {
         let ra = regs.ra();
 
         if ra == 0 {
@@ -144,7 +144,7 @@ impl<'a> Backtrace<'a> {
 /// because they won't allow to concatenate x$num_reg as a identifier and I need the
 /// literal number to access it via an index.
 #[derive(Debug, Clone, Default)]
-struct CallerSavedRegs {
+struct CalleeSavedRegs {
     x1: usize,
     x2: usize,
     x8: usize,
@@ -161,7 +161,7 @@ struct CallerSavedRegs {
     x27: usize,
 }
 
-impl core::fmt::Display for CallerSavedRegs {
+impl core::fmt::Display for CalleeSavedRegs {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         macro_rules! print_reg {
             ($reg:ident) => {
@@ -188,7 +188,7 @@ impl core::fmt::Display for CallerSavedRegs {
     }
 }
 
-impl core::ops::Index<usize> for CallerSavedRegs {
+impl core::ops::Index<usize> for CalleeSavedRegs {
     type Output = usize;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -212,7 +212,7 @@ impl core::ops::Index<usize> for CallerSavedRegs {
     }
 }
 
-impl core::ops::IndexMut<usize> for CallerSavedRegs {
+impl core::ops::IndexMut<usize> for CalleeSavedRegs {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         match index {
             1 => &mut self.x1,
@@ -235,9 +235,9 @@ impl core::ops::IndexMut<usize> for CallerSavedRegs {
 }
 
 // This value is referenced in the assembly of extern "C-unwind" fn dispatch
-static_assert_size!(CallerSavedRegs, 0x70);
+static_assert_size!(CalleeSavedRegs, 0x70);
 
-impl CallerSavedRegs {
+impl CalleeSavedRegs {
     fn ra(&self) -> usize {
         self.x1
     }
@@ -250,7 +250,7 @@ impl CallerSavedRegs {
         self.x2 = value;
     }
 
-    fn with_context<F: FnMut(&mut CallerSavedRegs)>(f: F) {
+    fn with_context<F: FnMut(&mut CalleeSavedRegs)>(f: F) {
         // Inspired by the unwinder crate
         // https://github.com/nbdd0121/unwinding/
 
@@ -263,31 +263,31 @@ impl CallerSavedRegs {
         // very convenient for the caller side.
 
         #[repr(C)]
-        struct ClosureWrapper<F: FnMut(&mut CallerSavedRegs)>(F);
+        struct ClosureWrapper<F: FnMut(&mut CalleeSavedRegs)>(F);
 
         let mut closure = ClosureWrapper(f);
 
         dispatch(
-            &mut CallerSavedRegs::default(),
+            &mut CalleeSavedRegs::default(),
             &mut closure,
             closure_to_fn_pointer,
         );
 
-        extern "C" fn closure_to_fn_pointer<F: FnMut(&mut CallerSavedRegs)>(
-            regs: &mut CallerSavedRegs,
+        extern "C" fn closure_to_fn_pointer<F: FnMut(&mut CalleeSavedRegs)>(
+            regs: &mut CalleeSavedRegs,
             f_data: &mut ClosureWrapper<F>,
         ) {
             (f_data.0)(regs);
         }
 
-        // SAFETY: Naked function that captures callee-saved registers into
-        // the CallerSavedRegs struct, then calls the closure. No prologue
-        // is generated so we get the true register state.
+        // SAFETY: Naked function that captures callee-saved registers (s0-s11,
+        // ra, sp) into the CalleeSavedRegs struct, then calls the closure.
+        // No prologue is generated so we get the true register state.
         #[unsafe(naked)]
-        extern "C-unwind" fn dispatch<F: FnMut(&mut CallerSavedRegs)>(
-            regs: &mut CallerSavedRegs,
+        extern "C-unwind" fn dispatch<F: FnMut(&mut CalleeSavedRegs)>(
+            regs: &mut CalleeSavedRegs,
             f_data: &mut ClosureWrapper<F>,
-            f: extern "C" fn(&mut CallerSavedRegs, &mut ClosureWrapper<F>),
+            f: extern "C" fn(&mut CalleeSavedRegs, &mut ClosureWrapper<F>),
         ) {
             core::arch::naked_asm!(
                 "
@@ -328,7 +328,7 @@ pub fn init() {
 }
 
 pub fn print() {
-    CallerSavedRegs::with_context(|regs| {
+    CalleeSavedRegs::with_context(|regs| {
         let mut counter = 0u64;
         loop {
             match BACKTRACE.next(regs) {
@@ -371,7 +371,7 @@ fn print_stacktrace_frame(counter: u64, address: usize) {
 #[cfg(not(miri))]
 #[cfg(test)]
 mod tests {
-    use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CallerSavedRegs};
+    use crate::debugging::backtrace::{Backtrace, BacktraceNextError, CalleeSavedRegs};
     use alloc::collections::VecDeque;
     use core::ffi::c_void;
     use unwinding::abi::{_Unwind_Backtrace, _Unwind_GetIP, UnwindContext, UnwindReasonCode};
@@ -397,7 +397,7 @@ mod tests {
         let mut data = CallbackData::default();
 
         _Unwind_Backtrace(callback, &mut data as *mut _ as _);
-        CallerSavedRegs::with_context(|regs| {
+        CalleeSavedRegs::with_context(|regs| {
             let backtrace = Backtrace::new();
             let mut own_addr = VecDeque::new();
 
