@@ -453,7 +453,7 @@ mod test {
         let ptr = alloc::<[u8; HEAP_SIZE]>(&heap);
         assert!(!ptr.is_null());
         unsafe {
-            ptr.write([0x42; HEAP_SIZE]);
+            core::ptr::write_bytes(ptr.cast::<u8>(), 0x42, HEAP_SIZE);
         }
         dealloc(&heap, ptr);
 
@@ -468,8 +468,8 @@ mod test {
         let ptr = alloc::<[u8; HEAP_SIZE]>(&heap);
         assert!(!ptr.is_null());
         unsafe {
-            ptr.write([0x42; HEAP_SIZE]);
-        };
+            core::ptr::write_bytes(ptr.cast::<u8>(), 0x42, HEAP_SIZE);
+        }
 
         let ptr2 = alloc::<u8>(&heap);
         assert!(ptr2.is_null());
