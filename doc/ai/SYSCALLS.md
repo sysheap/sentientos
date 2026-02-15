@@ -41,7 +41,7 @@ fn handle_syscall() {
 |---------|------|-------------|
 | brk | brk | Adjust heap break |
 | close | fd | Close file descriptor |
-| exit_group | status | Exit process |
+| exit_group | status | Exit process (stores exit status, then kills process) |
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
 | gettid | | Get thread ID |
 | ioctl | fd, op | Device control (+ SentientOS extensions) |
@@ -55,6 +55,7 @@ fn handle_syscall() {
 | rt_sigprocmask | how, set, oldset, size | Signal mask |
 | set_tid_address | tidptr | Set clear_child_tid |
 | sigaltstack | uss, uoss | Signal stack |
+| wait4 | pid, status, options, rusage | Wait for child process (supports WNOHANG) |
 | write | fd, buf, count | Write to fd |
 | writev | fd, iov, iovcnt | Vectored write |
 
@@ -125,7 +126,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 ```rust
 impl KernelSyscalls for SyscallHandler {
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
-    fn sys_wait(&mut self, tid) -> Result<Tid, SysWaitError>;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
     fn sys_write_back_udp_socket(&mut self, desc, buf);
     fn sys_read_udp_socket(&mut self, desc, buf);
