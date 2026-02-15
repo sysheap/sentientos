@@ -7,6 +7,9 @@ use crate::memory::PAGE_SIZE;
 
 const _: () = assert!(core::mem::size_of::<usize>() == core::mem::size_of::<u64>());
 
+/// Lossless `u64` → `usize` conversion. Clippy warns about `as usize` on u64
+/// because it could truncate on 32-bit targets. The compile-time assert above
+/// guarantees we are on a 64-bit platform, so this is safe.
 #[allow(clippy::wrong_self_convention)]
 pub trait UsizeExt {
     fn as_usize(self) -> usize;
