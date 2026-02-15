@@ -21,6 +21,7 @@ pub struct Process {
     fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
+    parent_tid: Tid,                           // Parent process (Tid(0) for init)
     brk: Brk,                                  // Heap break manager
 }
 ```
@@ -86,7 +87,7 @@ The `cpu_id` in `Running` is critical for multi-CPU correctness. It ensures:
 
 **From ELF:**
 ```rust
-Thread::from_elf(elf_file: &ElfFile, name: &str, args: &[&str])
+Thread::from_elf(elf_file: &ElfFile, name: &str, args: &[&str], parent_tid: Tid)
     -> Result<Arc<Spinlock<Thread>>, LoaderError>
 ```
 
@@ -157,11 +158,12 @@ impl CpuScheduler {
 Global registry of all threads:
 
 ```rust
-pub static THE: Spinlock<ProcessTable> = Spinlock::new(ProcessTable::new());
+pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>>;
 
 struct ProcessTable {
-    processes: BTreeMap<Tid, ThreadRef>,
-    run_pointer: usize,              // Round-robin pointer
+    threads: BTreeMap<Tid, ThreadRef>,
+    exited_children: BTreeMap<Tid, Vec<Tid>>,      // parent -> [exited child tids]
+    waiting_for_any_child: BTreeMap<Tid, Tid>,     // parent -> waiter thread tid
 }
 ```
 
@@ -177,6 +179,37 @@ impl ProcessTable {
     fn is_empty(&self) -> bool
 }
 ```
+
+## Parent-Child Relationships
+
+Every process tracks its parent via `parent_tid: Tid`:
+
+- **Init** (first process): `parent_tid = Tid(0)` (no real parent)
+- **Powersave** (idle): `parent_tid = POWERSAVE_TID`
+- **All others**: `parent_tid` = caller's `main_tid` at `sys_execute` time
+
+### sys_wait enforcement
+
+`sys_wait(tid)` verifies `target.parent_tid == caller.main_tid` before allowing the wait. Returns `SysWaitError::NotAChild` on mismatch.
+
+### Wait-for-any-child
+
+`sys_wait(Tid(0))` waits for any child:
+1. If exited children are queued, returns one immediately
+2. If live children exist, blocks until one exits
+3. If no children at all, returns `SysWaitError::NotAChild`
+
+### Orphan reparenting
+
+When a process dies in `ProcessTable::kill()`:
+1. Exited child is recorded in `exited_children[parent_tid]`
+2. Any `waiting_for_any_child` waiter for the parent is woken
+3. Orphans (children of the dying process) are reparented to init (`Tid(1)`)
+4. Exited-children entries for the dying process move to init
+
+### getppid syscall
+
+Linux syscall 173 (`getppid`) returns `process.parent_tid().0`.
 
 ## ELF Loader
 
