@@ -1,17 +1,14 @@
 # Custom Syscall Migration Plan
 
-This document analyzes all 11 custom syscalls in SentientOS and describes how each maps to Linux equivalents. Custom syscalls are identified by bit 63 being set in the syscall number. The goal is to replace them all with standard Linux syscalls so userspace programs use only musl libc / POSIX interfaces.
+This document analyzes the remaining custom syscalls in SentientOS and describes how each maps to Linux equivalents. Custom syscalls are identified by bit 63 being set in the syscall number. The goal is to replace them all with standard Linux syscalls so userspace programs use only musl libc / POSIX interfaces.
 
 ## Summary
 
 | # | Custom Syscall | Linux Equivalent | Callers | Difficulty |
 |---|----------------|-----------------|---------|------------|
-| 0 | `sys_write` | `write` (NR 64) | None | **MIGRATED** — deleted |
 | 1 | `sys_read_input` | `read` (NR 63) with non-blocking stdin | `udp.rs` | Medium |
-| 2 | `sys_exit` | `exit_group` (NR 94) | `sesh.rs` | **MIGRATED** — uses std::process::exit |
 | 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
 | 4 | `sys_wait` | `wait4` (NR 260) | `init.rs`, `sesh.rs`, `stress.rs` | Medium |
-| 5 | `sys_mmap_pages` | `mmap` (NR 222) | None | **MIGRATED** — deleted |
 | 6 | `sys_open_udp_socket` | `socket` + `bind` | `udp.rs` | Hard |
 | 7 | `sys_write_back_udp_socket` | `sendto` | `udp.rs` | Hard |
 | 8 | `sys_read_udp_socket` | `recvfrom` | `udp.rs` | Hard |
@@ -19,18 +16,6 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 | 10 | `sys_print_programs` | `ioctl` or read from pseudo-file | `sesh.rs` | Medium |
 
 ## Detailed Analysis
-
-### 0. `sys_write` — DELETE
-
-**Current behavior:** Validates a string pointer from userspace, prints it via `print!("{s}")`.
-
-**Linux equivalent:** Already implemented — `write` (NR 64) and `writev` (NR 66) exist in `linux.rs` and handle fd 1 (stdout) and fd 2 (stderr).
-
-**Callers:** None. All userspace programs use `println!` which goes through musl libc → Linux `writev`/`write`.
-
-**Migration:** Delete the syscall. No userspace changes needed.
-
----
 
 ### 1. `sys_read_input` — `read` with non-blocking stdin
 
@@ -48,18 +33,6 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 3. The current `ppoll` implementation asserts `fd.events == 0` — it needs to support `POLLIN` on fd 0.
 
 **Complexity:** Medium. Requires enhancing the kernel's `ppoll` or `read` to support non-blocking I/O on stdin.
-
----
-
-### 2. `sys_exit` — `exit_group`
-
-**Current behavior:** Sets `process_exit = true`, calls `scheduler.kill_current_process()`, logs exit status.
-
-**Caller:** `sesh.rs` — calls `sys_exit(0)` when user types "exit" or "q".
-
-**Linux equivalent:** `exit_group` (NR 94) already exists and internally delegates to `self.handler.sys_exit(...)`. It is the standard way musl libc exits processes.
-
-**Migration:** Replace `sys_exit(0)` in `sesh.rs` with `std::process::exit(0)`, which calls `exit_group` via musl. No kernel changes needed.
 
 ---
 
@@ -108,18 +81,6 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 
 ---
 
-### 5. `sys_mmap_pages` — DELETE
-
-**Current behavior:** Allocates N pages and maps them read-write into the current process's address space. Returns the virtual address pointer.
-
-**Linux equivalent:** Already implemented — `mmap` (NR 222) in `linux.rs` supports `MAP_ANONYMOUS | MAP_PRIVATE` with various protection modes.
-
-**Callers:** None. All userspace programs use musl libc's `mmap` which calls the Linux `mmap` syscall.
-
-**Migration:** Delete the syscall. No userspace changes needed.
-
----
-
 ### 6. `sys_open_udp_socket` — `socket` + `bind`
 
 **Current behavior:** Takes a port number, acquires a socket from the global socket table, attaches it to the current process, and returns a `UDPDescriptor` (process-local handle).
@@ -131,12 +92,11 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 - `bind(fd, &sockaddr_in, len)` — binds to a port
 
 **Migration steps:**
-1. Implement a per-process file descriptor table in the kernel. Currently, processes don't have an fd table (only hard-coded 0/1/2 for stdin/stdout/stderr).
-2. Implement `socket` syscall (NR 198) that creates a socket and returns an fd.
-3. Implement `bind` syscall (NR 200) that binds the socket to a port.
-4. Rewrite `udp.rs` to use `socket()` and `bind()` from musl libc.
+1. Implement `socket` syscall (NR 198) that creates a socket and returns an fd.
+2. Implement `bind` syscall (NR 200) that binds the socket to a port.
+3. Rewrite `udp.rs` to use `socket()` and `bind()` from musl libc.
 
-**Complexity:** Hard. Requires implementing the fd table and socket-to-fd integration.
+**Complexity:** Hard. Requires socket-to-fd integration.
 
 ---
 
@@ -153,7 +113,7 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 2. The kernel network stack needs to accept an explicit destination IP/port rather than inferring from the last received packet.
 3. Rewrite `udp.rs` to use `sendto()` from musl libc with the destination address.
 
-**Complexity:** Hard. Coupled with the fd table work from `sys_open_udp_socket`.
+**Complexity:** Hard. Coupled with the socket work from `sys_open_udp_socket`.
 
 ---
 
@@ -170,7 +130,7 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 2. Decide on blocking vs. non-blocking behavior. The current code is non-blocking (returns 0 immediately). Standard `recvfrom` is blocking unless `MSG_DONTWAIT` or `O_NONBLOCK` is set.
 3. Packet processing (`receive_and_process_packets`) should happen asynchronously (interrupt-driven or in a kernel thread) rather than synchronously during the syscall.
 
-**Complexity:** Hard. Coupled with the fd table and socket work.
+**Complexity:** Hard. Coupled with the socket work.
 
 ---
 
@@ -226,21 +186,16 @@ Keep a Linux-numbered syscall that fills a userspace buffer with the program lis
 
 Recommended order based on dependencies and complexity:
 
-1. **Delete unused syscalls** — `sys_write` (#0) and `sys_mmap_pages` (#5). Zero risk.
-2. **`sys_exit`** (#2) — One-line change in `sesh.rs` to use `std::process::exit`.
-3. **`sys_panic`** (#9) — Replace with null-ptr write or `abort()` in `panic.rs`.
-4. **`sys_print_programs`** (#10) — Add custom ioctl, update shell.
-5. **`sys_read_input`** (#1) — Enhance `ppoll`/`read` for non-blocking stdin, update `udp.rs`.
-6. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
-7. **Socket syscalls** (#6, #7, #8) — Implement fd table, then `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
+1. **`sys_panic`** (#9) — Replace with null-ptr write or `abort()` in `panic.rs`.
+2. **`sys_print_programs`** (#10) — Add custom ioctl, update shell.
+3. **`sys_read_input`** (#1) — Enhance `ppoll`/`read` for non-blocking stdin, update `udp.rs`.
+4. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
+5. **Socket syscalls** (#6, #7, #8) — Implement `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
 
 ## Key Design Decisions
 
 ### Process creation: clone + execve vs. posix_spawn
 The current `sys_execute` is atomic (one syscall creates and starts a process). Linux splits this into clone (fork the process) and execve (replace the image). The simplest path is `CLONE_VFORK | CLONE_VM` semantics where the parent suspends until the child calls `execve`, avoiding the need for copy-on-write page tables. This matches how musl's `posix_spawn` works internally.
-
-### File descriptor table
-The kernel currently has no fd table — stdin/stdout/stderr are hard-coded checks on fd values 0/1/2. Migrating socket syscalls requires a proper fd table in each process. This is also a prerequisite for future features like pipes, file I/O, and dup2.
 
 ### Non-blocking I/O
 The `udp.rs` program polls both stdin and a UDP socket in a tight loop. After migration, this pattern should use `ppoll` with both an stdin fd and a socket fd, or use non-blocking fds with `O_NONBLOCK`. Enhancing `ppoll` to support `POLLIN` on real fds is the cleanest path.
