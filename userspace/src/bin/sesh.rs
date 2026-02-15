@@ -1,5 +1,7 @@
-use common::ioctl::print_programs;
-use common::syscalls::{sys_execute, sys_wait};
+use common::{
+    ioctl::print_programs,
+    syscalls::{sys_execute, sys_wait},
+};
 use std::{
     io::{Write, stdout},
     string::{String, ToString},
