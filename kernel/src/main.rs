@@ -9,6 +9,7 @@
 #![cfg_attr(not(test), deny(clippy::undocumented_unsafe_blocks))]
 #![deny(clippy::ptr_as_ptr)]
 #![deny(clippy::redundant_else)]
+#![deny(clippy::manual_assert)]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(assert_matches)]
