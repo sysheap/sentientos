@@ -192,7 +192,7 @@ fn handle_unhandled_exception() {
     });
     if from_userspace {
         info!("{}", message);
-        scheduler.kill_current_process();
+        scheduler.kill_current_process(0);
         return;
     }
     panic!("{}", message);

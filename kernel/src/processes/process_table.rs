@@ -122,14 +122,14 @@ impl ProcessTable {
         }
     }
 
-    pub fn kill(&mut self, tid: Tid) {
+    pub fn kill(&mut self, tid: Tid, exit_status: i32) {
         assert!(
             tid != POWERSAVE_TID,
             "We are not allowed to kill the never process"
         );
         debug!("Removing tid={tid} from process table");
         if let Some(thread) = self.threads.remove(&tid) {
-            let (main_tid, parent_tid, exit_status) = thread.with_lock(|mut t| {
+            let (main_tid, parent_tid) = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Waiting);
                 Cpu::current().ipi_to_all_but_me();
 
@@ -140,11 +140,7 @@ impl ProcessTable {
 
                 let process = t.process();
                 let process = process.lock();
-                (
-                    process.main_tid(),
-                    process.parent_tid(),
-                    process.exit_status(),
-                )
+                (process.main_tid(), process.parent_tid())
             });
 
             self.zombies.insert(

@@ -48,12 +48,10 @@ impl SyscallHandler {
     }
 
     pub fn sys_exit(&mut self, status: isize) {
-        self.current_process.with_lock(|mut p| {
-            p.set_exit_status(i32::try_from(status).expect("exit status fits in i32"))
-        });
+        let exit_status = i32::try_from(status).expect("exit status fits in i32");
 
         Cpu::with_scheduler(|mut s| {
-            s.kill_current_process();
+            s.kill_current_process(exit_status);
         });
 
         debug!("Exit process with status: {status}\n");

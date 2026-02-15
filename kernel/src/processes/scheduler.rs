@@ -96,7 +96,7 @@ impl CpuScheduler {
         }
     }
 
-    pub fn kill_current_process(&mut self) {
+    pub fn kill_current_process(&mut self, exit_status: i32) {
         let tid = self.current_thread.lock().process().with_lock(|p| {
             // TODO: Kill other threads first
             assert_eq!(
@@ -110,7 +110,7 @@ impl CpuScheduler {
             p.main_tid()
         });
 
-        process_table::THE.lock().kill(tid);
+        process_table::THE.lock().kill(tid, exit_status);
     }
 
     pub fn send_ctrl_c(&mut self) {
@@ -118,7 +118,7 @@ impl CpuScheduler {
             let highest_pid = pt.get_highest_tid_without(&["sesh"]);
 
             if let Some(pid) = highest_pid {
-                pt.kill(pid);
+                pt.kill(pid, 0);
             }
         });
         self.schedule();
