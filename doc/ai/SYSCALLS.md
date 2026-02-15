@@ -43,7 +43,7 @@ fn handle_syscall() {
 | close | fd | Close file descriptor |
 | exit_group | status | Exit process |
 | gettid | | Get thread ID |
-| ioctl | fd, op | Device control |
+| ioctl | fd, op | Device control (+ SentientOS extensions) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
 | munmap | addr, len | Unmap memory |
 | nanosleep | duration, rem | Sleep |
@@ -106,6 +106,15 @@ async fn mmap(&mut self, addr: usize, length: usize, prot: c_uint,
 }
 ```
 
+### SentientOS ioctl Extensions
+
+Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspace wrappers defined in `common/src/ioctl.rs`.
+
+| Command | Value | Description |
+|---------|-------|-------------|
+| SENTIENT_PANIC | 0x5301 | Trigger kernel panic from userspace |
+| SENTIENT_LIST_PROGRAMS | 0x5302 | Print list of available programs |
+
 ## Kernel Syscalls (Fast Path)
 
 **File:** `kernel/src/syscalls/handler.rs`
@@ -114,8 +123,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 
 ```rust
 impl KernelSyscalls for SyscallHandler {
-    fn sys_print_programs(&mut self);
-    fn sys_panic(&mut self);
     fn sys_read_input(&mut self) -> Option<u8>;
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
     fn sys_wait(&mut self, tid) -> Result<Tid, SysWaitError>;
@@ -232,6 +239,7 @@ trap_frame[Register::a0] = ret as usize;
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro |
 | kernel/src/syscalls/validator.rs | UserspaceArgument validation |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
+| common/src/ioctl.rs | SentientOS ioctl constants + userspace wrappers |
 | common/src/syscalls/kernel.rs | KernelSyscalls trait |
 | headers/src/syscall_types.rs | Syscall type definitions |
 | headers/src/errno.rs | Error codes |
