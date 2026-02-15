@@ -141,6 +141,28 @@ impl CpuScheduler {
         })
     }
 
+    pub fn let_current_thread_wait_for_any_child(&self) -> Result<Tid, SysWaitError> {
+        process_table::THE.with_lock(|mut pt| {
+            let current_main_tid = self.current_thread.lock().process().lock().main_tid();
+
+            if let Some(child_tid) = pt.take_one_exited_child(current_main_tid) {
+                return Ok(child_tid);
+            }
+
+            if !pt.has_live_children(current_main_tid) {
+                return Err(SysWaitError::NotAChild);
+            }
+
+            let waiter_tid = self.current_thread.lock().get_tid();
+            pt.register_waiting_for_any_child(current_main_tid, waiter_tid);
+            self.current_thread.with_lock(|mut t| {
+                t.set_state(ThreadState::Waiting);
+            });
+
+            Ok(Tid(0))
+        })
+    }
+
     pub fn send_ctrl_c(&mut self) {
         process_table::THE.with_lock(|mut pt| {
             let highest_pid = pt.get_highest_tid_without(&["sesh"]);

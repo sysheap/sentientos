@@ -118,7 +118,7 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_panic(&mut self);
     fn sys_read_input(&mut self) -> Option<u8>;
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
-    fn sys_wait(&mut self, tid) -> Result<(), SysWaitError>;
+    fn sys_wait(&mut self, tid) -> Result<Tid, SysWaitError>;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
     fn sys_write_back_udp_socket(&mut self, desc, buf);
     fn sys_read_udp_socket(&mut self, desc, buf);

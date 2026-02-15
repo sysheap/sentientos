@@ -137,7 +137,6 @@ impl ProcessTable {
             .push(child_tid);
     }
 
-    #[allow(dead_code)]
     pub fn take_one_exited_child(&mut self, parent_tid: Tid) -> Option<Tid> {
         let children = self.exited_children.get_mut(&parent_tid)?;
         let child = children.pop();
@@ -168,6 +167,17 @@ impl ProcessTable {
             }
         }
         None
+    }
+
+    pub fn has_live_children(&self, parent_main_tid: Tid) -> bool {
+        self.threads
+            .values()
+            .any(|thread| thread.with_lock(|t| t.process().lock().parent_tid() == parent_main_tid))
+    }
+
+    pub fn register_waiting_for_any_child(&mut self, parent_main_tid: Tid, waiter_tid: Tid) {
+        self.waiting_for_any_child
+            .insert(parent_main_tid, waiter_tid);
     }
 
     pub fn wake_process_up(&self, tid: Tid) {
