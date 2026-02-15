@@ -5,6 +5,7 @@
 #![cfg_attr(miri, allow(unused_macros))]
 #![cfg_attr(test, allow(dead_code))]
 #![cfg_attr(test, allow(unused_imports))]
+#![deny(clippy::unwrap_used)]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(assert_matches)]
