@@ -20,6 +20,7 @@ pub enum ValidationError {
 #[repr(usize)]
 pub enum SysWaitError {
     InvalidPid,
+    NotAChild,
 }
 
 #[derive(Debug)]

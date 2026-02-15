@@ -89,9 +89,9 @@ impl KernelSyscalls for SyscallHandler {
         Ok(tid)
     }
 
-    fn sys_wait(&mut self, tid: UserspaceArgument<Tid>) -> Result<(), SysWaitError> {
+    fn sys_wait(&mut self, tid: UserspaceArgument<Tid>) -> Result<Tid, SysWaitError> {
         if Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*tid)) {
-            Ok(())
+            Ok(*tid)
         } else {
             Err(SysWaitError::InvalidPid)
         }
