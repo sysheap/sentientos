@@ -25,6 +25,4 @@ syscalls!(
     sys_open_udp_socket(port: u16) -> Result<UDPDescriptor, SysSocketError>;
     sys_write_back_udp_socket<'a>(descriptor: UDPDescriptor, buffer: &'a [u8]) -> Result<usize, SysSocketError>;
     sys_read_udp_socket<'a>(descriptor: UDPDescriptor, buffer: &'a mut [u8]) -> Result<usize, SysSocketError>;
-    sys_panic() -> ();
-    sys_print_programs() -> ();
 );
