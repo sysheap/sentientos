@@ -226,7 +226,6 @@ impl Process {
         self.parent_tid
     }
 
-    #[allow(dead_code)]
     pub fn set_parent_tid(&mut self, parent_tid: Tid) {
         self.parent_tid = parent_tid;
     }

@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 use common::pid::Tid;
 
 use crate::{
@@ -25,12 +25,16 @@ pub fn init() {
 
 pub struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,
+    exited_children: BTreeMap<Tid, Vec<Tid>>,
+    waiting_for_any_child: BTreeMap<Tid, Tid>,
 }
 
 impl ProcessTable {
     pub fn new() -> Self {
         Self {
             threads: BTreeMap::new(),
+            exited_children: BTreeMap::new(),
+            waiting_for_any_child: BTreeMap::new(),
         }
     }
 
@@ -81,12 +85,8 @@ impl ProcessTable {
         );
         debug!("Removing tid={tid} from process table");
         if let Some(thread) = self.threads.remove(&tid) {
-            thread.with_lock(|mut t| {
+            let (parent_tid, main_tid) = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Waiting);
-                // Send ipi to all other harts such they reschedule
-                // It would be more efficient to only send the ipi to
-                // the hart which runs the process. However, I don't
-                // want to put too much effort into that now.
                 Cpu::current().ipi_to_all_but_me();
 
                 for tid in t.get_notifies_on_die() {
@@ -94,12 +94,57 @@ impl ProcessTable {
                 }
                 if let Some(clear_child_tid) = t.get_clear_child_tid() {
                     let process = t.process();
-                    // We don't care if the address is not mapped anymore
-                    // Since this operation should only wake up other threads
                     let _ = clear_child_tid.write_with_process_lock(&process.lock(), 0);
                 }
+
+                let process = t.process();
+                let process = process.lock();
+                (process.parent_tid(), process.main_tid())
             });
+
+            self.record_exited_child(parent_tid, main_tid);
+
+            if let Some(waiter_tid) = self.waiting_for_any_child.remove(&parent_tid) {
+                self.wake_process_up(waiter_tid);
+            }
+
+            // Reparent orphans to init (Tid(1))
+            let init_tid = Tid(1);
+            for child_thread in self.threads.values() {
+                child_thread.with_lock(|t| {
+                    let process = t.process();
+                    let mut process = process.lock();
+                    if process.parent_tid() == main_tid {
+                        process.set_parent_tid(init_tid);
+                    }
+                });
+            }
+
+            // Move exited_children entries from dying process to init
+            if let Some(orphan_exits) = self.exited_children.remove(&main_tid) {
+                self.exited_children
+                    .entry(init_tid)
+                    .or_default()
+                    .extend(orphan_exits);
+            }
         }
+    }
+
+    pub fn record_exited_child(&mut self, parent_tid: Tid, child_tid: Tid) {
+        self.exited_children
+            .entry(parent_tid)
+            .or_default()
+            .push(child_tid);
+    }
+
+    #[allow(dead_code)]
+    pub fn take_one_exited_child(&mut self, parent_tid: Tid) -> Option<Tid> {
+        let children = self.exited_children.get_mut(&parent_tid)?;
+        let child = children.pop();
+        if children.is_empty() {
+            self.exited_children.remove(&parent_tid);
+        }
+        child
     }
 
     pub fn next_runnable(&mut self) -> Option<ThreadRef> {
