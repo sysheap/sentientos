@@ -42,6 +42,7 @@ fn handle_syscall() {
 | brk | brk | Adjust heap break |
 | close | fd | Close file descriptor |
 | exit_group | status | Exit process |
+| fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
 | gettid | | Get thread ID |
 | ioctl | fd, op | Device control (+ SentientOS extensions) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
@@ -123,7 +124,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 
 ```rust
 impl KernelSyscalls for SyscallHandler {
-    fn sys_read_input(&mut self) -> Option<u8>;
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
     fn sys_wait(&mut self, tid) -> Result<Tid, SysWaitError>;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;

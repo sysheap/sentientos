@@ -76,6 +76,7 @@ fn default_bindgen_builder() -> bindgen::Builder {
 
 fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm-generic/fcntl.h")
         .header("linux_headers/include/asm-generic/ioctls.h")
         .header("linux_headers/include/asm-generic/poll.h")
         .header("linux_headers/include/asm-generic/signal.h")

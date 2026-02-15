@@ -10,7 +10,6 @@ use common::{
 use crate::{
     cpu::Cpu,
     debug,
-    io::stdin_buf::STDIN_BUFFER,
     net::{self, arp, udp::UdpHeader},
     processes::{process::ProcessRef, thread::ThreadRef},
 };
@@ -59,10 +58,6 @@ impl SyscallHandler {
 
 impl KernelSyscalls for SyscallHandler {
     type ArgWrapper<T: SyscallArgument> = UserspaceArgument<T>;
-
-    fn sys_read_input(&mut self) -> Option<u8> {
-        STDIN_BUFFER.lock().pop()
-    }
 
     fn sys_execute<'a>(
         &mut self,

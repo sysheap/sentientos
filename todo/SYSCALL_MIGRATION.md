@@ -6,7 +6,6 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 
 | # | Custom Syscall | Linux Equivalent | Callers | Difficulty |
 |---|----------------|-----------------|---------|------------|
-| 1 | `sys_read_input` | `read` (NR 63) with non-blocking stdin | `udp.rs` | Medium |
 | 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
 | 4 | `sys_wait` | `wait4` (NR 260) | `init.rs`, `sesh.rs`, `stress.rs` | Medium |
 | 6 | `sys_open_udp_socket` | `socket` + `bind` | `udp.rs` | Hard |
@@ -14,25 +13,6 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 | 8 | `sys_read_udp_socket` | `recvfrom` | `udp.rs` | Hard |
 
 ## Detailed Analysis
-
-### 1. `sys_read_input` — `read` with non-blocking stdin
-
-**Current behavior:** Pops one byte from the kernel's `STDIN_BUFFER` if available, returns `None` if empty. Non-blocking.
-
-**Caller:** `udp.rs` — uses it in a busy-loop to poll for keyboard input alongside UDP socket data.
-
-**Linux equivalent:** The Linux `read` syscall (NR 63) already exists in the kernel but is **blocking** — it uses `ReadStdin::new(count).await` which suspends the thread until data is available.
-
-**Migration steps:**
-1. The `udp.rs` program needs non-blocking stdin. Options:
-   - Support `O_NONBLOCK` on fd 0 via `fcntl`, making `read` return `EAGAIN` when no data is available.
-   - Support `ppoll` with a timeout on fd 0, so the program can poll stdin with a zero timeout.
-2. Rewrite `udp.rs` to use `read(0, &mut buf, 1)` instead of `sys_read_input()`. If non-blocking, handle `EAGAIN`. If using `ppoll`, check readiness before reading.
-3. The current `ppoll` implementation asserts `fd.events == 0` — it needs to support `POLLIN` on fd 0.
-
-**Complexity:** Medium. Requires enhancing the kernel's `ppoll` or `read` to support non-blocking I/O on stdin.
-
----
 
 ### 3. `sys_execute` — `clone` + `execve`
 
@@ -136,9 +116,8 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 
 Recommended order based on dependencies and complexity:
 
-1. **`sys_read_input`** (#1) — Enhance `ppoll`/`read` for non-blocking stdin, update `udp.rs`.
-2. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
-3. **Socket syscalls** (#6, #7, #8) — Implement `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
+1. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
+2. **Socket syscalls** (#6, #7, #8) — Implement `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
 
 ## Key Design Decisions
 

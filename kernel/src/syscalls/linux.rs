@@ -3,7 +3,11 @@ use crate::{
     klibc::util::UsizeExt,
     memory::{PAGE_SIZE, page_tables::XWRMode},
     print, println,
-    processes::{fd_table::FileDescriptor, process::ProcessRef, timer},
+    processes::{
+        fd_table::{FdFlags, FileDescriptor},
+        process::ProcessRef,
+        timer,
+    },
     syscalls::{handler::SyscallHandler, macros::linux_syscalls},
 };
 use alloc::vec::Vec;
@@ -15,9 +19,10 @@ use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
     errno::Errno,
     syscall_types::{
-        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC,
-        PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP,
-        TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
+        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, F_GETFL, F_SETFL, MAP_ANONYMOUS, MAP_FIXED,
+        MAP_PRIVATE, O_NONBLOCK, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK,
+        SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t,
+        stack_t, timespec,
     },
 };
 
@@ -25,6 +30,7 @@ linux_syscalls! {
     SYSCALL_NR_BRK => brk(brk: c_ulong);
     SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
     SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint);
@@ -54,13 +60,21 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*mut u8>,
         count: usize,
     ) -> Result<isize, headers::errno::Errno> {
-        let descriptor = self
+        let (descriptor, flags) = self
             .handler
             .current_process()
-            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .with_lock(|p| {
+                p.fd_table()
+                    .get(fd)
+                    .map(|e| (e.descriptor.clone(), e.flags))
+            })
             .ok_or(Errno::EBADF)?;
 
-        let data = descriptor.read(count).await?;
+        let data = if flags.is_nonblocking() {
+            descriptor.try_read(count)?
+        } else {
+            descriptor.read(count).await?
+        };
         assert!(data.len() <= count, "Read more than requested");
         buf.write_slice(&data)?;
 
@@ -76,7 +90,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let descriptor = self
             .handler
             .current_process()
-            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
             .ok_or(Errno::EBADF)?;
 
         let data = buf.validate_slice(count)?;
@@ -125,7 +139,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         for pfd in &poll_fds {
             self.handler
                 .current_process()
-                .with_lock(|p| p.fd_table().get(pfd.fd).cloned())
+                .with_lock(|p| p.fd_table().get(pfd.fd).map(|e| e.descriptor.clone()))
                 .ok_or(Errno::EBADF)?;
             assert_eq!(
                 pfd.events, 0,
@@ -357,7 +371,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let descriptor = self
             .handler
             .current_process()
-            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
             .ok_or(Errno::EBADF)?;
 
         match descriptor {
@@ -387,7 +401,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let descriptor = self
             .handler
             .current_process()
-            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
             .ok_or(Errno::EBADF)?;
 
         let iov = iov.validate_slice(usize::try_from(iovcnt).map_err(|_| Errno::EINVAL)?)?;
@@ -413,6 +427,32 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .current_process()
             .with_lock(|mut p| p.fd_table_mut().close(fd))?;
         Ok(0)
+    }
+
+    async fn fcntl(
+        &mut self,
+        fd: c_int,
+        cmd: c_int,
+        arg: c_ulong,
+    ) -> Result<isize, headers::errno::Errno> {
+        match cmd.cast_unsigned() {
+            F_GETFL => {
+                let flags = self
+                    .handler
+                    .current_process()
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                Ok(flags.as_raw() as isize)
+            }
+            F_SETFL => {
+                let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let flags = FdFlags::from_raw(raw & O_NONBLOCK as i32);
+                self.handler
+                    .current_process()
+                    .with_lock(|mut p| p.fd_table_mut().set_flags(fd, flags))?;
+                Ok(0)
+            }
+            _ => Err(Errno::EINVAL),
+        }
     }
 
     async fn getppid(&mut self) -> Result<isize, headers::errno::Errno> {
