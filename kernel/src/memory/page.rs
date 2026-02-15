@@ -50,6 +50,9 @@ pub trait PagesAsSlice {
 
 impl PagesAsSlice for [Page] {
     fn as_u8_slice(&mut self) -> &mut [u8] {
+        // SAFETY: Page is repr(C, align(4096)) containing [u8; PAGE_SIZE],
+        // so reinterpreting &mut [Page] as &mut [u8] is valid. The lifetime
+        // is tied to &mut self.
         unsafe {
             core::slice::from_raw_parts_mut(
                 self.as_mut_ptr() as *mut u8,

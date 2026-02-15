@@ -90,6 +90,8 @@ impl FreeBlock {
         );
 
         let block = FreeBlock::new_with_size(size);
+        // SAFETY: block_ptr comes from the page allocator and has sufficient
+        // size (verified by assertions above) and alignment for FreeBlock.
         unsafe {
             block_ptr.write(block);
         }
@@ -99,6 +101,7 @@ impl FreeBlock {
         mut block_ptr: NonNull<FreeBlock>,
         requested_size: AlignedSizeWithMetadata,
     ) -> NonNull<FreeBlock> {
+        // SAFETY: block_ptr is a valid heap block managed by our allocator.
         let block = unsafe { block_ptr.as_mut() };
         assert!(block.size.total_size() >= requested_size.total_size() + Self::MINIMUM_SIZE);
         assert!(
@@ -109,6 +112,8 @@ impl FreeBlock {
 
         let remaining_size = block.size.get_remaining_size(requested_size);
 
+        // SAFETY: The original block is large enough (checked above) so the
+        // new pointer is within the same allocation.
         let new_block = unsafe { block_ptr.byte_add(requested_size.total_size()) };
 
         assert!(
@@ -185,7 +190,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
     fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
         assert!(!ptr.is_null());
         if self.is_page_allocator_allocation(&layout) {
-            // Deallocate directly to the page allocator
+            // SAFETY: ptr was returned by alloc and is non-null (asserted above).
             unsafe {
                 let pages = Allocator::dealloc(NonNull::new_unchecked(ptr).cast());
                 self.allocated_memory -= pages * PAGE_SIZE;
@@ -193,8 +198,12 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
             return;
         }
         let size = AlignedSizeWithMetadata::from_layout(layout);
+        // SAFETY: ptr is non-null (asserted above) and was allocated with
+        // FreeBlock alignment by our alloc method.
         let free_block_ptr = unsafe { NonNull::new_unchecked(ptr).cast() };
         let free_block = FreeBlock::new_with_size(size);
+        // SAFETY: The pointer is valid and has sufficient size/alignment for
+        // FreeBlock (it was originally allocated as one).
         unsafe {
             free_block_ptr.write(free_block);
             self.insert(free_block_ptr);
@@ -203,6 +212,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
     }
 
     fn insert(&mut self, mut block_ptr: NonNull<FreeBlock>) {
+        // SAFETY: block_ptr is a valid heap block initialized by our allocator.
         let block = unsafe { block_ptr.as_mut() };
         assert!(block.next.is_none(), "Heap metadata corruption");
         block.next = self.genesis_block.next.take();
@@ -214,6 +224,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         block_ptr: NonNull<FreeBlock>,
         requested_size: AlignedSizeWithMetadata,
     ) {
+        // SAFETY: block_ptr is a valid heap block managed by our allocator.
         let block = unsafe { block_ptr.as_ref() };
         let current_block_size = block.size;
         assert!(current_block_size >= requested_size);
@@ -230,6 +241,8 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
         requested_size: AlignedSizeWithMetadata,
     ) -> Option<NonNull<FreeBlock>> {
         let mut current = &mut self.genesis_block;
+        // SAFETY: Each block in the free list was inserted by our allocator
+        // and remains valid until removed.
         while let Some(potential_block) = current.next.map(|mut block| unsafe { block.as_mut() }) {
             if potential_block.size < requested_size {
                 current = potential_block;
@@ -249,7 +262,8 @@ struct SpinlockHeap<Allocator: PageAllocator> {
     inner: Spinlock<Heap<Allocator>>,
 }
 
-// SAFETY: Heap can be send between threads
+// SAFETY: Heap is only accessed through a Spinlock, which provides mutual
+// exclusion. The raw pointers in the free list are not shared.
 unsafe impl<Allocator: PageAllocator> Send for Heap<Allocator> {}
 
 impl<Allocator: PageAllocator> SpinlockHeap<Allocator> {
@@ -260,6 +274,8 @@ impl<Allocator: PageAllocator> SpinlockHeap<Allocator> {
     }
 }
 
+// SAFETY: GlobalAlloc requires thread-safe alloc/dealloc. We delegate to a
+// Spinlock-protected Heap which serializes all access.
 unsafe impl<Allocator: PageAllocator> GlobalAlloc for SpinlockHeap<Allocator> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         self.inner.lock().alloc(layout)

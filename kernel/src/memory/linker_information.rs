@@ -2,6 +2,8 @@ macro_rules! getter_address {
     ($name:ident) => {
         #[cfg(not(miri))]
         pub fn $name() -> usize {
+            // SAFETY: These symbols are defined by the linker script. We only
+            // take their address (never read their value), which is always safe.
             unsafe extern "C" {
                 static $name: usize;
             }

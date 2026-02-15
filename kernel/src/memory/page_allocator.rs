@@ -61,10 +61,14 @@ impl<'a> MetadataPageAllocator<'a> {
 
         let (metadata, heap) = memory.split_at_mut(number_of_heap_pages);
 
+        // SAFETY: PageStatus is repr(u8), so any u8 alignment is sufficient.
+        // We assert begin/end are empty to confirm perfect alignment.
         let (begin, metadata, end) = unsafe { metadata.align_to_mut::<MaybeUninit<PageStatus>>() };
         assert!(begin.is_empty());
         assert!(end.is_empty());
 
+        // SAFETY: Page is repr(C, align(4096)). The heap region starts at a
+        // page-aligned address (verified by the assert below).
         let (_begin, heap, _end) = unsafe { heap.align_to_mut::<MaybeUninit<Page>>() };
         assert!(metadata.len() <= heap.len());
         assert!((heap[0].as_ptr() as usize).is_multiple_of(PAGE_SIZE));
@@ -77,7 +81,7 @@ impl<'a> MetadataPageAllocator<'a> {
             x.write(PageStatus::FirstUse);
         });
 
-        // SAFTEY: We initialized all the data in the previous statement
+        // SAFETY: All elements were initialized via MaybeUninit::write above.
         self.metadata = unsafe {
             core::mem::transmute::<&mut [MaybeUninit<PageStatus>], &mut [PageStatus]>(metadata)
         };
@@ -104,6 +108,8 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 
     fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<MaybeUninit<Page>> {
+        // SAFETY: page_index is within the metadata bounds, so the resulting
+        // pointer is within the heap pages allocation.
         unsafe { NonNull::new(self.pages.start.add(page_index)).unwrap() }
     }
 
@@ -114,6 +120,8 @@ impl<'a> MetadataPageAllocator<'a> {
         assert!(page_ptr >= heap_start);
         assert!(page_ptr < heap_end);
         assert!(page_ptr.is_aligned());
+        // SAFETY: Both pointers are within the same heap allocation, verified
+        // by the assertions above.
         let offset = unsafe { page_ptr.offset_from(heap_start) };
         offset as usize
     }
