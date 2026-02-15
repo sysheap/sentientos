@@ -123,6 +123,7 @@ impl<T> Spinlock<T> {
 // SAFETY: Spinlock provides mutual exclusion via an atomic lock, so it is safe
 // to share across threads as long as the inner type can be sent between threads.
 unsafe impl<T: Send> Sync for Spinlock<T> {}
+// SAFETY: Same reasoning as Sync — the Spinlock serializes all access.
 unsafe impl<T: Send> Send for Spinlock<T> {}
 
 pub struct SpinlockGuard<'a, T> {
