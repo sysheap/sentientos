@@ -1,10 +1,10 @@
-use common::{pid::Tid, syscalls::sys_wait};
-
 extern crate userspace;
 
 fn main() {
-    match sys_wait(Tid(1)) {
-        Err(common::errors::SysWaitError::NotAChild) => println!("NotAChild"),
-        other => println!("Unexpected: {:?}", other),
+    let ret = unsafe { libc::waitpid(1, core::ptr::null_mut(), 0) };
+    if ret == -1 {
+        println!("NotAChild");
+    } else {
+        println!("Unexpected: waitpid returned {ret}");
     }
 }

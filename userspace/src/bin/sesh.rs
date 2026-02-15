@@ -1,7 +1,4 @@
-use common::{
-    ioctl::print_programs,
-    syscalls::{sys_execute, sys_wait},
-};
+use common::{ioctl::print_programs, syscalls::sys_execute};
 use std::{
     io::{Write, stdout},
     string::{String, ToString},
@@ -60,7 +57,9 @@ fn parse_command_and_execute(mut command: String) {
             match execute_result {
                 Ok(pid) => {
                     if !background {
-                        let _ = sys_wait(pid);
+                        unsafe {
+                            libc::waitpid(pid.0 as i32, core::ptr::null_mut(), 0);
+                        }
                     }
                 }
                 Err(err) => {
