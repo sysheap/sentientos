@@ -32,6 +32,7 @@ pub fn exit_reset() -> ! {
 }
 
 pub fn wait_for_the_end() -> ! {
+    // SAFETY: We are shutting down — disabling interrupts prevents further preemption.
     unsafe {
         Cpu::disable_global_interrupts();
     }

@@ -6,6 +6,7 @@
 #![cfg_attr(test, allow(dead_code))]
 #![cfg_attr(test, allow(unused_imports))]
 #![deny(clippy::unwrap_used)]
+#![cfg_attr(not(test), deny(clippy::undocumented_unsafe_blocks))]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(assert_matches)]
