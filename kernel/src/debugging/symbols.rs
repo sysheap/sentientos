@@ -8,7 +8,8 @@ pub static THE: RuntimeInitializedData<&'static str> = RuntimeInitializedData::n
 
 pub fn init() {
     let symbols_start = LinkerInformation::__start_symbols();
-    // SAFETY: We now that the symbols are null terminated
+    // SAFETY: The symbols section is null-terminated by the build process
+    // (objcopy --update-section appends a NUL byte).
     let cstr = unsafe { core::ffi::CStr::from_ptr(symbols_start as *const c_char) };
     let str = cstr.to_str().expect("Symbols must be UTF-8");
     info!("Initialized symbols ({} bytes)", str.len());
