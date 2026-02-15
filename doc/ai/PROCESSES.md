@@ -162,8 +162,6 @@ pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>>;
 
 struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,
-    exited_children: BTreeMap<Tid, Vec<Tid>>,      // parent -> [exited child tids]
-    waiting_for_any_child: BTreeMap<Tid, Tid>,     // parent -> waiter thread tid
 }
 ```
 
@@ -192,20 +190,9 @@ Every process tracks its parent via `parent_tid: Tid`:
 
 `sys_wait(tid)` verifies `target.parent_tid == caller.main_tid` before allowing the wait. Returns `SysWaitError::NotAChild` on mismatch.
 
-### Wait-for-any-child
-
-`sys_wait(Tid(0))` waits for any child:
-1. If exited children are queued, returns one immediately
-2. If live children exist, blocks until one exits
-3. If no children at all, returns `SysWaitError::NotAChild`
-
 ### Orphan reparenting
 
-When a process dies in `ProcessTable::kill()`:
-1. Exited child is recorded in `exited_children[parent_tid]`
-2. Any `waiting_for_any_child` waiter for the parent is woken
-3. Orphans (children of the dying process) are reparented to init (`Tid(1)`)
-4. Exited-children entries for the dying process move to init
+When a process dies in `ProcessTable::kill()`, orphans (children of the dying process) are reparented to init (`Tid(1)`).
 
 ### getppid syscall
 
