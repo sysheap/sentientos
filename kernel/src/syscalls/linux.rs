@@ -1,4 +1,5 @@
 use crate::{
+    klibc::util::UsizeExt,
     memory::{PAGE_SIZE, page_tables::XWRMode},
     processes::{fd_table::FileDescriptor, process::ProcessRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls},
@@ -257,7 +258,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     async fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
         self.handler
             .current_process()
-            .with_lock(|mut p| Ok(p.brk(crate::klibc::util::u64_as_usize(brk)) as isize))
+            .with_lock(|mut p| Ok(p.brk(brk.as_usize()) as isize))
     }
 
     async fn mmap(
@@ -378,7 +379,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         for io in iov {
             let buf = LinuxUserspaceArg::<*const u8>::new(io.iov_base as usize, self.get_process());
-            let mut buf = buf.validate_slice(crate::klibc::util::u64_as_usize(io.iov_len))?;
+            let mut buf = buf.validate_slice(io.iov_len.as_usize())?;
             data.append(&mut buf);
         }
 

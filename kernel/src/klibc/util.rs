@@ -7,16 +7,23 @@ use crate::memory::PAGE_SIZE;
 
 const _: () = assert!(core::mem::size_of::<usize>() == core::mem::size_of::<u64>());
 
-#[allow(clippy::cast_possible_truncation)]
-pub const fn u64_as_usize(v: u64) -> usize {
-    v as usize
+#[allow(clippy::wrong_self_convention)]
+pub trait UsizeExt {
+    fn as_usize(self) -> usize;
+}
+
+impl UsizeExt for u64 {
+    #[allow(clippy::cast_possible_truncation)]
+    fn as_usize(self) -> usize {
+        self as usize
+    }
 }
 
 pub fn wrapping_add_signed(base: usize, offset: i64) -> usize {
     if offset >= 0 {
-        base.wrapping_add(u64_as_usize(offset.unsigned_abs()))
+        base.wrapping_add(offset.unsigned_abs().as_usize())
     } else {
-        base.wrapping_sub(u64_as_usize(offset.unsigned_abs()))
+        base.wrapping_sub(offset.unsigned_abs().as_usize())
     }
 }
 

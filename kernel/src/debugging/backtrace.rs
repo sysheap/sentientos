@@ -7,7 +7,7 @@ use crate::{
         unwinder::{RegisterRule, Unwinder},
     },
     info,
-    klibc::runtime_initialized::RuntimeInitializedData,
+    klibc::{runtime_initialized::RuntimeInitializedData, util::UsizeExt},
     memory::linker_information::LinkerInformation,
 };
 use alloc::vec::Vec;
@@ -88,7 +88,7 @@ impl<'a> Backtrace<'a> {
         let row = unwinder.find_row_for_address(ra);
 
         let cfa = crate::klibc::util::wrapping_add_signed(
-            regs[crate::klibc::util::u64_as_usize(row.cfa_register)],
+            regs[row.cfa_register.as_usize()],
             row.cfa_offset,
         );
 
