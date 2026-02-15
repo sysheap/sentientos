@@ -96,6 +96,8 @@
             name="$(basename "$target")"
             ln -sf "$target" "./kernel/compiled_userspace_nix/$name"
           done
+
+          just mcp-server
         '';
 
       in
