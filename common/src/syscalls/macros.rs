@@ -18,6 +18,9 @@ macro_rules! syscalls {
                 };
                 let mut ret = core::mem::MaybeUninit::<$ret>::uninit();
                 let successful: usize;
+                // SAFETY: ecall traps into S-mode kernel. The register
+                // convention is: a7=syscall nr, a1=arg ptr, a2=ret ptr,
+                // a0=status. The kernel validates the pointers.
                 unsafe {
                     core::arch::asm!(
                         "ecall",
@@ -32,6 +35,8 @@ macro_rules! syscalls {
                 if status != Ok($crate::syscalls::SyscallStatus::Success) {
                     panic!("Could not execute syscall {}: {:?}", stringify!($name), status);
                 }
+                // SAFETY: The kernel wrote a valid value into ret via the
+                // pointer we passed in a2 (success verified above).
                 unsafe {
                     ret.assume_init()
                 }

@@ -98,6 +98,8 @@ impl Iterator for PciCapabilityIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let capability: MMIO<PciCapability> = match self.next_offset {
             0 => return None,
+            // SAFETY: next_offset is read from PCI capability linked list.
+            // The offset is within the 256-byte configuration space.
             _ => unsafe {
                 self.pci_device
                     .configuration_space
@@ -123,6 +125,8 @@ impl PCIDevice {
         &self.configuration_space
     }
 
+    /// # Safety
+    /// `address` must point to a valid PCI configuration space MMIO region.
     unsafe fn try_new(address: usize) -> Option<Self> {
         let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address);
         if pci_device.vendor_id().read() == INVALID_VENDOR_ID {
@@ -210,6 +214,8 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
                     device,
                     function,
                 );
+                // SAFETY: address is computed from the PCI host bridge base
+                // and valid bus/device/function numbers.
                 let maybe_device = unsafe { PCIDevice::try_new(address) };
                 if let Some(device) = maybe_device {
                     let vendor_id = device.configuration_space.vendor_id().read();
