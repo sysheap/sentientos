@@ -117,7 +117,6 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_print_programs(&mut self);
     fn sys_panic(&mut self);
     fn sys_read_input(&mut self) -> Option<u8>;
-    fn sys_exit(&mut self, status: UserspaceArgument<isize>);
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
     fn sys_wait(&mut self, tid) -> Result<(), SysWaitError>;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
@@ -130,7 +129,6 @@ impl KernelSyscalls for SyscallHandler {
 
 ```rust
 pub struct SyscallHandler {
-    process_exit: bool,
     current_process: ProcessRef,
     current_thread: ThreadRef,
     current_tid: Tid,
@@ -141,6 +139,7 @@ impl SyscallHandler {
     pub fn current_tid(&self) -> Tid;
     pub fn current_process(&self) -> &ProcessRef;
     pub fn current_thread(&self) -> &ThreadRef;
+    pub fn sys_exit(&mut self, status: isize);
 }
 ```
 

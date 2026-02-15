@@ -3,16 +3,10 @@ use crate::{
     memory::{PAGE_SIZE, page_tables::XWRMode},
     print,
     processes::{process::ProcessRef, timer},
-    syscalls::{handler::SyscallHandler, macros::linux_syscalls, validator::UserspaceArgument},
+    syscalls::{handler::SyscallHandler, macros::linux_syscalls},
 };
 use alloc::{string::String, vec::Vec};
-use common::{
-    constructable::Constructable,
-    syscalls::{
-        kernel::KernelSyscalls,
-        trap_frame::{Register, TrapFrame},
-    },
-};
+use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
     errno::Errno,
@@ -82,8 +76,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
-        self.handler
-            .sys_exit(UserspaceArgument::new(status as isize));
+        self.handler.sys_exit(status as isize);
         Ok(0)
     }
 
