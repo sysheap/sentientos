@@ -7,14 +7,6 @@ independently actionable. Reference by number (e.g. "R-02") in commits and PRs.
 
 ## High Impact
 
-**R-01 — Introduce a file descriptor table.**
-Process has no generic fd table — stdin/stdout/stderr are magic constants checked
-in ~10 places across `syscalls/linux.rs` (lines 58, 77, 132, 362, 377). UDP
-sockets live in a separate `BTreeMap<UDPDescriptor, SharedAssignedSocket>`. A
-proper `FdTable` mapping `i32 → FileDescriptor` (enum of Stdio, Socket, future
-File/Pipe) would eliminate all hardcoded fd comparisons and unify socket
-management.
-
 **R-02 — Implement munmap.**
 `munmap` is a no-op returning `Ok(0)` (`syscalls/linux.rs:347-354`). Every
 `mmap` allocation leaks permanently. Implementing real munmap requires
@@ -23,12 +15,6 @@ page-table unmapping and feeding pages back to the allocator.
 ---
 
 ## Medium Impact
-
-**R-03 — Replace unsafe transmute for SbiError / XWRMode / PageStatus.**
-`sbi_call.rs:31` uses `core::mem::transmute::<i64, SbiError>()`, and
-`page_table_entry.rs` and `page_allocator.rs:82` do the same for enum
-conversions. Use `TryFrom` implementations or explicit match arms to make
-invalid values a checked error rather than undefined behavior.
 
 **R-04 — Remove hardcoded IP address.**
 `net/mod.rs:22` defines `static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15)`
