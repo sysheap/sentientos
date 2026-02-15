@@ -1,3 +1,6 @@
+set dotenv-load
+set export
+
 build: build-cargo patch-symbols
 
 patch-symbols:
