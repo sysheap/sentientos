@@ -594,8 +594,6 @@ impl RootPageTableHolder {
             *third_level_entry = PageTableEntry(null_mut());
             offset += PAGE_SIZE;
         }
-
-        Cpu::sfence_vma();
     }
 
     pub fn is_mapped(&self, range: Range<usize>) -> bool {
