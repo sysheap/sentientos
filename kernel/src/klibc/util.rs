@@ -70,7 +70,7 @@ impl BufferExtension for [u8] {
         // of the returned reference is tied to &self.
         unsafe {
             assert!(self.len() >= core::mem::size_of::<T>());
-            let ptr: *const T = self.as_ptr() as *const T;
+            let ptr: *const T = self.as_ptr().cast::<T>();
             assert!(
                 ptr.is_aligned(),
                 "pointer not aligned for {}",
@@ -90,7 +90,10 @@ pub trait ByteInterpretable {
     fn as_slice(&self) -> &[u8] {
         // SAFETY: It is always safe to interpret a allocated struct as bytes
         unsafe {
-            core::slice::from_raw_parts(self as *const _ as *const u8, core::mem::size_of_val(self))
+            core::slice::from_raw_parts(
+                (self as *const Self).cast::<u8>(),
+                core::mem::size_of_val(self),
+            )
         }
     }
 }

@@ -254,7 +254,7 @@ impl<'a> ElfFile<'a> {
         assert!(self.data.len() >= core::mem::size_of::<ElfHeader>());
         // SAFETY: Size checked above; ElfFile is only created after
         // check_validity passes, which verifies magic and header size.
-        unsafe { &*(self.data.as_ptr() as *const ElfHeader) }
+        unsafe { &*self.data.as_ptr().cast::<ElfHeader>() }
     }
 
     pub fn get_program_headers(&self) -> &[ElfProgramHeaderEntry] {
@@ -279,7 +279,7 @@ impl<'a> ElfFile<'a> {
                 .data
                 .as_ptr()
                 .byte_add(position_program_header as usize)
-                as *const ElfProgramHeaderEntry;
+                .cast::<ElfProgramHeaderEntry>();
             core::slice::from_raw_parts(program_header_pointer, number_of_entries as usize)
         };
 
@@ -302,7 +302,7 @@ impl<'a> ElfFile<'a> {
 
         // SAFETY: Size checked above (FileTooShort check). We only read the
         // header to validate fields before constructing ElfFile.
-        let header = unsafe { &*(data.as_ptr() as *const ElfHeader) };
+        let header = unsafe { &*data.as_ptr().cast::<ElfHeader>() };
 
         if header.magic_number.get() != ELF_MAGIC_NUMBER {
             return Some(ElfParseErrors::MagicNumberWrong);

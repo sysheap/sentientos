@@ -389,14 +389,14 @@ mod tests {
         ) -> UnwindReasonCode {
             // SAFETY: arg was cast from &mut CallbackData in the caller below;
             // the callback is invoked synchronously so the reference is valid.
-            let data = unsafe { &mut *(arg as *mut CallbackData) };
+            let data = unsafe { &mut *arg.cast::<CallbackData>() };
             data.addresses.push_back(_Unwind_GetIP(unwind_ctx));
             UnwindReasonCode::NO_REASON
         }
 
         let mut data = CallbackData::default();
 
-        _Unwind_Backtrace(callback, &mut data as *mut _ as _);
+        _Unwind_Backtrace(callback, (&mut data as *mut CallbackData).cast());
         CalleeSavedRegs::with_context(|regs| {
             let backtrace = Backtrace::new();
             let mut own_addr = VecDeque::new();

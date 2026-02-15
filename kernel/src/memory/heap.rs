@@ -351,12 +351,12 @@ mod test {
 
     fn alloc<T>(heap: &SpinlockHeap<TestAllocator>) -> *mut T {
         let layout = core::alloc::Layout::new::<T>();
-        unsafe { heap.alloc(layout) as *mut T }
+        unsafe { heap.alloc(layout).cast::<T>() }
     }
 
     fn dealloc<T>(heap: &SpinlockHeap<TestAllocator>, ptr: *mut T) {
         let layout = core::alloc::Layout::new::<T>();
-        unsafe { heap.dealloc(ptr as *mut u8, layout) };
+        unsafe { heap.dealloc(ptr.cast::<u8>(), layout) };
     }
 
     #[test_case]
