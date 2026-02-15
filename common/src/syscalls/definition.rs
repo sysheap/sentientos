@@ -1,5 +1,5 @@
 use crate::{
-    errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
+    errors::{SysExecuteError, SysSocketError, SysWaitError},
     net::UDPDescriptor,
     pid::Tid,
     scalar_enum,
@@ -19,7 +19,6 @@ scalar_enum! {
 }
 
 syscalls!(
-    sys_write<'a>(s: &'a str) -> Result<(), ValidationError>;
     sys_read_input() -> Option<u8>;
     sys_exit(status: isize) -> ();
     sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<Tid, SysExecuteError>;

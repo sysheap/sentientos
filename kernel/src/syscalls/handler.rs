@@ -1,5 +1,5 @@
 use common::{
-    errors::{SysExecuteError, SysSocketError, SysWaitError, ValidationError},
+    errors::{SysExecuteError, SysSocketError, SysWaitError},
     net::UDPDescriptor,
     pid::Tid,
     pointer::Pointer,
@@ -66,12 +66,6 @@ impl KernelSyscalls for SyscallHandler {
 
     fn sys_panic(&mut self) {
         panic!("Userspace triggered kernel panic");
-    }
-
-    fn sys_write(&mut self, s: UserspaceArgument<&str>) -> Result<(), ValidationError> {
-        let s = s.validate(self)?;
-        print!("{s}");
-        Ok(())
     }
 
     fn sys_read_input(&mut self) -> Option<u8> {
