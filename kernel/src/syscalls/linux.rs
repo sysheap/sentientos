@@ -363,14 +363,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             FileDescriptor::Stdout | FileDescriptor::Stderr if op == TIOCGWINSZ => {
                 Err(Errno::ENOTTY)
             }
-            _ if op == SENTIENT_LIST_PROGRAMS => {
+            FileDescriptor::Stdout if op == SENTIENT_LIST_PROGRAMS => {
                 for (name, _) in PROGRAMS {
                     print!("{name} ");
                 }
-                println!("");
+                println!();
                 Ok(0)
             }
-            _ if op == SENTIENT_PANIC => {
+            FileDescriptor::Stdout if op == SENTIENT_PANIC => {
                 panic!("Userspace triggered kernel panic");
             }
             _ => Err(Errno::EINVAL),
