@@ -275,7 +275,7 @@ impl<'a> EhFrameIterator<'a> {
             consts::DW_CFA_DEF_CFA => {
                 let register =
                     u16::try_from(instructions.consume_unsized_type::<UnsignedLEB128>()?.get())
-                        .unwrap();
+                        .expect("Register number must fit in u16");
                 let offset = instructions.consume_unsized_type::<UnsignedLEB128>()?.get();
                 Some(Instruction::DefCfa { register, offset })
             }
@@ -359,12 +359,20 @@ mod tests {
     #[cfg(not(miri))]
     #[test_case]
     fn parser_works() {
-        let file =
-            ElfBytes::<elf::endian::LittleEndian>::minimal_parse(KERNEL_ELF_TEST_BINARY).unwrap();
+        let file = ElfBytes::<elf::endian::LittleEndian>::minimal_parse(KERNEL_ELF_TEST_BINARY)
+            .expect("ELF parse must succeed");
 
-        let eh_frame = file.section_header_by_name(".eh_frame").unwrap().unwrap();
-        let text = file.section_header_by_name(".text").unwrap().unwrap();
-        let (eh_frame_data, _) = file.section_data(&eh_frame).unwrap();
+        let eh_frame = file
+            .section_header_by_name(".eh_frame")
+            .expect("Must have .eh_frame section lookup")
+            .expect("Must have .eh_frame section");
+        let text = file
+            .section_header_by_name(".text")
+            .expect("Must have .text section lookup")
+            .expect("Must have .text section");
+        let (eh_frame_data, _) = file
+            .section_data(&eh_frame)
+            .expect("Must read .eh_frame data");
 
         let base_addresses = BaseAddresses::default()
             .set_eh_frame(eh_frame.sh_addr)
@@ -376,12 +384,17 @@ mod tests {
         let parser = EhFrameParser::new(eh_frame_data);
         let mut entries = parser.iter(eh_frame.sh_addr as usize);
 
-        while let Some(control_entry) = control_entries.next().unwrap() {
+        while let Some(control_entry) = control_entries
+            .next()
+            .expect("Control entry iteration must succeed")
+        {
             match control_entry {
                 gimli::CieOrFde::Cie(_) => {}
                 gimli::CieOrFde::Fde(control_fde) => {
-                    let parsed_fde = entries.next().unwrap();
-                    let control_fde = control_fde.parse(EhFrame::cie_from_offset).unwrap();
+                    let parsed_fde = entries.next().expect("Parser must produce matching FDE");
+                    let control_fde = control_fde
+                        .parse(EhFrame::cie_from_offset)
+                        .expect("Control FDE parse must succeed");
 
                     assert_eq!(control_fde, parsed_fde);
 
@@ -395,11 +408,16 @@ mod tests {
                     let mut ctx: UnwindContext<usize, StoreOnHeap> = UnwindContext::new_in();
                     let mut control_table = control_fde
                         .rows(&control_eh_frame, &base_addresses, &mut ctx)
-                        .unwrap();
+                        .expect("Control row iteration must succeed");
 
                     let mut counter = 0;
-                    while let Some(control_row) = control_table.next_row().unwrap() {
-                        let parsed_row = parsed_rows.next().unwrap();
+                    while let Some(control_row) = control_table
+                        .next_row()
+                        .expect("Row iteration must succeed")
+                    {
+                        let parsed_row = parsed_rows
+                            .next()
+                            .expect("Parsed rows must match control rows");
                         assert_eq!(parsed_row, control_row);
                         counter += 1;
                         debug!("{counter} rows ok");
@@ -416,8 +434,13 @@ mod tests {
         mut control_instructions: CallFrameInstructionIter<EndianSlice<'_, LittleEndian>>,
     ) {
         let mut insts = fde.instructions.iter();
-        while let Some(control_inst) = control_instructions.next().unwrap() {
-            let inst = insts.next().unwrap();
+        while let Some(control_inst) = control_instructions
+            .next()
+            .expect("Instruction iteration must succeed")
+        {
+            let inst = insts
+                .next()
+                .expect("Parsed instructions must match control instructions");
             assert_eq!(control_inst, *inst);
         }
         assert!(insts.next().is_none());
@@ -494,7 +517,8 @@ mod tests {
             } = other;
             // Currently we only support zR enconding
             // So check if the control block has that too
-            let augmentation_data = augmentation_data.unwrap();
+            let augmentation_data =
+                augmentation_data.expect("Augmentation data must be present for zR encoding");
             assert!(augmentation_data.len() == 1);
             let augmentation_ok = *augmentation_string == "zR"
                 && !self.has_lsda()

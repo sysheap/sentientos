@@ -268,16 +268,18 @@ mod tests {
     #[test_case]
     fn create_process_from_elf() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let _process = Thread::from_elf(&elf, "prog1", &[]).unwrap();
+        let _process = Thread::from_elf(&elf, "prog1", &[]).expect("ELF loading must succeed");
     }
 
     #[test_case]
     fn mmap_process() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
 
-        let process_ref = Thread::from_elf(&elf, "prog1", &[]).unwrap();
+        let process_ref = Thread::from_elf(&elf, "prog1", &[]).expect("ELF loading must succeed");
 
-        let thread = Arc::into_inner(process_ref).unwrap().into_inner();
+        let thread = Arc::into_inner(process_ref)
+            .expect("Must be sole owner")
+            .into_inner();
         let process = thread.process();
         let mut process = process.lock();
 

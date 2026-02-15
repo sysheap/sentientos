@@ -110,7 +110,10 @@ impl<'a> MetadataPageAllocator<'a> {
     fn page_idx_to_pointer(&self, page_index: usize) -> NonNull<MaybeUninit<Page>> {
         // SAFETY: page_index is within the metadata bounds, so the resulting
         // pointer is within the heap pages allocation.
-        unsafe { NonNull::new(self.pages.start.add(page_index)).unwrap() }
+        unsafe {
+            NonNull::new(self.pages.start.add(page_index))
+                .expect("Heap pointer from add() must be non-null")
+        }
     }
 
     fn page_pointer_to_page_idx(&self, page: NonNull<MaybeUninit<Page>>) -> usize {
@@ -280,10 +283,13 @@ mod tests {
     fn exhaustion_allocation() {
         init_allocator(false, &[]);
         let number_of_pages = PAGE_ALLOC.lock().total_heap_pages();
-        let _pages = alloc(number_of_pages).unwrap();
+        let _pages = alloc(number_of_pages).expect("Allocation must succeed");
         assert!(alloc(1).is_none());
         let allocator = PAGE_ALLOC.lock();
-        let (last, all_metadata_except_last) = allocator.metadata.split_last().unwrap();
+        let (last, all_metadata_except_last) = allocator
+            .metadata
+            .split_last()
+            .expect("Metadata must not be empty");
         assert!(
             all_metadata_except_last
                 .iter()
@@ -313,14 +319,14 @@ mod tests {
     #[test_case]
     fn metadata_integrity() {
         init_allocator(false, &[]);
-        let page1 = alloc(1).unwrap();
+        let page1 = alloc(1).expect("Single page allocation must succeed");
         assert_eq!(PAGE_ALLOC.lock().metadata[0], PageStatus::Last);
         assert!(
             PAGE_ALLOC.lock().metadata[1..]
                 .iter()
                 .all(|s| *s == PageStatus::FirstUse)
         );
-        let page2 = alloc(2).unwrap();
+        let page2 = alloc(2).expect("Two page allocation must succeed");
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..3],
             [PageStatus::Last, PageStatus::Used, PageStatus::Last]
@@ -330,7 +336,7 @@ mod tests {
                 .iter()
                 .all(|s| *s == PageStatus::FirstUse)
         );
-        let page3 = alloc(3).unwrap();
+        let page3 = alloc(3).expect("Three page allocation must succeed");
         assert_eq!(
             PAGE_ALLOC.lock().metadata[..6],
             [
@@ -390,7 +396,11 @@ mod tests {
         init_allocator(true, &[]);
         let first_page = PAGE_ALLOC.lock().pages.start as *const u8;
         unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
-        let page = PAGE_ALLOC.lock().alloc(1).unwrap().start;
+        let page = PAGE_ALLOC
+            .lock()
+            .alloc(1)
+            .expect("Single page allocation must succeed")
+            .start;
         unsafe {
             assert_eq!(page.read(), Page::zero());
         }
@@ -406,7 +416,11 @@ mod tests {
         let first_page = PAGE_ALLOC.lock().pages.start as *const u8;
         unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
 
-        let _page = PAGE_ALLOC.lock().alloc(1).unwrap().start;
+        let _page = PAGE_ALLOC
+            .lock()
+            .alloc(1)
+            .expect("Single page allocation must succeed")
+            .start;
         unsafe { assert_eq!((*first_page), MEMORY_PATTERN) }
     }
 }

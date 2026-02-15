@@ -77,8 +77,12 @@ mod tests {
     #[test_case]
     fn alignment() {
         let mut allocator = init_allocator(8192);
-        let _ = allocator.allocate(3).unwrap();
-        let allocation = allocator.allocate(4096).unwrap();
+        let _ = allocator
+            .allocate(3)
+            .expect("Small allocation must succeed");
+        let allocation = allocator
+            .allocate(4096)
+            .expect("Page-sized allocation must succeed");
         assert!(
             allocation.cpu_address.is_multiple_of(4096),
             "cpu address must be properly aligned"
