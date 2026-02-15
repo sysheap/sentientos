@@ -149,17 +149,15 @@ unsafe impl<T: Send> Send for Spinlock<T> {}
 
 **Can eliminate?** No. This is the standard pattern for interior mutability containers.
 
-### 3b. `RuntimeInitializedData<T>` — `klibc/runtime_initialized.rs:8`
+### 3b. `RuntimeInitializedData<T: Sync>` — `klibc/runtime_initialized.rs:8`
 
 ```rust
-unsafe impl<T> Sync for RuntimeInitializedData<T> {}
+unsafe impl<T: Sync> Sync for RuntimeInitializedData<T> {}
 ```
 
-**Sound?** Yes. Initialization is guarded by an `AtomicBool` swap. After initialization, the data is read-only (returned via `Deref`). The `Sync` impl is justified because `initialize` can only succeed once (panics on double-init), and `Deref` only returns `&T` after checking the atomic flag.
+**Sound?** Yes. **FIXED:** Added `T: Sync` bound. Initialization is guarded by an `AtomicBool` swap. After initialization, the data is read-only (returned via `Deref`). The `Sync` impl is justified because `initialize` can only succeed once (panics on double-init), and `Deref` only returns `&T` after checking the atomic flag.
 
 **Can eliminate?** No. `UnsafeCell` prevents auto-Sync.
-
-**Concern:** The bound should arguably be `T: Sync` — if `T` itself is not `Sync`, sharing `&RuntimeInitializedData<T>` across threads would allow concurrent `&T` access to a non-Sync type. In practice all uses are with `&str`, `Spinlock<Plic>`, `Backtrace`, and `usize`, all of which are `Sync`. **Low risk but technically unsound without `T: Sync` bound.**
 
 ### 3c. `MMIO<T>` — `klibc/mmio.rs:77`
 
@@ -292,19 +290,17 @@ unsafe { *addr_of!((*ptr).cpu_id) }
 
 **Can eliminate?** No. Page tables must be raw pointers because they're shared with hardware (SATP register).
 
-### 4f. `PageTableEntry::get_target_page_table` — `page_table_entry.rs:121-126`
+### 4f. `PageTableEntry::get_target_page_table` — `page_table_entry.rs:121-125`
 
 ```rust
-pub(super) fn get_target_page_table(&self) -> &'static mut PageTable {
+pub(super) fn get_target_page_table(&self) -> *mut PageTable {
     assert!(!self.is_leaf());
     assert!(!self.get_physical_address().is_null());
-    unsafe { &mut *physical_address }
+    self.get_physical_address()
 }
 ```
 
-**Sound?** Conditionally. Assertions guard against null and leaf entries. However, the `'static mut` reference is concerning — multiple call sites can get `&mut` to the same page table simultaneously. In practice this doesn't cause issues because the page table holder has `&mut self` on all mutating operations, but **the `'static mut` return is technically unsound** if anyone can call this concurrently.
-
-**Can eliminate?** No, but the `'static mut` lifetime should ideally be tied to the `RootPageTableHolder`'s lifetime. Low risk in practice because all callers hold `&mut RootPageTableHolder`.
+**Sound?** Yes. **FIXED:** Returns `*mut PageTable` instead of `&'static mut PageTable`. Each call site now performs its own `unsafe { &*ptr }` or `unsafe { &mut *ptr }` with a SAFETY comment explaining why the dereference is valid (e.g., &self/&mut self guarantees no concurrent mutation).
 
 ### 4g. `Box::from_raw` in page table Drop — `page_tables.rs:121-125`
 
@@ -400,25 +396,13 @@ let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, hea
 
 ## 6. Transmute / MaybeUninit
 
-### 6a. `XWRMode::from(u8)` — `page_table_entry.rs:19-23`
+### 6a. `XWRMode::from(u8)` — `page_table_entry.rs:19-30`
 
-```rust
-unsafe { core::mem::transmute(value) }
-```
+**FIXED.** Replaced `transmute` with an exhaustive `match` that panics on invalid values. No longer unsafe.
 
-**Sound?** **UNSOUND.** The enum has 6 variants (0,1,3,4,5,7) but the transmute accepts any `u8`. Values 2 and 6 (and 8-255) have no variant, creating undefined behavior. In practice, only values extracted from page table entries are passed, which should always be valid. But the code has no validation.
+### 6b. `SbiRet::new` — `sbi/sbi_call.rs:28-43`
 
-**Can eliminate?** Yes! Replace with a `match` statement or use `TryFrom`. This is the most clearly improvable unsafe in the codebase.
-
-### 6b. `SbiRet::new` — `sbi/sbi_call.rs:28-35`
-
-```rust
-unsafe { core::mem::transmute::<i64, SbiError>(error) }
-```
-
-**Sound?** Conditionally. SBI spec guarantees the error codes, but a buggy firmware could return unexpected values. The function is `unsafe fn` which is appropriate. In practice OpenSBI always returns valid values.
-
-**Can eliminate?** Yes. Replace with `TryFrom<i64>` or a match. **Improvement opportunity.**
+**FIXED.** Replaced `transmute` with a `match` on known SBI error codes that panics on unexpected values. Function is no longer `unsafe`.
 
 ### 6c. Page allocator `align_to_mut` + `transmute` — `page_allocator.rs:64,68,81-82`
 
@@ -633,18 +617,15 @@ Test-only. Not a concern.
 
 ## Actionable Findings
 
-### Must Fix (Unsound)
+### Fixed
 
-1. **`XWRMode::from(u8)` transmute** (`page_table_entry.rs:21`): Replace with a `match` or `TryFrom`. Values 2, 6, 8-255 are undefined.
-
-### Should Fix (Improvable)
-
-2. **`SbiRet::new` transmute** (`sbi/sbi_call.rs:29`): Replace with a `match`. Low risk but easy to fix.
-
-3. **`RuntimeInitializedData` missing `T: Sync` bound** (`runtime_initialized.rs:8`): Add `T: Sync` bound to the `unsafe impl Sync`. Currently all users happen to use Sync types, but the blanket impl is technically unsound.
+1. **`XWRMode::from(u8)` transmute** — Replaced with exhaustive `match`.
+2. **`SbiRet::new` transmute** — Replaced with `match` on known error codes.
+3. **`RuntimeInitializedData` missing `T: Sync` bound** — Added `T: Sync` bound.
+4. **`get_target_page_table` returning `&'static mut`** — Changed to return `*mut PageTable` with per-call-site SAFETY comments.
 
 ### Consider (Low Priority)
 
-4. **`Cpu::read/write_trap_frame` manual offset arithmetic** (`cpu.rs:157-175`): Could access via `Cpu::current()` struct field instead of raw pointer + `byte_add`. Would eliminate 2 unsafe blocks. However, volatile semantics may be needed due to concurrent trap handler access.
+5. **`Cpu::read/write_trap_frame` manual offset arithmetic** (`cpu.rs:157-175`): Could access via `Cpu::current()` struct field instead of raw pointer + `byte_add`. Would eliminate 2 unsafe blocks. However, volatile semantics may be needed due to concurrent trap handler access.
 
-5. **PLIC `set_priority` pointer arithmetic** (`plic.rs:36-40`): Could use MMIO array type instead.
+6. **PLIC `set_priority` pointer arithmetic** (`plic.rs:36-40`): Could use MMIO array type instead.
