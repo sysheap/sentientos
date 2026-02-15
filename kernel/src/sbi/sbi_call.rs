@@ -67,6 +67,8 @@ pub fn sbi_call(eid: u64, fid: u64, arg0: u64, arg1: u64, arg2: u64) -> SbiRet {
     let mut error: i64;
     let mut value: i64;
 
+    // SAFETY: ecall traps into M-mode firmware (SBI). The register convention
+    // is defined by the SBI spec: a7=EID, a6=FID, a0-a2=args, a0/a1=return.
     unsafe {
         asm!(
             "ecall",
