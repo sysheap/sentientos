@@ -67,6 +67,9 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
         crate::klibc::util::PrintMemorySizeHumanFriendly(heap_size)
     );
 
+    // SAFETY: The heap region [heap_start, heap_start+heap_size) is reserved
+    // by the linker script and not used by any other code. MaybeUninit<u8>
+    // has no validity requirements.
     let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
     PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
 }

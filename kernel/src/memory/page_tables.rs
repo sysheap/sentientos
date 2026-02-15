@@ -81,7 +81,8 @@ pub struct RootPageTableHolder {
     already_mapped: Vec<MappingEntry>,
 }
 
-// SAFETY: PageTables can be send to another thread
+// SAFETY: RootPageTableHolder owns its page table tree. The raw pointer is
+// not shared; only one owner exists per process/kernel instance.
 unsafe impl Send for RootPageTableHolder {}
 
 impl Debug for RootPageTableHolder {
@@ -127,6 +128,7 @@ impl Drop for RootPageTableHolder {
             // SAFETY: Each second-level table was allocated with Box::new in map().
             let _ = unsafe { Box::from_raw(second_level_ptr) };
         }
+        // SAFETY: The root table was allocated with Box::new in empty().
         let _ = unsafe { Box::from_raw(self.root_table) };
         self.root_table = null_mut();
     }
@@ -529,6 +531,8 @@ impl RootPageTableHolder {
 
         let satp_val = self.get_satp_value_from_page_tables();
 
+        // SAFETY: satp_val encodes a valid page table that identity-maps all
+        // kernel memory, so execution can continue after the switch.
         unsafe {
             Cpu::write_satp_and_fence(satp_val);
         };
