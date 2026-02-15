@@ -18,13 +18,6 @@ pub enum ValidationError {
 
 #[derive(Debug)]
 #[repr(usize)]
-pub enum SysWaitError {
-    InvalidPid,
-    NotAChild,
-}
-
-#[derive(Debug)]
-#[repr(usize)]
 pub enum SysExecuteError {
     InvalidProgram,
     ValidationError(ValidationError),
