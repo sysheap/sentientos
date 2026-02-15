@@ -19,6 +19,7 @@ linux_syscalls! {
     SYSCALL_NR_BRK => brk(brk: c_ulong);
     SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
@@ -395,6 +396,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .current_process()
             .with_lock(|mut p| p.fd_table_mut().close(fd))?;
         Ok(0)
+    }
+
+    async fn getppid(&mut self) -> Result<isize, headers::errno::Errno> {
+        let parent_tid = self.handler.current_process().lock().parent_tid();
+        Ok(parent_tid.0 as isize)
     }
 
     async fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
