@@ -257,7 +257,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     async fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
         self.handler
             .current_process()
-            .with_lock(|mut p| Ok(p.brk(brk as usize) as isize))
+            .with_lock(|mut p| Ok(p.brk(crate::klibc::util::u64_as_usize(brk)) as isize))
     }
 
     async fn mmap(
@@ -373,12 +373,12 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .with_lock(|p| p.fd_table().get(fd).cloned())
             .ok_or(Errno::EBADF)?;
 
-        let iov = iov.validate_slice(iovcnt as usize)?;
+        let iov = iov.validate_slice(usize::try_from(iovcnt).map_err(|_| Errno::EINVAL)?)?;
         let mut data = Vec::new();
 
         for io in iov {
             let buf = LinuxUserspaceArg::<*const u8>::new(io.iov_base as usize, self.get_process());
-            let mut buf = buf.validate_slice(io.iov_len as usize)?;
+            let mut buf = buf.validate_slice(crate::klibc::util::u64_as_usize(io.iov_len))?;
             data.append(&mut buf);
         }
 
@@ -400,11 +400,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     async fn getppid(&mut self) -> Result<isize, headers::errno::Errno> {
         let parent_tid = self.handler.current_process().lock().parent_tid();
-        Ok(parent_tid.0 as isize)
+        Ok(isize::try_from(parent_tid.0).expect("tid fits in isize"))
     }
 
     async fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
-        Ok(self.handler.current_tid().0 as isize)
+        Ok(isize::try_from(self.handler.current_tid().0).expect("tid fits in isize"))
     }
 }
 

@@ -87,8 +87,9 @@ impl<'a> Unwinder<'a> {
                 }
                 Instruction::Offset { register, offset } => {
                     debug!("Offset(register={}, offset={})", *register, *offset);
-                    let real_offset =
-                        (*offset as i64).wrapping_mul(self.fde.cie.data_alignment_factor);
+                    let real_offset = i64::try_from(*offset)
+                        .expect("DWARF offset fits in i64")
+                        .wrapping_mul(self.fde.cie.data_alignment_factor);
                     current_row.register_rules[*register as usize] =
                         RegisterRule::Offset(real_offset);
                 }
@@ -103,12 +104,14 @@ impl<'a> Unwinder<'a> {
                 }
                 Instruction::DefCfa { register, offset } => {
                     debug!("DefCfa(register={}, offset={})", *register, *offset);
-                    current_row.cfa_register = *register as u64;
-                    current_row.cfa_offset = *offset as i64;
+                    current_row.cfa_register = u64::from(*register);
+                    current_row.cfa_offset =
+                        i64::try_from(*offset).expect("DWARF CFA offset fits in i64");
                 }
                 Instruction::DefCfaOffset { offset } => {
                     debug!("DefCfaOffset(offset={})", *offset);
-                    current_row.cfa_offset = *offset as i64;
+                    current_row.cfa_offset =
+                        i64::try_from(*offset).expect("DWARF CFA offset fits in i64");
                 }
                 Instruction::RemeberState => {
                     self.row_stack

@@ -109,7 +109,9 @@ impl KernelSyscalls for SyscallHandler {
             .fd_table_mut()
             .allocate(FileDescriptor::UdpSocket(socket))
             .map_err(|_| SysSocketError::TooManyOpenFiles)?;
-        Ok(UDPDescriptor::new(raw_fd as u64))
+        Ok(UDPDescriptor::new(
+            u64::try_from(raw_fd).expect("allocated fd is non-negative"),
+        ))
     }
 
     fn sys_write_back_udp_socket(

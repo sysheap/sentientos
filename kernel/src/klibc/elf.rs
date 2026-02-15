@@ -1,5 +1,5 @@
 use super::big_endian::BigEndian;
-use crate::{assert::static_assert_size, debug};
+use crate::{assert::static_assert_size, debug, klibc::util};
 
 const ELF_MAGIC_NUMBER: u32 = 0x7f454c46;
 
@@ -268,7 +268,8 @@ impl<'a> ElfFile<'a> {
             core::mem::size_of::<ElfProgramHeaderEntry>()
         );
         assert!(
-            position_program_header as usize + (entry_size as usize * number_of_entries as usize)
+            util::u64_as_usize(position_program_header)
+                + (entry_size as usize * number_of_entries as usize)
                 <= self.data.len()
         );
 
@@ -278,7 +279,7 @@ impl<'a> ElfFile<'a> {
             let program_header_pointer = self
                 .data
                 .as_ptr()
-                .byte_add(position_program_header as usize)
+                .byte_add(util::u64_as_usize(position_program_header))
                 .cast::<ElfProgramHeaderEntry>();
             core::slice::from_raw_parts(program_header_pointer, number_of_entries as usize)
         };
@@ -289,8 +290,8 @@ impl<'a> ElfFile<'a> {
     }
 
     pub fn get_program_header_data(&self, program_header: &ElfProgramHeaderEntry) -> &[u8] {
-        let start = program_header.offset_in_file as usize;
-        let size = program_header.file_size as usize;
+        let start = util::u64_as_usize(program_header.offset_in_file);
+        let size = util::u64_as_usize(program_header.file_size);
 
         &self.data[start..start + size]
     }

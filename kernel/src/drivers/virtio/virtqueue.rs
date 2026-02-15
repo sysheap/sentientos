@@ -58,7 +58,10 @@ pub enum QueueError {
 
 impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     pub fn new(queue_size: u16, queue_index: u16) -> Self {
-        assert!(queue_size == QUEUE_SIZE as u16, "Queue size must be equal");
+        assert!(
+            queue_size == u16::try_from(QUEUE_SIZE).expect("queue size fits in u16"),
+            "Queue size must be equal"
+        );
         assert!(
             queue_size.is_power_of_two(),
             "Queue size must be a power of 2"
@@ -119,7 +122,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             .ok_or(QueueError::NoFreeDescriptors)?;
         let descriptor = &mut self.descriptor_area[free_descriptor_index as usize];
         descriptor.addr = buffer.as_ptr() as u64;
-        descriptor.len = buffer.len() as u32;
+        descriptor.len = u32::try_from(buffer.len()).expect("buffer length fits in u32");
         descriptor.flags = match direction {
             BufferDirection::DeviceWritable => VIRTQ_DESC_F_WRITE,
             BufferDirection::DriverWritable => 0,
@@ -171,7 +174,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             let descriptor_entry = &mut self.descriptor_area[result_descriptor.id as usize];
             debug!("Received packet from descriptor {:#x?}", descriptor_entry);
             debug!("Result descriptor {:#x?}", result_descriptor);
-            let index = result_descriptor.id as u16;
+            let index = u16::try_from(result_descriptor.id).expect("descriptor id fits in u16");
             let buffer = self
                 .outstanding_buffers
                 .remove(&index)

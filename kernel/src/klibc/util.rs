@@ -5,6 +5,21 @@ use core::{
 
 use crate::memory::PAGE_SIZE;
 
+const _: () = assert!(core::mem::size_of::<usize>() == core::mem::size_of::<u64>());
+
+#[allow(clippy::cast_possible_truncation)]
+pub const fn u64_as_usize(v: u64) -> usize {
+    v as usize
+}
+
+pub fn wrapping_add_signed(base: usize, offset: i64) -> usize {
+    if offset >= 0 {
+        base.wrapping_add(u64_as_usize(offset.unsigned_abs()))
+    } else {
+        base.wrapping_sub(u64_as_usize(offset.unsigned_abs()))
+    }
+}
+
 pub fn align_up_page_size(value: usize) -> usize {
     align_up(value, PAGE_SIZE)
 }
@@ -202,7 +217,8 @@ pub fn get_multiple_bits<DataType, ValueType>(
 where
     DataType: Shr<usize, Output = DataType> + BitAnd<u64, Output = ValueType>,
 {
-    (data >> bit_position) & (2u64.pow(number_of_bits as u32) - 1)
+    (data >> bit_position)
+        & (2u64.pow(u32::try_from(number_of_bits).expect("bit count fits in u32")) - 1)
 }
 
 pub trait InBytes {

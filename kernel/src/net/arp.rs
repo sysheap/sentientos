@@ -51,10 +51,12 @@ impl ArpPacket {
             hardware_address_type: BigEndian::from_little_endian(HARDWARE_ADDRESS_TYPE_ETHERNET),
             protocol_address_type: BigEndian::from_little_endian(PROTOCOL_ADDRESS_TYPE_IPV4),
             hardware_address_length: BigEndian::from_little_endian(
-                core::mem::size_of::<MacAddress>() as u8,
+                u8::try_from(core::mem::size_of::<MacAddress>())
+                    .expect("MAC address size fits in u8"),
             ),
             protocol_address_length: BigEndian::from_little_endian(
-                core::mem::size_of::<Ipv4Addr>() as u8,
+                u8::try_from(core::mem::size_of::<Ipv4Addr>())
+                    .expect("IPv4 address size fits in u8"),
             ),
             operation: BigEndian::from_little_endian(ARP_RESPONSE),
             source_mac_address: current_mac_address(),

@@ -188,8 +188,14 @@ impl PCIDevice {
             .allocate(size as usize)
             .expect("There must be enough space for the bar");
 
-        configuration_space.write_bar(index, space.pci_address as u32);
-        configuration_space.write_bar(index + 1, (space.pci_address >> 32) as u32);
+        configuration_space.write_bar(
+            index,
+            u32::try_from(space.pci_address & 0xFFFF_FFFF).expect("masked to 32 bits"),
+        );
+        configuration_space.write_bar(
+            index + 1,
+            u32::try_from(space.pci_address >> 32).expect("high 32 bits fit in u32"),
+        );
 
         configuration_space.set_command_register_bits(command_register::MEMORY_SPACE);
 

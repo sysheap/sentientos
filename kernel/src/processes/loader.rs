@@ -8,7 +8,7 @@ use crate::{
     debug,
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{InBytes, minimum_amount_of_pages},
+        util::{self, InBytes, minimum_amount_of_pages},
     },
     memory::{
         PAGE_SIZE,
@@ -143,18 +143,19 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
 
+        let real_size_usize = util::u64_as_usize(real_size);
         assert!(
-            real_size as usize >= data.len(),
+            real_size_usize >= data.len(),
             "real size must always be greater than the actual data"
         );
 
-        let offset = program_header.virtual_address as usize % PAGE_SIZE;
+        let offset = util::u64_as_usize(program_header.virtual_address) % PAGE_SIZE;
 
-        let mut size_in_pages = minimum_amount_of_pages(real_size as usize);
+        let mut size_in_pages = minimum_amount_of_pages(real_size_usize);
 
         // Take into account when we spill into the next page
-        size_in_pages += minimum_amount_of_pages(offset + real_size as usize)
-            - minimum_amount_of_pages(real_size as usize);
+        size_in_pages += minimum_amount_of_pages(offset + real_size_usize)
+            - minimum_amount_of_pages(real_size_usize);
 
         let mut pages = PinnedHeapPages::new(size_in_pages);
 
@@ -170,7 +171,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
-            program_header.virtual_address as usize - offset,
+            util::u64_as_usize(program_header.virtual_address) - offset,
             pages_addr,
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
@@ -184,7 +185,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     let brk = match bss_end {
         Some(bss_end) => {
-            let (pages, brk) = Brk::new(bss_end as usize, &mut page_tables);
+            let (pages, brk) = Brk::new(util::u64_as_usize(bss_end), &mut page_tables);
             allocated_pages.push(pages);
             brk
         }
@@ -192,7 +193,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     };
 
     Ok(LoadedElf {
-        entry_address: elf_header.entry_point as usize,
+        entry_address: util::u64_as_usize(elf_header.entry_point),
         page_tables,
         allocated_pages,
         args_start,

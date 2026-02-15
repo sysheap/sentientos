@@ -144,7 +144,7 @@ fn handle_syscall() {
                 Ok(ret) => ret,
                 Err(errno) => -(errno as isize),
             };
-            trap_frame[Register::a0] = ret as usize;
+            trap_frame[Register::a0] = ret.cast_unsigned();
 
             if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
                 Cpu::write_trap_frame(trap_frame);

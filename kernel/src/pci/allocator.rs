@@ -34,7 +34,7 @@ impl PCIAllocator {
         self.free_space_pci_space.start = aligned_current + size;
         Some(PCIAllocatedSpace {
             pci_address: aligned_current,
-            cpu_address: (aligned_current as i64 + self.offset_to_cpu_space) as usize,
+            cpu_address: util::wrapping_add_signed(aligned_current, self.offset_to_cpu_space),
             size,
         })
     }

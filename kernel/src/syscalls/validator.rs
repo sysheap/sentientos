@@ -33,7 +33,7 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
 
     fn validate(self, handler: &mut SyscallHandler) -> Result<SharedAssignedSocket, Self::Error> {
         use crate::processes::fd_table::FileDescriptor;
-        let fd = self.inner.get() as i32;
+        let fd = i32::try_from(self.inner.get()).expect("fd fits in i32");
         let descriptor = handler
             .current_process()
             .with_lock(|p| p.fd_table().get(fd).cloned())

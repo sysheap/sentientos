@@ -118,14 +118,18 @@ impl<'a> EhFrameIterator<'a> {
             None
         };
 
-        let address_size = core::mem::size_of::<usize>() as u8;
+        let address_size =
+            u8::try_from(core::mem::size_of::<usize>()).expect("pointer size fits in u8");
         let code_alignment_factor = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
         let data_alignment_factor = self.data.consume_unsized_type::<SignedLEB128>()?.get();
         let return_address_register = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
 
         let augmentation_data = if augmentation_string.contains('z') {
             let length = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
-            Some(self.data.consume_slice(length as usize)?)
+            Some(
+                self.data
+                    .consume_slice(crate::klibc::util::u64_as_usize(length))?,
+            )
         } else {
             None
         };
@@ -184,7 +188,10 @@ impl<'a> EhFrameIterator<'a> {
 
         let augmentation_data = if cie.augmentation_string.contains('z') {
             let length = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
-            Some(self.data.consume_slice(length as usize)?)
+            Some(
+                self.data
+                    .consume_slice(crate::klibc::util::u64_as_usize(length))?,
+            )
         } else {
             None
         };
@@ -227,7 +234,7 @@ impl<'a> EhFrameIterator<'a> {
         }
 
         let length = self.data.consume_sized_type::<u64>()?;
-        Some((length as usize, Bitness::Bits64))
+        Some((crate::klibc::util::u64_as_usize(length), Bitness::Bits64))
     }
 
     fn parse_instructions(&self, instructions: &[u8]) -> Vec<Instruction> {
@@ -382,7 +389,7 @@ mod tests {
         let mut control_entries = control_eh_frame.entries(&base_addresses);
 
         let parser = EhFrameParser::new(eh_frame_data);
-        let mut entries = parser.iter(eh_frame.sh_addr as usize);
+        let mut entries = parser.iter(crate::klibc::util::u64_as_usize(eh_frame.sh_addr));
 
         while let Some(control_entry) = control_entries
             .next()
@@ -498,7 +505,7 @@ mod tests {
                 instructions: _,
             } = other;
             *self.cie() == **cie
-                && self.initial_address() as usize == *pc_begin
+                && crate::klibc::util::u64_as_usize(self.initial_address()) == *pc_begin
                 && self.len() == *address_range as u64
         }
     }
@@ -542,8 +549,9 @@ mod tests {
                 gimli::CfaRule::Expression(_) => panic!("Expressions are not supported."),
             };
 
-            let metadata = self.start_address == other.start_address() as usize
-                && self.end_address == other.end_address() as usize
+            let metadata = self.start_address
+                == crate::klibc::util::u64_as_usize(other.start_address())
+                && self.end_address == crate::klibc::util::u64_as_usize(other.end_address())
                 && self.cfa_register == cfa_register.0 as u64
                 && self.cfa_offset == *cfa_offset;
 
