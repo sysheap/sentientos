@@ -18,8 +18,7 @@ pub struct Process {
     page_table: RootPageTableHolder,           // Virtual address space
     allocated_pages: Vec<PinnedHeapPages>,     // Physical memory
     free_mmap_address: usize,                  // Next mmap VA (starts 0x2000000000)
-    next_free_descriptor: u64,                 // UDP socket descriptor counter
-    open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
+    fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     brk: Brk,                                  // Heap break manager
@@ -41,9 +40,9 @@ impl Process {
     fn read_userspace_slice<T>(&self, ptr: &UserspacePtr<*const T>, len: usize) -> Result<Vec<T>, Errno>
     fn write_userspace_slice<T>(&self, ptr: &UserspacePtr<*mut T>, data: &[T]) -> Result<(), Errno>
 
-    // UDP sockets
-    fn put_new_udp_socket(&mut self, socket: SharedAssignedSocket) -> UDPDescriptor
-    fn get_shared_udp_socket(&mut self, desc: UDPDescriptor) -> Option<&mut SharedAssignedSocket>
+    // File descriptor table
+    fn fd_table(&self) -> &FdTable
+    fn fd_table_mut(&mut self) -> &mut FdTable
 }
 ```
 

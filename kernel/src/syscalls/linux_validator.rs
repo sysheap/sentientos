@@ -1,5 +1,5 @@
 use crate::processes::{process::ProcessRef, userspace_ptr::UserspacePtr};
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 use common::pointer::Pointer;
 use core::marker::PhantomData;
 use headers::errno::Errno;
@@ -22,13 +22,6 @@ impl<T> LinuxUserspaceArg<T> {
             process,
             phantom: PhantomData,
         }
-    }
-}
-
-impl LinuxUserspaceArg<*const u8> {
-    pub fn validate_str(&self, len: usize) -> Result<String, Errno> {
-        self.process
-            .with_lock(|p| p.read_userspace_str(&self.into(), len))
     }
 }
 

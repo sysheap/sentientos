@@ -5,8 +5,7 @@ use crate::{
         page::PinnedHeapPages,
         page_tables::{RootPageTableHolder, XWRMode},
     },
-    net::sockets::SharedAssignedSocket,
-    processes::{brk::Brk, thread::ThreadWeakRef, userspace_ptr::UserspacePtr},
+    processes::{brk::Brk, fd_table::FdTable, thread::ThreadWeakRef, userspace_ptr::UserspacePtr},
 };
 use alloc::{
     collections::BTreeMap,
@@ -14,7 +13,7 @@ use alloc::{
     sync::Arc,
     vec::Vec,
 };
-use common::{net::UDPDescriptor, pid::Tid, pointer::Pointer};
+use common::{pid::Tid, pointer::Pointer};
 use core::{self, fmt::Debug, ptr::null_mut};
 use headers::errno::Errno;
 
@@ -33,8 +32,7 @@ pub struct Process {
     page_table: RootPageTableHolder,
     allocated_pages: Vec<PinnedHeapPages>,
     free_mmap_address: usize,
-    next_free_descriptor: u64,
-    open_udp_sockets: BTreeMap<UDPDescriptor, SharedAssignedSocket>,
+    fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     brk: Brk,
@@ -70,8 +68,7 @@ impl Process {
             page_table,
             allocated_pages,
             free_mmap_address: FREE_MMAP_START_ADDRESS,
-            next_free_descriptor: 0,
-            open_udp_sockets: BTreeMap::new(),
+            fd_table: FdTable::new(),
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
@@ -111,18 +108,6 @@ impl Process {
         let slice = unsafe { core::slice::from_raw_parts_mut(kernel_ptr, len) };
         slice.copy_from_slice(data);
         Ok(())
-    }
-
-    pub fn read_userspace_str(
-        &self,
-        ptr: &UserspacePtr<*const u8>,
-        len: usize,
-    ) -> Result<String, Errno> {
-        let kernel_ptr = self.get_kernel_space_fat_pointer(ptr, len)?;
-        // SAFETY: We just validate the pointer
-        let slice = unsafe { core::slice::from_raw_parts(kernel_ptr, len) };
-        let cow = String::from_utf8_lossy(slice);
-        Ok(cow.into_owned())
     }
 
     fn get_kernel_space_pointer<PTR: Pointer>(
@@ -234,23 +219,12 @@ impl Process {
         self.main_tid
     }
 
-    pub fn put_new_udp_socket(&mut self, socket: SharedAssignedSocket) -> UDPDescriptor {
-        let descriptor = UDPDescriptor::new(self.next_free_descriptor);
-        self.next_free_descriptor += 1;
-
-        assert!(
-            self.open_udp_sockets.insert(descriptor, socket).is_none(),
-            "Descriptor must be empty."
-        );
-
-        descriptor
+    pub fn fd_table(&self) -> &FdTable {
+        &self.fd_table
     }
 
-    pub fn get_shared_udp_socket(
-        &mut self,
-        descriptor: UDPDescriptor,
-    ) -> Option<&mut SharedAssignedSocket> {
-        self.open_udp_sockets.get_mut(&descriptor)
+    pub fn fd_table_mut(&mut self) -> &mut FdTable {
+        &mut self.fd_table
     }
 }
 

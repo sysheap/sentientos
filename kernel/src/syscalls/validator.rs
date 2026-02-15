@@ -8,7 +8,6 @@ use common::{
     pid::Tid,
     pointer::{FatPointer, Pointer},
     syscalls::syscall_argument::SyscallArgument,
-    unwrap_or_return,
 };
 use core::ops::{Deref, DerefMut};
 
@@ -33,13 +32,16 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
     type Error = SysSocketError;
 
     fn validate(self, handler: &mut SyscallHandler) -> Result<SharedAssignedSocket, Self::Error> {
-        let socket = unwrap_or_return!(
-            handler
-                .current_process()
-                .with_lock(|mut p| p.get_shared_udp_socket(self.inner).cloned()),
-            Err(SysSocketError::InvalidDescriptor)
-        );
-        Ok(socket)
+        use crate::processes::fd_table::FileDescriptor;
+        let fd = self.inner.get() as i32;
+        let descriptor = handler
+            .current_process()
+            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .ok_or(SysSocketError::InvalidDescriptor)?;
+        match descriptor {
+            FileDescriptor::UdpSocket(socket) => Ok(socket),
+            _ => Err(SysSocketError::InvalidDescriptor),
+        }
     }
 }
 
