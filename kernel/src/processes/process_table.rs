@@ -176,8 +176,13 @@ impl ProcessTable {
     }
 
     pub fn register_waiting_for_any_child(&mut self, parent_main_tid: Tid, waiter_tid: Tid) {
-        self.waiting_for_any_child
+        let prev = self
+            .waiting_for_any_child
             .insert(parent_main_tid, waiter_tid);
+        assert!(
+            prev.is_none(),
+            "Already waiting for any child of {parent_main_tid}"
+        );
     }
 
     pub fn wake_process_up(&self, tid: Tid) {
