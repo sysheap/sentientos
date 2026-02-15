@@ -127,6 +127,7 @@ impl<'a> MetadataPageAllocator<'a> {
     }
 
     pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
+        assert!(number_of_pages_requested > 0, "Cannot allocate zero pages");
         let total_pages = self.total_heap_pages();
         if number_of_pages_requested > total_pages {
             return None;
@@ -202,6 +203,12 @@ impl<'a> MetadataPageAllocator<'a> {
     pub fn dealloc(&mut self, page: NonNull<Page>) -> usize {
         let mut count = 0;
         let mut idx = self.page_pointer_to_page_idx(page.cast());
+
+        assert!(
+            self.metadata[idx] == PageStatus::Used || self.metadata[idx] == PageStatus::Last,
+            "Double-free detected: page at index {idx} has status {:?}",
+            self.metadata[idx]
+        );
 
         while self.metadata[idx] != PageStatus::Last {
             self.metadata[idx] = PageStatus::Free;

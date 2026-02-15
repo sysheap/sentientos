@@ -122,6 +122,10 @@ impl Cpu {
     }
 
     pub fn init(cpu_id: usize, number_cpus: usize) -> *const Cpu {
+        assert!(
+            cpu_id < number_cpus,
+            "cpu_id {cpu_id} must be less than number_cpus {number_cpus}"
+        );
         let kernel_stack =
             Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()) as *mut _ as *mut u8;
         let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(true);

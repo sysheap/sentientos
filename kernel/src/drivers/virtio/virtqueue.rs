@@ -60,7 +60,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     pub fn new(queue_size: u16, queue_index: u16) -> Self {
         assert!(queue_size == QUEUE_SIZE as u16, "Queue size must be equal");
         assert!(
-            queue_size.is_multiple_of(2),
+            queue_size.is_power_of_two(),
             "Queue size must be a power of 2"
         );
         let queue = VirtQueue {
@@ -162,6 +162,12 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             debug!("last used ring index: {:#x?}", self.last_used_ring_index);
             let result_descriptor =
                 &mut self.device_area.ring[self.last_used_ring_index as usize % QUEUE_SIZE];
+            assert!(
+                (result_descriptor.id as usize) < QUEUE_SIZE,
+                "Device returned descriptor ID {} outside queue bounds {}",
+                result_descriptor.id,
+                QUEUE_SIZE
+            );
             let descriptor_entry = &mut self.descriptor_area[result_descriptor.id as usize];
             debug!("Received packet from descriptor {:#x?}", descriptor_entry);
             debug!("Result descriptor {:#x?}", result_descriptor);

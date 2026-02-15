@@ -111,6 +111,10 @@ impl PageTableEntry {
     }
 
     pub(super) fn set_leaf_address(&mut self, address: usize) {
+        assert!(
+            address & 0xFFF == 0,
+            "Leaf address {address:#x} is not page-aligned"
+        );
         let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
         self.0 = self.0.map_addr(|_| {
             let mut original = self.0.addr();
