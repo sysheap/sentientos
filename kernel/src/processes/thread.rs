@@ -114,6 +114,7 @@ impl core::fmt::Display for Thread {
 
 impl Thread {
     pub fn create_powersave_thread() -> Arc<Spinlock<Self>> {
+        // SAFETY: powersave is defined in powersave.S; it runs wfi in a loop.
         unsafe extern "C" {
             fn powersave();
         }

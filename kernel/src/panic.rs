@@ -18,6 +18,7 @@ fn panic(info: &PanicInfo) -> ! {
 
     use crate::{asm::wfi_loop, cpu::Cpu, io::uart::QEMU_UART};
 
+    // SAFETY: We are panicking; no further interrupt handling is expected.
     unsafe {
         crate::Cpu::disable_global_interrupts();
     }
@@ -34,6 +35,8 @@ fn panic(info: &PanicInfo) -> ! {
         wfi_loop();
     }
 
+    // SAFETY: We are panicking and need to print regardless of who holds
+    // the UART lock (they will never resume).
     unsafe {
         QEMU_UART.force_unlock();
     }

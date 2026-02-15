@@ -56,6 +56,8 @@ mod test;
 #[macro_use]
 extern crate alloc;
 
+// SAFETY: Called from boot.S as the kernel entry point; must use C ABI and
+// fixed symbol name. boot.S passes hart_id and device_tree_pointer.
 #[unsafe(no_mangle)]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     cpu::STARTING_CPU_ID.initialize(hart_id);
@@ -144,6 +146,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     prepare_for_scheduling();
 }
 
+// SAFETY: Called from boot.S for secondary harts; must use C ABI and fixed
+// symbol name.
 #[unsafe(no_mangle)]
 pub extern "C" fn prepare_for_scheduling() -> ! {
     // Enable all interrupts
@@ -158,6 +162,8 @@ pub extern "C" fn prepare_for_scheduling() -> ! {
 }
 
 fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
+    // SAFETY: start_hart is defined in boot.S; it initializes the hart and
+    // jumps to prepare_for_scheduling.
     unsafe extern "C" {
         fn start_hart();
     }

@@ -104,6 +104,8 @@ pub fn set_timer(milliseconds: u64) {
 
 fn get_current_clocks() -> u64 {
     let current: u64;
+    // SAFETY: rdtime reads the platform timer; it has no side-effects and
+    // returns the value in a general-purpose register.
     unsafe {
         asm!("rdtime {current}", current = out(reg)current);
     };

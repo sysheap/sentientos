@@ -16,17 +16,20 @@ use core::{
     task::{Context, Poll},
 };
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn get_process_satp_value() -> usize {
     Cpu::with_current_process(|p| p.get_page_table().get_satp_value_from_page_tables())
 }
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn handle_timer_interrupt() {
     timer::wakeup_wakers();
     Cpu::with_scheduler(|mut s| s.schedule());
 }
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 fn handle_external_interrupt() {
     debug!("External interrupt occurred!");
@@ -196,6 +199,7 @@ fn handle_unhandled_exception() {
     panic!("{}", message);
 }
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn handle_exception() {
     let cause = InterruptCause::from_scause();
@@ -205,6 +209,7 @@ extern "C" fn handle_exception() {
     }
 }
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn handle_supervisor_software_interrupt() {
     // This interrupt is fired when we kill a thread
@@ -214,6 +219,7 @@ extern "C" fn handle_supervisor_software_interrupt() {
     Cpu::clear_supervisor_software_interrupt();
 }
 
+// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn handle_unimplemented() {
     let sepc = Cpu::read_sepc();
