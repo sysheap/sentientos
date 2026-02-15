@@ -56,6 +56,8 @@ impl<'a> Backtrace<'a> {
             eh_frame_start, eh_frame_size
         );
 
+        // SAFETY: The eh_frame section is mapped by the kernel page tables.
+        // Start and size come from linker-defined symbols.
         let eh_frame = unsafe { core::slice::from_raw_parts(eh_frame_start, eh_frame_size) };
 
         let eh_frame_parser = EhFrameParser::new(eh_frame);
@@ -98,6 +100,8 @@ impl<'a> Backtrace<'a> {
                 }
                 RegisterRule::Offset(offset) => {
                     let ptr = (cfa.wrapping_add(*offset as usize)) as *const usize;
+                    // SAFETY: ptr is CFA + offset, which points to the saved
+                    // register value on the stack frame.
                     unsafe { ptr.read() }
                 }
             };
@@ -276,6 +280,9 @@ impl CallerSavedRegs {
             (f_data.0)(regs);
         }
 
+        // SAFETY: Naked function that captures callee-saved registers into
+        // the CallerSavedRegs struct, then calls the closure. No prologue
+        // is generated so we get the true register state.
         #[unsafe(naked)]
         extern "C-unwind" fn dispatch<F: FnMut(&mut CallerSavedRegs)>(
             regs: &mut CallerSavedRegs,
@@ -380,6 +387,8 @@ mod tests {
             unwind_ctx: &UnwindContext<'_>,
             arg: *mut c_void,
         ) -> UnwindReasonCode {
+            // SAFETY: arg was cast from &mut CallbackData in the caller below;
+            // the callback is invoked synchronously so the reference is valid.
             let data = unsafe { &mut *(arg as *mut CallbackData) };
             data.addresses.push_back(_Unwind_GetIP(unwind_ctx));
             UnwindReasonCode::NO_REASON

@@ -40,6 +40,8 @@ impl DeconstructedVec {
             length <= self.capacity,
             "Length must be smaller or equal capacity"
         );
+        // SAFETY: ptr/capacity were obtained from Vec::into_raw_parts in
+        // from_vec. length is bounds-checked above.
         unsafe { Vec::from_raw_parts(self.ptr, length, self.capacity) }
     }
 }

@@ -63,6 +63,8 @@ impl NetworkDevice {
         let capabilities = pci_device.capabilities();
         let mut virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities
             .filter(|cap| cap.id().read() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
+            // SAFETY: VirtIO vendor-specific capabilities have the virtio_pci_cap
+            // layout per the VirtIO spec.
             .map(|cap| unsafe { cap.new_type::<virtio_pci_cap>() })
             .collect();
 
@@ -88,7 +90,8 @@ impl NetworkDevice {
             .find(|cap| cap.cfg_type().read() == VIRTIO_PCI_CAP_NOTIFY_CFG)
             .ok_or("Notification capability not found")?;
 
-        // SAFETY: Notification capability is a different type
+        // SAFETY: The notify capability extends virtio_pci_cap with an
+        // additional notify_off_multiplier field per the VirtIO spec.
         let notify_cfg = unsafe { notify_cfg.new_type::<virtio_pci_notify_cap>() };
 
         assert!(
