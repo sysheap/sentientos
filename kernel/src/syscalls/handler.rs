@@ -101,11 +101,17 @@ impl KernelSyscalls for SyscallHandler {
         &mut self,
         port: UserspaceArgument<u16>,
     ) -> Result<UDPDescriptor, SysSocketError> {
+        use crate::processes::fd_table::FileDescriptor;
         let socket = match net::open_sockets().lock().try_get_socket(*port) {
             None => return Err(SysSocketError::PortAlreadyUsed),
             Some(socket) => socket,
         };
-        Ok(self.current_process.lock().put_new_udp_socket(socket))
+        let raw_fd = self
+            .current_process
+            .lock()
+            .fd_table_mut()
+            .allocate(FileDescriptor::UdpSocket(socket));
+        Ok(UDPDescriptor::new(raw_fd as u64))
     }
 
     fn sys_write_back_udp_socket(

@@ -200,7 +200,8 @@ fn sys_open_udp_socket(&mut self, port: UserspaceArgument<u16>)
     -> Result<UDPDescriptor, SysSocketError>
 {
     let socket = OPEN_UDP_SOCKETS.lock().try_get_socket(*port)?;
-    Ok(process.put_new_udp_socket(socket))
+    let raw_fd = process.fd_table_mut().allocate(FileDescriptor::UdpSocket(socket));
+    Ok(UDPDescriptor::new(raw_fd as u64))
 }
 ```
 

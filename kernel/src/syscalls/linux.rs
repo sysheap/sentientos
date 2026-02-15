@@ -1,11 +1,9 @@
 use crate::{
-    io::stdin_buf::ReadStdin,
     memory::{PAGE_SIZE, page_tables::XWRMode},
-    print,
-    processes::{process::ProcessRef, timer},
+    processes::{fd_table::FileDescriptor, process::ProcessRef, timer},
     syscalls::{handler::SyscallHandler, macros::linux_syscalls},
 };
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
@@ -49,12 +47,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*mut u8>,
         count: usize,
     ) -> Result<isize, headers::errno::Errno> {
-        Self::validate_read_fd(fd)?;
+        let descriptor = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .ok_or(Errno::EBADF)?;
 
-        let data = ReadStdin::new(count).await;
-
+        let data = descriptor.read(count).await?;
         assert!(data.len() <= count, "Read more than requested");
-
         buf.write_slice(&data)?;
 
         Ok(data.len() as isize)
@@ -66,11 +66,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*const u8>,
         count: usize,
     ) -> Result<isize, Errno> {
-        Self::validate_write_fd(fd)?;
+        let descriptor = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .ok_or(Errno::EBADF)?;
 
-        let string = buf.validate_str(count)?;
-
-        print!("{}", string);
+        let data = buf.validate_slice(count)?;
+        descriptor.write(&data)?;
 
         Ok(count as isize)
     }
@@ -110,7 +113,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         };
 
         Self::validate_poll_timeout(to.validate_ptr()?);
-        Self::validate_poll_fds(&fds.validate_slice(n as usize)?);
+
+        let poll_fds = fds.validate_slice(n as usize)?;
+        for pfd in &poll_fds {
+            self.handler
+                .current_process()
+                .with_lock(|p| p.fd_table().get(pfd.fd).cloned())
+                .ok_or(Errno::EBADF)?;
+            assert_eq!(
+                pfd.events, 0,
+                "No further events are supported at the moment"
+            );
+        }
 
         if let Some(mask) = old_mask {
             self.handler
@@ -332,13 +346,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn ioctl(&mut self, fd: c_int, op: c_uint) -> Result<isize, headers::errno::Errno> {
-        if fd > 2 {
-            return Err(Errno::EBADFD);
+        let descriptor = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .ok_or(Errno::EBADF)?;
+
+        match descriptor {
+            FileDescriptor::Stdout | FileDescriptor::Stderr if op == TIOCGWINSZ => {
+                Err(Errno::ENOTTY)
+            }
+            _ => Err(Errno::EINVAL),
         }
-        if op == TIOCGWINSZ && (fd == 1 || fd == 2) {
-            return Err(Errno::ENOTTY);
-        }
-        Err(Errno::EINVAL)
     }
 
     async fn writev(
@@ -347,7 +366,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         iov: LinuxUserspaceArg<*const iovec>,
         iovcnt: c_int,
     ) -> Result<isize, headers::errno::Errno> {
-        Self::validate_write_fd(fd)?;
+        let descriptor = self
+            .handler
+            .current_process()
+            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .ok_or(Errno::EBADF)?;
 
         let iov = iov.validate_slice(iovcnt as usize)?;
         let mut data = Vec::new();
@@ -359,16 +382,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
 
         let len = data.len();
-        print!("{}", String::from_utf8_lossy_owned(data));
+        descriptor.write(&data)?;
 
         Ok(len as isize)
     }
 
     async fn close(
         &mut self,
-        _fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
+        fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
     ) -> Result<isize, headers::errno::Errno> {
-        // TODO: Implement when we really manage fd objects
+        self.handler
+            .current_process()
+            .with_lock(|mut p| p.fd_table_mut().close(fd))?;
         Ok(0)
     }
 
@@ -389,32 +414,5 @@ impl LinuxSyscallHandler {
             assert_eq!(to.tv_sec, 0, "ppoll with timeout not yet implemented");
             assert_eq!(to.tv_nsec, 0, "ppoll with timeout not yet implemented");
         }
-    }
-
-    fn validate_poll_fds(fds: &[pollfd]) {
-        for fd in fds {
-            assert!(
-                matches!(fd.fd, 0..=2),
-                "Only stdin, stdout, and stderr is supported currently"
-            );
-            assert_eq!(
-                fd.events, 0,
-                "No further events are supported at the moment"
-            );
-        }
-    }
-
-    fn validate_read_fd(fd: c_int) -> Result<(), Errno> {
-        if fd != 0 {
-            return Err(Errno::EBADF);
-        }
-        Ok(())
-    }
-
-    fn validate_write_fd(fd: c_int) -> Result<(), Errno> {
-        if fd != 1 && fd != 2 {
-            return Err(Errno::EBADF);
-        }
-        Ok(())
     }
 }
