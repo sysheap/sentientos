@@ -12,8 +12,6 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 | 6 | `sys_open_udp_socket` | `socket` + `bind` | `udp.rs` | Hard |
 | 7 | `sys_write_back_udp_socket` | `sendto` | `udp.rs` | Hard |
 | 8 | `sys_read_udp_socket` | `recvfrom` | `udp.rs` | Hard |
-| 9 | `sys_panic` | `kill(SIGABRT)` or null-ptr write | `panic.rs` | Easy |
-| 10 | `sys_print_programs` | `ioctl` or read from pseudo-file | `sesh.rs` | Medium |
 
 ## Detailed Analysis
 
@@ -134,63 +132,13 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 
 ---
 
-### 9. `sys_panic` — `kill(SIGABRT)` or crash
-
-**Current behavior:** Triggers `panic!("Userspace triggered kernel panic")` — crashes the entire kernel.
-
-**Caller:** `panic.rs` — a test program that intentionally triggers a kernel panic.
-
-**Linux equivalent:** There's no Linux syscall that intentionally panics the kernel. Options:
-- `kill(getpid(), SIGABRT)` — terminates the process with a signal (not the kernel)
-- Write to a null pointer / execute an illegal instruction — triggers a fault
-- For testing purposes, a custom ioctl or debug-only mechanism could remain
-
-**Migration steps:**
-1. If the intent is "crash the kernel for testing," this could remain as a custom debug mechanism or be triggered via a magic write to a debug device.
-2. If the intent is "abort the process," replace with `std::process::abort()` which raises SIGABRT.
-3. Since this is only used in a test program, the simplest approach is to write to a null pointer (which the kernel's trap handler can detect and panic on if desired).
-
-**Complexity:** Easy. The test program can use any crash mechanism.
-
----
-
-### 10. `sys_print_programs` — `ioctl` or pseudo-file
-
-**Current behavior:** Iterates the `PROGRAMS` array (embedded ELF binaries) and prints each name to stdout. The kernel directly produces output on behalf of the process.
-
-**Caller:** `sesh.rs` — the shell's `help` command prints available programs.
-
-**Linux equivalent:** No direct Linux equivalent. The kernel needs to expose the program list to userspace. Options:
-
-**Option A: `ioctl` on stdout**
-Define a custom `ioctl` number (e.g., `TIOC_LIST_PROGRAMS`). Userspace calls `ioctl(1, TIOC_LIST_PROGRAMS, &buffer)` to read the program list into a buffer.
-
-**Option B: Pseudo-file (e.g., `/proc/programs`)**
-Expose a virtual file that lists programs. Userspace reads it with `open` + `read`. Requires implementing `open` syscall and a minimal virtual filesystem, which is substantial.
-
-**Option C: Dedicated simple syscall**
-Keep a Linux-numbered syscall that fills a userspace buffer with the program list. Pragmatic but not standard.
-
-**Recommended approach:** Option A (`ioctl`) is the least invasive. The kernel already has an `ioctl` handler in `linux.rs`. Extend it with a custom operation code that writes the program list to a userspace buffer.
-
-**Migration steps:**
-1. Define a custom ioctl number for listing programs.
-2. Extend the `ioctl` handler to support it — serialize program names into a userspace buffer.
-3. Update `sesh.rs` to call `ioctl(1, TIOC_LIST_PROGRAMS, buf.as_mut_ptr())` and print the result.
-
-**Complexity:** Medium.
-
----
-
 ## Migration Order
 
 Recommended order based on dependencies and complexity:
 
-1. **`sys_panic`** (#9) — Replace with null-ptr write or `abort()` in `panic.rs`.
-2. **`sys_print_programs`** (#10) — Add custom ioctl, update shell.
-3. **`sys_read_input`** (#1) — Enhance `ppoll`/`read` for non-blocking stdin, update `udp.rs`.
-4. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
-5. **Socket syscalls** (#6, #7, #8) — Implement `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
+1. **`sys_read_input`** (#1) — Enhance `ppoll`/`read` for non-blocking stdin, update `udp.rs`.
+2. **`sys_execute` + `sys_wait`** (#3, #4) — Implement `clone`+`execve`+`wait4`. Must be done together since wait depends on parent-child relationships established by clone.
+3. **Socket syscalls** (#6, #7, #8) — Implement `socket`+`bind`+`recvfrom`+`sendto`. Must be done together.
 
 ## Key Design Decisions
 
@@ -200,5 +148,3 @@ The current `sys_execute` is atomic (one syscall creates and starts a process). 
 ### Non-blocking I/O
 The `udp.rs` program polls both stdin and a UDP socket in a tight loop. After migration, this pattern should use `ppoll` with both an stdin fd and a socket fd, or use non-blocking fds with `O_NONBLOCK`. Enhancing `ppoll` to support `POLLIN` on real fds is the cleanest path.
 
-### Program list exposure
-Since there's no filesystem, `ioctl` is the pragmatic choice for exposing the embedded program list. A pseudo-filesystem (`/proc`) would be more Linux-like but requires substantially more infrastructure.
