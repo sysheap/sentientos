@@ -126,7 +126,7 @@ impl<'a> MetadataPageAllocator<'a> {
         // SAFETY: Both pointers are within the same heap allocation, verified
         // by the assertions above.
         let offset = unsafe { page_ptr.offset_from(heap_start) };
-        offset as usize
+        offset.cast_unsigned()
     }
 
     pub fn alloc(&mut self, number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {

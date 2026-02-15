@@ -10,7 +10,7 @@ pub struct SbiSpecVersion {
 pub fn sbi_get_spec_version() -> SbiSpecVersion {
     let result = sbi::sbi_call(EID, 0x0, 0, 0, 0);
     SbiSpecVersion {
-        minor: result.value as u32 & 0xffffff,
-        major: (result.value >> 24) as u32,
+        minor: u32::try_from(result.value & 0xFF_FFFF).expect("SBI minor version fits in u32"),
+        major: u32::try_from(result.value >> 24).expect("SBI major version fits in u32"),
     }
 }

@@ -85,7 +85,7 @@ impl CpuScheduler {
             self.current_thread.with_lock(|mut t| {
                 t.clear_wakeup_pending();
                 let trap_frame = t.get_register_state_mut();
-                trap_frame[Register::a0] = ret as usize;
+                trap_frame[Register::a0] = ret.cast_unsigned();
                 let pc = t.get_program_counter();
                 t.set_program_counter(pc + 4); // Skip the ecall instruction
             });

@@ -90,7 +90,12 @@ impl PageTableEntry {
     }
 
     pub(super) fn get_xwr_mode(&self) -> XWRMode {
-        let bits = get_multiple_bits(self.0.addr() as u64, 3, PageTableEntry::READ_BIT_POS) as u8;
+        let bits: u8 = u8::try_from(get_multiple_bits::<u64, u64>(
+            self.0.addr() as u64,
+            3,
+            PageTableEntry::READ_BIT_POS,
+        ))
+        .expect("3 bits fit in u8");
         bits.into()
     }
 

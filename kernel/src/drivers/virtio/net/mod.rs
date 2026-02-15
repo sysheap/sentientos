@@ -207,12 +207,14 @@ impl NetworkDevice {
         );
 
         common_cfg.driver_feature_select().write(0);
-        common_cfg.driver_feature().write(wanted_features as u32);
+        common_cfg
+            .driver_feature()
+            .write(u32::try_from(wanted_features & 0xFFFF_FFFF).expect("masked to 32 bits"));
 
         common_cfg.driver_feature_select().write(1);
         common_cfg
             .driver_feature()
-            .write((wanted_features >> 32) as u32);
+            .write(u32::try_from(wanted_features >> 32).expect("high 32 bits fit in u32"));
 
         let mut device_status = common_cfg.device_status();
         device_status |= DEVICE_STATUS_FEATURES_OK;

@@ -87,7 +87,10 @@ impl<'a> Backtrace<'a> {
 
         let row = unwinder.find_row_for_address(ra);
 
-        let cfa = regs[row.cfa_register as usize].wrapping_add(row.cfa_offset as usize);
+        let cfa = crate::klibc::util::wrapping_add_signed(
+            regs[crate::klibc::util::u64_as_usize(row.cfa_register)],
+            row.cfa_offset,
+        );
 
         let mut new_regs = regs.clone();
         new_regs.set_sp(cfa);
@@ -99,7 +102,7 @@ impl<'a> Backtrace<'a> {
                     continue;
                 }
                 RegisterRule::Offset(offset) => {
-                    let ptr = (cfa.wrapping_add(*offset as usize)) as *const usize;
+                    let ptr = crate::klibc::util::wrapping_add_signed(cfa, *offset) as *const usize;
                     // SAFETY: ptr is CFA + offset, which points to the saved
                     // register value on the stack frame.
                     unsafe { ptr.read() }

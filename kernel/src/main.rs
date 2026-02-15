@@ -11,6 +11,8 @@
 #![deny(clippy::redundant_else)]
 #![deny(clippy::manual_assert)]
 #![deny(clippy::large_stack_arrays)]
+#![deny(clippy::cast_possible_truncation)]
+#![deny(clippy::cast_sign_loss)]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(assert_matches)]

@@ -35,5 +35,5 @@ pub fn ones_complement_checksum(slices: &[&[u8]]) -> u16 {
         sum = (sum & 0xffff) + (sum >> 16);
     }
 
-    !(sum as u16)
+    !u16::try_from(sum).expect("carry fold ensures 16-bit result")
 }

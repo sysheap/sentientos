@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use crate::{
     device_tree::{self},
-    klibc::big_endian::BigEndian,
+    klibc::{big_endian::BigEndian, util},
 };
 use alloc::vec::Vec;
 
@@ -113,17 +113,21 @@ pub fn parse() -> Option<PCIInformation> {
         let pci_bitfield = ranges_property
             .consume_sized_type::<BigEndian<u32>>()?
             .get();
-        let pci_child_address = ranges_property
-            .consume_sized_type::<BigEndian<u64>>()?
-            .get() as usize;
+        let pci_child_address = util::u64_as_usize(
+            ranges_property
+                .consume_sized_type::<BigEndian<u64>>()?
+                .get(),
+        );
 
         let parent_address = match node.parent_address_cells? {
             1 => ranges_property
                 .consume_sized_type::<BigEndian<u32>>()?
                 .get() as usize,
-            2 => ranges_property
-                .consume_sized_type::<BigEndian<u64>>()?
-                .get() as usize,
+            2 => util::u64_as_usize(
+                ranges_property
+                    .consume_sized_type::<BigEndian<u64>>()?
+                    .get(),
+            ),
             _ => panic!("pci address cannot be larger than 64 bit"),
         };
 
@@ -131,9 +135,11 @@ pub fn parse() -> Option<PCIInformation> {
             1 => ranges_property
                 .consume_sized_type::<BigEndian<u32>>()?
                 .get() as usize,
-            2 => ranges_property
-                .consume_sized_type::<BigEndian<u64>>()?
-                .get() as usize,
+            2 => util::u64_as_usize(
+                ranges_property
+                    .consume_sized_type::<BigEndian<u64>>()?
+                    .get(),
+            ),
             _ => panic!("pci size cannot be larger than 64 bit"),
         };
 

@@ -1,25 +1,17 @@
 pub trait NeedsUserSpaceWrapper {
     type Wrapped;
-    fn wrap_arg(value: usize, process: ProcessRef) -> Self::Wrapped;
+    fn wrap_arg(value: usize, process: ProcessRef) -> Result<Self::Wrapped, headers::errno::Errno>;
 }
 
 macro_rules! impl_userspace_arg {
     ($type:ty) => {
         impl<T> NeedsUserSpaceWrapper for $type {
             type Wrapped = LinuxUserspaceArg<$type>;
-            fn wrap_arg(value: usize, process: ProcessRef) -> Self::Wrapped {
-                LinuxUserspaceArg::new(value, process)
-            }
-        }
-    };
-}
-
-macro_rules! impl_plain_arg {
-    ($type:ty) => {
-        impl NeedsUserSpaceWrapper for $type {
-            type Wrapped = $type;
-            fn wrap_arg(value: usize, _process: ProcessRef) -> Self::Wrapped {
-                value as $type
+            fn wrap_arg(
+                value: usize,
+                process: ProcessRef,
+            ) -> Result<Self::Wrapped, headers::errno::Errno> {
+                Ok(LinuxUserspaceArg::new(value, process))
             }
         }
     };
@@ -30,11 +22,55 @@ impl_userspace_arg!(*mut T);
 impl_userspace_arg!(Option<*const T>);
 impl_userspace_arg!(Option<*mut T>);
 
-impl_plain_arg!(c_int);
-impl_plain_arg!(c_uint);
-impl_plain_arg!(c_ulong);
-impl_plain_arg!(usize);
-impl_plain_arg!(isize);
+impl NeedsUserSpaceWrapper for c_int {
+    type Wrapped = c_int;
+    fn wrap_arg(
+        value: usize,
+        _process: ProcessRef,
+    ) -> Result<Self::Wrapped, headers::errno::Errno> {
+        c_int::try_from(value as isize).map_err(|_| headers::errno::Errno::EINVAL)
+    }
+}
+
+impl NeedsUserSpaceWrapper for c_uint {
+    type Wrapped = c_uint;
+    fn wrap_arg(
+        value: usize,
+        _process: ProcessRef,
+    ) -> Result<Self::Wrapped, headers::errno::Errno> {
+        c_uint::try_from(value).map_err(|_| headers::errno::Errno::EINVAL)
+    }
+}
+
+impl NeedsUserSpaceWrapper for c_ulong {
+    type Wrapped = c_ulong;
+    fn wrap_arg(
+        value: usize,
+        _process: ProcessRef,
+    ) -> Result<Self::Wrapped, headers::errno::Errno> {
+        Ok(value as c_ulong)
+    }
+}
+
+impl NeedsUserSpaceWrapper for usize {
+    type Wrapped = usize;
+    fn wrap_arg(
+        value: usize,
+        _process: ProcessRef,
+    ) -> Result<Self::Wrapped, headers::errno::Errno> {
+        Ok(value)
+    }
+}
+
+impl NeedsUserSpaceWrapper for isize {
+    type Wrapped = isize;
+    fn wrap_arg(
+        value: usize,
+        _process: ProcessRef,
+    ) -> Result<Self::Wrapped, headers::errno::Errno> {
+        Ok(value as isize)
+    }
+}
 
 macro_rules! linux_syscalls {
     ($($number:ident => $name:ident ($($arg_name: ident: $arg_ty:ty),*);)*) => {
@@ -55,7 +91,7 @@ macro_rules! linux_syscalls {
                     trap_frame[Register::a5]
                 ];
                 match nr {
-                    $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())),*).await),*,
+                    $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())?),*).await),*,
                     syscall_nr => {
                         let pc = $crate::cpu::Cpu::read_sepc();
                         let name = headers::syscalls::SYSCALL_NAMES
