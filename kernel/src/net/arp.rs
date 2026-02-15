@@ -66,9 +66,10 @@ impl ArpPacket {
 }
 
 pub fn process_and_respond(data: &[u8]) {
-    if data.len() < core::mem::size_of::<ArpPacket>() {
-        panic!("Received ARP packet is too small");
-    }
+    assert!(
+        data.len() >= core::mem::size_of::<ArpPacket>(),
+        "Received ARP packet is too small"
+    );
 
     let arp_header = data.interpret_as::<ArpPacket>();
     assert!(arp_header.hardware_address_type.get() == HARDWARE_ADDRESS_TYPE_ETHERNET); // Ethernet
