@@ -20,9 +20,9 @@ use headers::{
     errno::Errno,
     syscall_types::{
         _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, F_GETFL, F_SETFL, MAP_ANONYMOUS, MAP_FIXED,
-        MAP_PRIVATE, O_NONBLOCK, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK,
-        SIG_SETMASK, SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t,
-        stack_t, timespec,
+        MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK, SIG_SETMASK,
+        SIG_UNBLOCK, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t,
+        timespec,
     },
 };
 
@@ -444,7 +444,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             }
             F_SETFL => {
                 let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
-                let flags = FdFlags::from_raw(raw & (O_NONBLOCK as i32));
+                let flags = FdFlags::from_raw(raw);
                 self.handler
                     .current_process()
                     .with_lock(|mut p| p.fd_table_mut().set_flags(fd, flags))?;

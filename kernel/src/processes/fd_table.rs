@@ -19,7 +19,7 @@ impl FdFlags {
     }
 
     pub fn from_raw(raw: i32) -> Self {
-        Self(raw)
+        Self(raw & (O_NONBLOCK as i32))
     }
 }
 
