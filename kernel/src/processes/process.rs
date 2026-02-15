@@ -35,6 +35,7 @@ pub struct Process {
     fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
+    parent_tid: Tid,
     brk: Brk,
 }
 
@@ -62,6 +63,7 @@ impl Process {
         allocated_pages: Vec<PinnedHeapPages>,
         brk: Brk,
         main_thread: Tid,
+        parent_tid: Tid,
     ) -> Self {
         Self {
             name,
@@ -72,6 +74,7 @@ impl Process {
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
+            parent_tid,
         }
     }
 
@@ -219,6 +222,16 @@ impl Process {
         self.main_tid
     }
 
+    #[allow(dead_code)]
+    pub fn parent_tid(&self) -> Tid {
+        self.parent_tid
+    }
+
+    #[allow(dead_code)]
+    pub fn set_parent_tid(&mut self, parent_tid: Tid) {
+        self.parent_tid = parent_tid;
+    }
+
     pub fn fd_table(&self) -> &FdTable {
         &self.fd_table
     }
@@ -268,14 +281,16 @@ mod tests {
     #[test_case]
     fn create_process_from_elf() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let _process = Thread::from_elf(&elf, "prog1", &[]).expect("ELF loading must succeed");
+        let _process =
+            Thread::from_elf(&elf, "prog1", &[], Tid(0)).expect("ELF loading must succeed");
     }
 
     #[test_case]
     fn mmap_process() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
 
-        let process_ref = Thread::from_elf(&elf, "prog1", &[]).expect("ELF loading must succeed");
+        let process_ref =
+            Thread::from_elf(&elf, "prog1", &[], Tid(0)).expect("ELF loading must succeed");
 
         let thread = Arc::into_inner(process_ref)
             .expect("Must be sole owner")
