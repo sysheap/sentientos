@@ -116,7 +116,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 impl KernelSyscalls for SyscallHandler {
     fn sys_print_programs(&mut self);
     fn sys_panic(&mut self);
-    fn sys_write(&mut self, s: UserspaceArgument<&str>);
     fn sys_read_input(&mut self) -> Option<u8>;
     fn sys_exit(&mut self, status: UserspaceArgument<isize>);
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
