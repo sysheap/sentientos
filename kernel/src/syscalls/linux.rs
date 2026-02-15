@@ -338,12 +338,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         })
     }
 
-    async fn munmap(
-        &mut self,
-        _addr: usize,
-        _length: usize,
-    ) -> Result<isize, headers::errno::Errno> {
-        // Ignore munmap for now
+    async fn munmap(&mut self, addr: usize, length: usize) -> Result<isize, headers::errno::Errno> {
+        if !addr.is_multiple_of(PAGE_SIZE) || length == 0 {
+            return Err(Errno::EINVAL);
+        }
+        self.handler
+            .current_process()
+            .with_lock(|mut p| p.munmap_pages(addr, length))?;
         Ok(0)
     }
 
