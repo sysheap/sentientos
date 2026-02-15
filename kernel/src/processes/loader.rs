@@ -62,7 +62,7 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
 
     // Patch pointers
     argv[0] = addr_current_string;
-    addr_current_string += name.len() + 1;
+    addr_current_string = addr_current_string.wrapping_add(name.len() + 1);
     for (idx, arg) in args.iter().enumerate() {
         argv[idx + 1] = addr_current_string;
         // It could overflow on the last element, so just use wrapping_add
