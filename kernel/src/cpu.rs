@@ -241,6 +241,13 @@ impl Cpu {
         }
     }
 
+    pub fn sfence_vma() {
+        // SAFETY: sfence.vma flushes the TLB; safe to call at any time.
+        unsafe {
+            asm!("sfence.vma");
+        }
+    }
+
     pub fn memory_fence() {
         // SAFETY: `fence` is a memory ordering instruction with no operands.
         unsafe {

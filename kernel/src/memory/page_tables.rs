@@ -538,6 +538,66 @@ impl RootPageTableHolder {
         };
     }
 
+    pub fn unmap_userspace(&mut self, virtual_address_start: usize, size: usize) {
+        assert_eq!(virtual_address_start % PAGE_SIZE, 0);
+        assert!(size > 0);
+
+        let idx = self
+            .already_mapped
+            .iter()
+            .position(|m| m.virtual_range.start == virtual_address_start);
+        let idx = idx.expect("unmap_userspace: no mapping at this address");
+        self.already_mapped.swap_remove(idx);
+
+        let root_page_table = self.table_mut();
+        let mut offset = 0;
+
+        while offset < size {
+            let addr = virtual_address_start + offset;
+            let first_level_entry = root_page_table.get_entry_for_virtual_address_mut(addr, 2);
+
+            assert!(
+                first_level_entry.get_validity(),
+                "unmap_userspace: first-level PTE not valid at {addr:#x}"
+            );
+
+            if first_level_entry.is_leaf() {
+                *first_level_entry = PageTableEntry(null_mut());
+                offset += GiB(1);
+                continue;
+            }
+
+            // SAFETY: Entry is valid and non-leaf, so it points to an allocated second-level table.
+            let second_level_entry = unsafe { &mut *first_level_entry.get_target_page_table() }
+                .get_entry_for_virtual_address_mut(addr, 1);
+
+            assert!(
+                second_level_entry.get_validity(),
+                "unmap_userspace: second-level PTE not valid at {addr:#x}"
+            );
+
+            if second_level_entry.is_leaf() {
+                *second_level_entry = PageTableEntry(null_mut());
+                offset += MiB(2);
+                continue;
+            }
+
+            // SAFETY: Entry is valid and non-leaf, so it points to an allocated third-level table.
+            let third_level_entry = unsafe { &mut *second_level_entry.get_target_page_table() }
+                .get_entry_for_virtual_address_mut(addr, 0);
+
+            assert!(
+                third_level_entry.get_validity(),
+                "unmap_userspace: third-level PTE not valid at {addr:#x}"
+            );
+
+            *third_level_entry = PageTableEntry(null_mut());
+            offset += PAGE_SIZE;
+        }
+
+        Cpu::sfence_vma();
+    }
+
     pub fn is_mapped(&self, range: Range<usize>) -> bool {
         self.already_mapped.iter().any(|m| m.contains(&range))
     }
@@ -625,5 +685,23 @@ mod tests {
         pt.map_userspace(0x1000, 0x2000, 0x1000, XWRMode::ReadWrite, "A".to_string());
         assert!(pt.is_mapped(0x1000..0x1FFF));
         assert!(!pt.is_mapped(0x3000..0x3FFF));
+    }
+
+    #[test_case]
+    fn unmap_userspace_clears_mapping() {
+        let mut pt = RootPageTableHolder::empty();
+        pt.map_userspace(0x1000, 0x2000, 0x1000, XWRMode::ReadWrite, "A".to_string());
+        assert!(pt.is_mapped(0x1000..0x1FFF));
+        pt.unmap_userspace(0x1000, 0x1000);
+        assert!(!pt.is_mapped(0x1000..0x1FFF));
+    }
+
+    #[test_case]
+    fn unmap_userspace_clears_pte_validity() {
+        let mut pt = RootPageTableHolder::empty();
+        pt.map_userspace(0x1000, 0x2000, 0x1000, XWRMode::ReadWrite, "A".to_string());
+        assert!(pt.get_page_table_entry_for_address(0x1000).is_some());
+        pt.unmap_userspace(0x1000, 0x1000);
+        assert!(pt.get_page_table_entry_for_address(0x1000).is_none());
     }
 }

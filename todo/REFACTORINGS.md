@@ -5,15 +5,6 @@ independently actionable. Reference by number (e.g. "R-02") in commits and PRs.
 
 ---
 
-## High Impact
-
-**R-02 — Implement munmap.**
-`munmap` is a no-op returning `Ok(0)` (`syscalls/linux.rs:347-354`). Every
-`mmap` allocation leaks permanently. Implementing real munmap requires
-page-table unmapping and feeding pages back to the allocator.
-
----
-
 ## Medium Impact
 
 **R-04 — Remove hardcoded IP address.**

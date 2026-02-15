@@ -31,6 +31,7 @@ pub struct Process {
     name: Arc<String>,
     page_table: RootPageTableHolder,
     allocated_pages: Vec<PinnedHeapPages>,
+    mmap_allocations: BTreeMap<usize, PinnedHeapPages>,
     free_mmap_address: usize,
     fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
@@ -69,6 +70,7 @@ impl Process {
             name,
             page_table,
             allocated_pages,
+            mmap_allocations: BTreeMap::new(),
             free_mmap_address: FREE_MMAP_START_ADDRESS,
             fd_table: FdTable::new(),
             threads: BTreeMap::new(),
@@ -178,23 +180,33 @@ impl Process {
         let pages = PinnedHeapPages::new(number_of_pages);
         self.page_table
             .map_userspace(addr, pages.addr(), length, permission, "mmap".into());
-        self.allocated_pages.push(pages);
+        self.mmap_allocations.insert(addr, pages);
         core::ptr::without_provenance_mut(addr)
     }
 
     pub fn mmap_pages(&mut self, number_of_pages: usize, permission: XWRMode) -> *mut u8 {
         let pages = PinnedHeapPages::new(number_of_pages);
+        let addr = self.free_mmap_address;
         self.page_table.map_userspace(
-            self.free_mmap_address,
+            addr,
             pages.as_ptr() as usize,
             PAGE_SIZE * number_of_pages,
             permission,
             "mmap".to_string(),
         );
-        self.allocated_pages.push(pages);
-        let ptr = core::ptr::without_provenance_mut(self.free_mmap_address);
+        self.mmap_allocations.insert(addr, pages);
         self.free_mmap_address += number_of_pages * PAGE_SIZE;
-        ptr
+        core::ptr::without_provenance_mut(addr)
+    }
+
+    pub fn munmap_pages(&mut self, addr: usize, length: usize) -> Result<(), Errno> {
+        let pages = self.mmap_allocations.remove(&addr).ok_or(Errno::EINVAL)?;
+        if pages.size() != length {
+            self.mmap_allocations.insert(addr, pages);
+            return Err(Errno::EINVAL);
+        }
+        self.page_table.unmap_userspace(addr, length);
+        Ok(())
     }
 
     pub fn get_page_table(&self) -> &RootPageTableHolder {
@@ -317,6 +329,63 @@ mod tests {
         assert!(
             process.free_mmap_address == FREE_MMAP_START_ADDRESS + (3 * PAGE_SIZE),
             "Free mmap address must have the value of the next free value"
+        );
+    }
+
+    #[test_case]
+    fn munmap_process() {
+        let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
+        let process_ref =
+            Thread::from_elf(&elf, "prog1", &[], Tid(0)).expect("ELF loading must succeed");
+        let thread = Arc::into_inner(process_ref)
+            .expect("Must be sole owner")
+            .into_inner();
+        let process = thread.process();
+        let mut process = process.lock();
+
+        let ptr = process.mmap_pages(1, XWRMode::ReadWrite);
+        let addr = ptr as usize;
+        assert!(process.get_page_table().is_mapped(addr..addr + PAGE_SIZE));
+
+        process
+            .munmap_pages(addr, PAGE_SIZE)
+            .expect("munmap must succeed");
+        assert!(!process.get_page_table().is_mapped(addr..addr + PAGE_SIZE));
+    }
+
+    #[test_case]
+    fn munmap_unknown_address_returns_einval() {
+        let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
+        let process_ref =
+            Thread::from_elf(&elf, "prog1", &[], Tid(0)).expect("ELF loading must succeed");
+        let thread = Arc::into_inner(process_ref)
+            .expect("Must be sole owner")
+            .into_inner();
+        let process = thread.process();
+        let mut process = process.lock();
+
+        let result = process.munmap_pages(0xDEAD_0000, PAGE_SIZE);
+        assert_eq!(result, Err(headers::errno::Errno::EINVAL));
+    }
+
+    #[test_case]
+    fn munmap_wrong_length_returns_einval() {
+        let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
+        let process_ref =
+            Thread::from_elf(&elf, "prog1", &[], Tid(0)).expect("ELF loading must succeed");
+        let thread = Arc::into_inner(process_ref)
+            .expect("Must be sole owner")
+            .into_inner();
+        let process = thread.process();
+        let mut process = process.lock();
+
+        let ptr = process.mmap_pages(1, XWRMode::ReadWrite);
+        let addr = ptr as usize;
+        let result = process.munmap_pages(addr, PAGE_SIZE * 2);
+        assert_eq!(result, Err(headers::errno::Errno::EINVAL));
+        assert!(
+            process.get_page_table().is_mapped(addr..addr + PAGE_SIZE),
+            "mapping must still exist after failed munmap"
         );
     }
 }
