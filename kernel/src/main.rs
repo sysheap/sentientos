@@ -10,6 +10,7 @@
 #![deny(clippy::ptr_as_ptr)]
 #![deny(clippy::redundant_else)]
 #![deny(clippy::manual_assert)]
+#![deny(clippy::large_stack_arrays)]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
 #![feature(assert_matches)]
