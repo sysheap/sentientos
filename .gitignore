@@ -15,6 +15,3 @@ mcp-server/target/
 /coreutils
 
 __pycache__/
-
-# Review agent logs (local only)
-/review-logs/
