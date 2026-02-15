@@ -159,9 +159,8 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
             if let Some(allocation) = Allocator::alloc(pages) {
                 self.allocated_memory += pages * PAGE_SIZE;
                 return allocation.start.cast().as_ptr();
-            } else {
-                return null_mut();
-            };
+            }
+            return null_mut();
         }
 
         let requested_size = AlignedSizeWithMetadata::from_layout(layout);
