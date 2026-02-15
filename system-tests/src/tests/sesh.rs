@@ -4,7 +4,9 @@ use qemu_infra::PROMPT;
 #[tokio::test]
 async fn background_execution() -> anyhow::Result<()> {
     let mut sentientos = QemuInstance::start().await?;
-    sentientos.write_and_wait_for("sleep 10 &\n", PROMPT).await?;
+    sentientos
+        .write_and_wait_for("sleep 10 &\n", PROMPT)
+        .await?;
     sentientos
         .write_and_wait_for("prog1\n", "Hello from Prog1")
         .await?;
