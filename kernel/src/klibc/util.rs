@@ -301,4 +301,40 @@ mod tests {
         assert_eq!(super::get_multiple_bits(value, 3, 1), 0b110);
         assert_eq!(super::get_multiple_bits(value, 3, 2), 0b011);
     }
+
+    #[test_case]
+    fn split_as_parses_header_and_remainder() {
+        use super::BufferExtension;
+
+        #[repr(C)]
+        struct Header {
+            tag: u16,
+            len: u16,
+            flags: u8,
+        }
+
+        let payload = [0xAA, 0xBB, 0xCC];
+        let total_len = core::mem::size_of::<Header>() + payload.len();
+        // Allocate with Header alignment so interpret_as's is_aligned() check is guaranteed.
+        let layout =
+            alloc::alloc::Layout::from_size_align(total_len, core::mem::align_of::<Header>())
+                .unwrap();
+        let buf = unsafe {
+            let ptr = alloc::alloc::alloc_zeroed(layout);
+            core::slice::from_raw_parts_mut(ptr, total_len)
+        };
+        buf[0..2].copy_from_slice(&0xCAFEu16.to_ne_bytes());
+        buf[2..4].copy_from_slice(&128u16.to_ne_bytes());
+        buf[4] = 0x07;
+        buf[core::mem::size_of::<Header>()..].copy_from_slice(&payload);
+
+        let (header, rest) = buf.split_as::<Header>();
+
+        assert_eq!(header.tag, 0xCAFE);
+        assert_eq!(header.len, 128);
+        assert_eq!(header.flags, 0x07);
+        assert_eq!(rest, &payload);
+
+        unsafe { alloc::alloc::dealloc(buf.as_mut_ptr(), layout) };
+    }
 }
