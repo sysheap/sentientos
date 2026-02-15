@@ -42,14 +42,17 @@ pub fn _print(args: fmt::Arguments) {
     {
         use std::io::Write;
         let mut stdout = std::io::stdout().lock();
-        stdout.write_fmt(args).unwrap();
-        stdout.flush().unwrap();
+        stdout.write_fmt(args).expect("Failed to write to stdout");
+        stdout.flush().expect("Failed to flush stdout");
     }
 
     #[cfg(not(miri))]
     {
         use crate::io::uart;
         use core::fmt::Write;
-        uart::QEMU_UART.lock().write_fmt(args).unwrap();
+        uart::QEMU_UART
+            .lock()
+            .write_fmt(args)
+            .expect("Failed to write to UART");
     }
 }

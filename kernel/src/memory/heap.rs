@@ -374,7 +374,12 @@ mod test {
             ptr.write(0x42);
         };
         let heap = heap.inner.lock();
-        let free_block = unsafe { heap.genesis_block.next.unwrap().as_ref() };
+        let free_block = unsafe {
+            heap.genesis_block
+                .next
+                .expect("Free list must have a block")
+                .as_ref()
+        };
         assert!(free_block.next.is_none());
         assert_eq!(
             free_block.size.total_size(),
@@ -398,7 +403,12 @@ mod test {
         };
 
         let heap = heap.inner.lock();
-        let free_block = unsafe { heap.genesis_block.next.unwrap().as_ref() };
+        let free_block = unsafe {
+            heap.genesis_block
+                .next
+                .expect("Free list must have a block")
+                .as_ref()
+        };
         assert!(free_block.next.is_none());
         assert_eq!(
             free_block.size.total_size(),
@@ -417,10 +427,20 @@ mod test {
 
         dealloc(&heap, ptr);
         let heap = heap.inner.lock();
-        let free_block1 = unsafe { heap.genesis_block.next.unwrap().as_ref() };
+        let free_block1 = unsafe {
+            heap.genesis_block
+                .next
+                .expect("Free list must have a block after dealloc")
+                .as_ref()
+        };
         assert_eq!(free_block1.size.total_size(), FreeBlock::MINIMUM_SIZE);
 
-        let free_block2 = unsafe { free_block1.next.unwrap().as_ref() };
+        let free_block2 = unsafe {
+            free_block1
+                .next
+                .expect("Free list must have a second block")
+                .as_ref()
+        };
         assert!(free_block2.next.is_none());
         assert_eq!(
             free_block2.size.total_size(),
@@ -468,7 +488,13 @@ mod test {
         }
 
         let heap_lock = heap.inner.lock();
-        let free_block = unsafe { heap_lock.genesis_block.next.unwrap().as_ref() };
+        let free_block = unsafe {
+            heap_lock
+                .genesis_block
+                .next
+                .expect("Free list must have a block after partial realloc")
+                .as_ref()
+        };
         assert!(free_block.next.is_none());
         // Because we use the page allocator directly there should be only one page allocated to the heap
         assert_eq!(

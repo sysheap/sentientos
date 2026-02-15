@@ -94,7 +94,10 @@ impl<'a> Unwinder<'a> {
                 }
                 Instruction::Restore { register } => {
                     debug!("Restre(register={})", *register);
-                    let first_rule = self.rows.first().unwrap();
+                    let first_rule = self
+                        .rows
+                        .first()
+                        .expect("Rows must not be empty during Restore");
                     current_row.register_rules[*register as usize] =
                         first_rule.register_rules[*register as usize];
                 }

@@ -318,7 +318,7 @@ mod tests {
         // Allocate with Header alignment so interpret_as's is_aligned() check is guaranteed.
         let layout =
             alloc::alloc::Layout::from_size_align(total_len, core::mem::align_of::<Header>())
-                .unwrap();
+                .expect("Layout must be valid");
         let buf = unsafe {
             let ptr = alloc::alloc::alloc_zeroed(layout);
             core::slice::from_raw_parts_mut(ptr, total_len)
