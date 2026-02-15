@@ -44,6 +44,7 @@ pub enum SysSocketError {
     ValidationError(ValidationError),
     InvalidDescriptor,
     NoReceiveIPYet,
+    TooManyOpenFiles,
 }
 
 impl_from_to!(ValidationError, SysExecuteError);

@@ -110,7 +110,8 @@ impl KernelSyscalls for SyscallHandler {
             .current_process
             .lock()
             .fd_table_mut()
-            .allocate(FileDescriptor::UdpSocket(socket));
+            .allocate(FileDescriptor::UdpSocket(socket))
+            .map_err(|_| SysSocketError::TooManyOpenFiles)?;
         Ok(UDPDescriptor::new(raw_fd as u64))
     }
 
