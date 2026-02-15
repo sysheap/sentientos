@@ -12,7 +12,10 @@ fn main() {
     println!("Hello from the udp receiver");
     println!("Listening on {PORT}");
 
-    unsafe { libc::fcntl(0, libc::F_SETFL, libc::O_NONBLOCK) };
+    assert_eq!(
+        unsafe { libc::fcntl(0, libc::F_SETFL, libc::O_NONBLOCK) },
+        0
+    );
 
     let mut socket = UdpSocket::try_open(PORT).expect("Socket must be openable.");
     let mut input = String::new();

@@ -11,7 +11,7 @@ pub struct FdFlags(i32);
 
 impl FdFlags {
     pub fn is_nonblocking(self) -> bool {
-        self.0 & O_NONBLOCK as i32 != 0
+        (self.0 & O_NONBLOCK as i32) != 0
     }
 
     pub fn as_raw(self) -> i32 {

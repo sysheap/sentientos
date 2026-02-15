@@ -444,7 +444,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             }
             F_SETFL => {
                 let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
-                let flags = FdFlags::from_raw(raw & O_NONBLOCK as i32);
+                let flags = FdFlags::from_raw(raw & (O_NONBLOCK as i32));
                 self.handler
                     .current_process()
                     .with_lock(|mut p| p.fd_table_mut().set_flags(fd, flags))?;
