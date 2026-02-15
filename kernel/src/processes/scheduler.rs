@@ -16,7 +16,12 @@ use crate::{
     test::qemu_exit,
 };
 use alloc::sync::Arc;
-use common::{errors::SchedulerError, pid::Tid, syscalls::trap_frame::Register, unwrap_or_return};
+use common::{
+    errors::{SchedulerError, SysWaitError},
+    pid::Tid,
+    syscalls::trap_frame::Register,
+    unwrap_or_return,
+};
 use core::task::{Context, Poll};
 
 pub struct CpuScheduler {
@@ -113,19 +118,26 @@ impl CpuScheduler {
         process_table::THE.lock().kill(tid);
     }
 
-    pub fn let_current_thread_wait_for(&self, tid: Tid) -> bool {
+    pub fn let_current_thread_wait_for(&self, tid: Tid) -> Result<(), SysWaitError> {
         // Hold process_table lock for the entire operation to prevent a race condition:
         // Without this, the target thread could be killed between get_thread() and
         // add_notify_on_die(), causing the waiter to never be woken up.
         process_table::THE.with_lock(|pt| {
-            let wait_for_thread = unwrap_or_return!(pt.get_thread(tid), false);
+            let wait_for_thread =
+                unwrap_or_return!(pt.get_thread(tid), Err(SysWaitError::InvalidPid));
+
+            let current_main_tid = self.current_thread.lock().process().lock().main_tid();
+            let target_parent_tid = wait_for_thread.lock().process().lock().parent_tid();
+            if target_parent_tid != current_main_tid {
+                return Err(SysWaitError::NotAChild);
+            }
 
             self.current_thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Waiting);
                 wait_for_thread.lock().add_notify_on_die(t.get_tid());
             });
 
-            true
+            Ok(())
         })
     }
 

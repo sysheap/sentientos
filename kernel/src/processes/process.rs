@@ -222,7 +222,6 @@ impl Process {
         self.main_tid
     }
 
-    #[allow(dead_code)]
     pub fn parent_tid(&self) -> Tid {
         self.parent_tid
     }

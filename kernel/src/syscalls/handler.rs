@@ -90,11 +90,8 @@ impl KernelSyscalls for SyscallHandler {
     }
 
     fn sys_wait(&mut self, tid: UserspaceArgument<Tid>) -> Result<Tid, SysWaitError> {
-        if Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*tid)) {
-            Ok(*tid)
-        } else {
-            Err(SysWaitError::InvalidPid)
-        }
+        Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*tid))?;
+        Ok(*tid)
     }
 
     fn sys_open_udp_socket(
