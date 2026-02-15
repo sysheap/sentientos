@@ -14,6 +14,15 @@ async fn background_execution() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn help_lists_programs() -> anyhow::Result<()> {
+    let mut sentientos = QemuInstance::start().await?;
+    sentientos
+        .write_and_wait_for("help\n", "sesh")
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn execute_nonexistent_program() -> anyhow::Result<()> {
     let mut sentientos = QemuInstance::start().await?;
     let output = sentientos.run_prog("nonexistent").await?;

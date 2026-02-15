@@ -1,4 +1,5 @@
-use common::syscalls::{sys_execute, sys_print_programs, sys_wait};
+use common::ioctl::print_programs;
+use common::syscalls::{sys_execute, sys_wait};
 use std::{
     io::{Write, stdout},
     string::{String, ToString},
@@ -35,7 +36,7 @@ fn parse_command_and_execute(mut command: String) {
             println!("exit - Exit the shell");
             println!("help - Print this help message");
             println!("\nFollowing programs exist and can be called:");
-            sys_print_programs();
+            print_programs();
         }
         _ => {
             let mut background = false;
