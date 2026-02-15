@@ -20,7 +20,6 @@ use crate::{
 use super::validator::{UserspaceArgument, Validatable};
 
 pub(super) struct SyscallHandler {
-    process_exit: bool,
     current_process: ProcessRef,
     current_thread: ThreadRef,
     current_tid: Tid,
@@ -33,7 +32,6 @@ impl SyscallHandler {
 
         let current_process = current_thread.lock().process();
         Self {
-            process_exit: false,
             current_process,
             current_thread,
             current_tid,
@@ -50,6 +48,14 @@ impl SyscallHandler {
 
     pub fn current_thread(&self) -> &ThreadRef {
         &self.current_thread
+    }
+
+    pub fn sys_exit(&mut self, status: isize) {
+        Cpu::with_scheduler(|mut s| {
+            s.kill_current_process();
+        });
+
+        debug!("Exit process with status: {status}\n");
     }
 }
 
@@ -69,17 +75,6 @@ impl KernelSyscalls for SyscallHandler {
 
     fn sys_read_input(&mut self) -> Option<u8> {
         STDIN_BUFFER.lock().pop()
-    }
-
-    fn sys_exit(&mut self, status: UserspaceArgument<isize>) {
-        // We don't want to overwrite the next process trap frame
-        self.process_exit = true;
-
-        Cpu::with_scheduler(|mut s| {
-            s.kill_current_process();
-        });
-
-        debug!("Exit process with status: {}\n", *status);
     }
 
     fn sys_execute<'a>(
@@ -174,13 +169,7 @@ impl KernelSyscalls for SyscallHandler {
     }
 }
 
-pub fn handle_syscall(nr: usize, arg: usize, ret: usize) -> Option<SyscallStatus> {
+pub fn handle_syscall(nr: usize, arg: usize, ret: usize) -> SyscallStatus {
     let mut handler = SyscallHandler::new();
-    let ret = handler.dispatch(nr, arg, ret);
-
-    if handler.process_exit {
-        None
-    } else {
-        Some(ret)
-    }
+    handler.dispatch(nr, arg, ret)
 }

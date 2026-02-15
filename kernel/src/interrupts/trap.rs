@@ -119,13 +119,12 @@ fn handle_syscall() {
     if (1 << 63) & nr > 0 {
         // legacy syscalls - not compatible with linux
         // will be removed in the future
-        if let Some(ret) = syscalls::handle_syscall(nr, arg, ret) {
-            trap_frame[Register::a0] = ret as usize;
+        let ret = syscalls::handle_syscall(nr, arg, ret);
+        trap_frame[Register::a0] = ret as usize;
 
-            if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
-                Cpu::write_trap_frame(trap_frame);
-                Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
-            }
+        if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
+            Cpu::write_trap_frame(trap_frame);
+            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
         }
     } else {
         // Normal syscall - async

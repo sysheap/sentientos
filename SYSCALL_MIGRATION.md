@@ -8,7 +8,7 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 |---|----------------|-----------------|---------|------------|
 | 0 | `sys_write` | `write` (NR 64) | None | **MIGRATED** — deleted |
 | 1 | `sys_read_input` | `read` (NR 63) with non-blocking stdin | `udp.rs` | Medium |
-| 2 | `sys_exit` | `exit_group` (NR 94) | `sesh.rs` | Trivial |
+| 2 | `sys_exit` | `exit_group` (NR 94) | `sesh.rs` | **MIGRATED** — uses std::process::exit |
 | 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
 | 4 | `sys_wait` | `wait4` (NR 260) | `init.rs`, `sesh.rs`, `stress.rs` | Medium |
 | 5 | `sys_mmap_pages` | `mmap` (NR 222) | None | **MIGRATED** — deleted |

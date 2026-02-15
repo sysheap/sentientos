@@ -1,4 +1,4 @@
-use common::syscalls::{sys_execute, sys_exit, sys_print_programs, sys_wait};
+use common::syscalls::{sys_execute, sys_print_programs, sys_wait};
 use std::{
     io::{Write, stdout},
     string::{String, ToString},
@@ -28,7 +28,7 @@ fn parse_command_and_execute(mut command: String) {
         "" => {}
         "exit" | "q" => {
             println!("Exiting...");
-            sys_exit(0);
+            std::process::exit(0);
         }
         "help" => {
             println!("Available commands:");
