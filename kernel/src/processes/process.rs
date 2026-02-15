@@ -37,7 +37,6 @@ pub struct Process {
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     parent_tid: Tid,
-    exit_status: i32,
     brk: Brk,
 }
 
@@ -78,7 +77,6 @@ impl Process {
             brk,
             main_tid: main_thread,
             parent_tid,
-            exit_status: 0,
         }
     }
 
@@ -242,14 +240,6 @@ impl Process {
 
     pub fn set_parent_tid(&mut self, parent_tid: Tid) {
         self.parent_tid = parent_tid;
-    }
-
-    pub fn exit_status(&self) -> i32 {
-        self.exit_status
-    }
-
-    pub fn set_exit_status(&mut self, status: i32) {
-        self.exit_status = status;
     }
 
     pub fn fd_table(&self) -> &FdTable {
