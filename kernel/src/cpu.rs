@@ -43,6 +43,8 @@ macro_rules! read_csrr {
             }
 
             let $name: usize;
+            // SAFETY: Reading a CSR has no memory side-effects; the value is
+            // returned in a general-purpose register.
             unsafe {
                 asm!(concat!("csrr {}, ", stringify!($name)), out(reg) $name);
             }
@@ -58,6 +60,8 @@ macro_rules! write_csrr {
             if cfg!(miri) {
                 return ;
             }
+            // SAFETY: Writing a CSR is a privileged operation with no memory
+            // aliasing concerns. Callers are responsible for semantic correctness.
             unsafe {
                 asm!(concat!("csrw ", stringify!($name), ", {}"), in(reg) value);
             }
@@ -68,6 +72,8 @@ macro_rules! write_csrr {
             if cfg!(miri) {
                 return ;
             }
+            // SAFETY: csrs (set bits) is a privileged CSR operation with no
+            // memory aliasing concerns.
             unsafe {
                 asm!(concat!("csrs ", stringify!($name), ", {}"), in(reg) mask);
             }
@@ -78,6 +84,8 @@ macro_rules! write_csrr {
             if cfg!(miri) {
                 return ;
             }
+            // SAFETY: csrc (clear bits) is a privileged CSR operation with no
+            // memory aliasing concerns.
             unsafe {
                 asm!(concat!("csrc ", stringify!($name), ", {}"), in(reg) mask);
             }
@@ -197,8 +205,8 @@ impl Cpu {
         if ptr.is_null() || !ptr.is_aligned() {
             return None;
         }
-        // SAFETY: We validate above that the kernel is save
-        // Furthermore we are returning a static value.
+        // SAFETY: We validate above that the pointer is non-null and aligned.
+        // The Cpu struct is statically allocated via Box::leak and never freed.
         unsafe { Some(&(*ptr).kernel_page_tables) }
     }
 
@@ -207,6 +215,8 @@ impl Cpu {
         if ptr.is_null() {
             return *STARTING_CPU_ID;
         }
+        // SAFETY: The Cpu struct is statically allocated via Box::leak; addr_of!
+        // reads the field without creating an intermediate reference.
         unsafe { *addr_of!((*ptr).cpu_id) }
     }
 
@@ -218,25 +228,34 @@ impl Cpu {
         &self.scheduler
     }
 
+    /// # Safety
+    /// Caller must ensure `satp_val` points to a valid page table.
     pub unsafe fn write_satp_and_fence(satp_val: usize) {
         Cpu::write_satp(satp_val);
+        // SAFETY: sfence.vma flushes the TLB; required after changing satp.
         unsafe {
             asm!("sfence.vma");
         }
     }
 
     pub fn memory_fence() {
+        // SAFETY: `fence` is a memory ordering instruction with no operands.
         unsafe {
             asm!("fence");
         }
     }
 
+    /// # Safety
+    /// Must only be called during panic or shutdown paths where no further
+    /// interrupt handling is expected.
     pub unsafe fn disable_global_interrupts() {
         Self::csrc_sstatus(0b10);
         Self::write_sie(0);
     }
 
     pub fn wait_for_interrupt() {
+        // SAFETY: `wfi` halts the hart until an interrupt arrives; it has
+        // no memory side-effects.
         unsafe {
             asm!("wfi");
         }
