@@ -32,10 +32,6 @@ impl StdinBuffer {
         }
     }
 
-    pub fn pop(&mut self) -> Option<u8> {
-        self.data.pop_front()
-    }
-
     pub fn get(&mut self, count: usize) -> Vec<u8> {
         let actual_count = min(self.data.len(), count);
 
@@ -96,9 +92,7 @@ mod tests {
         stdin.push(43);
         stdin.push(44);
 
-        assert_eq!(stdin.pop(), Some(42));
-        assert_eq!(stdin.pop(), Some(43));
-        assert_eq!(stdin.pop(), Some(44));
+        assert_eq!(stdin.get(3), &[42, 43, 44]);
     }
 
     #[test_case]

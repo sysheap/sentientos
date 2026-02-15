@@ -19,7 +19,6 @@ scalar_enum! {
 }
 
 syscalls!(
-    sys_read_input() -> Option<u8>;
     sys_execute<'a>(name: &'a str, args: &'a [&'a str]) -> Result<Tid, SysExecuteError>;
     sys_wait(tid: Tid) -> Result<Tid, SysWaitError>;
     sys_open_udp_socket(port: u16) -> Result<UDPDescriptor, SysSocketError>;

@@ -36,7 +36,7 @@ impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
         let fd = i32::try_from(self.inner.get()).expect("fd fits in i32");
         let descriptor = handler
             .current_process()
-            .with_lock(|p| p.fd_table().get(fd).cloned())
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
             .ok_or(SysSocketError::InvalidDescriptor)?;
         match descriptor {
             FileDescriptor::UdpSocket(socket) => Ok(socket),

@@ -1,7 +1,5 @@
 use std::io::{Write, stdout};
 
-// use alloc::string::String;
-use common::syscalls::sys_read_input;
 use userspace::net::UdpSocket;
 
 extern crate alloc;
@@ -13,6 +11,8 @@ const DELETE: u8 = 127;
 fn main() {
     println!("Hello from the udp receiver");
     println!("Listening on {PORT}");
+
+    unsafe { libc::fcntl(0, libc::F_SETFL, libc::O_NONBLOCK) };
 
     let mut socket = UdpSocket::try_open(PORT).expect("Socket must be openable.");
     let mut input = String::new();
@@ -27,11 +27,11 @@ fn main() {
             let _ = stdout().flush();
         }
 
-        if let Some(c) = sys_read_input() {
+        let mut c = 0u8;
+        let ret = unsafe { libc::read(0, &mut c as *mut u8 as *mut libc::c_void, 1) };
+        if ret == 1 {
             match c {
                 b'\r' | b'\n' => {
-                    // Carriage return
-                    // Send data
                     println!();
                     input.push(b'\n' as char);
                     socket.transmit(input.as_bytes());
