@@ -3,7 +3,7 @@ use crate::{
     debug, info,
     klibc::{
         big_endian::BigEndian, consumable_buffer::ConsumableBuffer,
-        runtime_initialized::RuntimeInitializedData, util,
+        runtime_initialized::RuntimeInitializedData, util::UsizeExt,
     },
 };
 use core::{
@@ -276,13 +276,19 @@ impl<'a> Node<'a> {
         let mut reg_property = self.get_property("reg")?;
         let address = match self.parent_address_cells? {
             1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
-            2 => util::u64_as_usize(reg_property.consume_sized_type::<BigEndian<u64>>()?.get()),
+            2 => reg_property
+                .consume_sized_type::<BigEndian<u64>>()?
+                .get()
+                .as_usize(),
             _ => panic!("address cannot be larger than 64 bit"),
         };
 
         let size = match self.parent_size_cells? {
             1 => reg_property.consume_sized_type::<BigEndian<u32>>()?.get() as usize,
-            2 => util::u64_as_usize(reg_property.consume_sized_type::<BigEndian<u64>>()?.get()),
+            2 => reg_property
+                .consume_sized_type::<BigEndian<u64>>()?
+                .get()
+                .as_usize(),
             _ => panic!("size cannot be larger than 64 bit"),
         };
 

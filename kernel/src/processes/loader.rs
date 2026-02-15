@@ -8,7 +8,7 @@ use crate::{
     debug,
     klibc::{
         elf::{ElfFile, ProgramHeaderType},
-        util::{self, InBytes, minimum_amount_of_pages},
+        util::{InBytes, UsizeExt, minimum_amount_of_pages},
     },
     memory::{
         PAGE_SIZE,
@@ -143,13 +143,13 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         let data = elf_file.get_program_header_data(program_header);
         let real_size = program_header.memory_size;
 
-        let real_size_usize = util::u64_as_usize(real_size);
+        let real_size_usize = real_size.as_usize();
         assert!(
             real_size_usize >= data.len(),
             "real size must always be greater than the actual data"
         );
 
-        let offset = util::u64_as_usize(program_header.virtual_address) % PAGE_SIZE;
+        let offset = program_header.virtual_address.as_usize() % PAGE_SIZE;
 
         let mut size_in_pages = minimum_amount_of_pages(real_size_usize);
 
@@ -171,7 +171,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
-            util::u64_as_usize(program_header.virtual_address) - offset,
+            program_header.virtual_address.as_usize() - offset,
             pages_addr,
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
@@ -185,7 +185,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     let brk = match bss_end {
         Some(bss_end) => {
-            let (pages, brk) = Brk::new(util::u64_as_usize(bss_end), &mut page_tables);
+            let (pages, brk) = Brk::new(bss_end.as_usize(), &mut page_tables);
             allocated_pages.push(pages);
             brk
         }
@@ -193,7 +193,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     };
 
     Ok(LoadedElf {
-        entry_address: util::u64_as_usize(elf_header.entry_point),
+        entry_address: elf_header.entry_point.as_usize(),
         page_tables,
         allocated_pages,
         args_start,

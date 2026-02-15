@@ -3,6 +3,7 @@
 use crate::klibc::{
     consumable_buffer::ConsumableBuffer,
     leb128::{SignedLEB128, UnsignedLEB128},
+    util::UsizeExt,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 
@@ -126,10 +127,7 @@ impl<'a> EhFrameIterator<'a> {
 
         let augmentation_data = if augmentation_string.contains('z') {
             let length = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
-            Some(
-                self.data
-                    .consume_slice(crate::klibc::util::u64_as_usize(length))?,
-            )
+            Some(self.data.consume_slice(length.as_usize())?)
         } else {
             None
         };
@@ -188,10 +186,7 @@ impl<'a> EhFrameIterator<'a> {
 
         let augmentation_data = if cie.augmentation_string.contains('z') {
             let length = self.data.consume_unsized_type::<UnsignedLEB128>()?.get();
-            Some(
-                self.data
-                    .consume_slice(crate::klibc::util::u64_as_usize(length))?,
-            )
+            Some(self.data.consume_slice(length.as_usize())?)
         } else {
             None
         };
@@ -234,7 +229,7 @@ impl<'a> EhFrameIterator<'a> {
         }
 
         let length = self.data.consume_sized_type::<u64>()?;
-        Some((crate::klibc::util::u64_as_usize(length), Bitness::Bits64))
+        Some((length.as_usize(), Bitness::Bits64))
     }
 
     fn parse_instructions(&self, instructions: &[u8]) -> Vec<Instruction> {
@@ -351,6 +346,7 @@ mod tests {
             eh_frame_parser::EhFrameParser,
             unwinder::{Row, Unwinder},
         },
+        klibc::util::UsizeExt,
     };
     use elf::ElfBytes;
     use gimli::{
@@ -389,7 +385,7 @@ mod tests {
         let mut control_entries = control_eh_frame.entries(&base_addresses);
 
         let parser = EhFrameParser::new(eh_frame_data);
-        let mut entries = parser.iter(crate::klibc::util::u64_as_usize(eh_frame.sh_addr));
+        let mut entries = parser.iter(eh_frame.sh_addr.as_usize());
 
         while let Some(control_entry) = control_entries
             .next()
@@ -505,7 +501,7 @@ mod tests {
                 instructions: _,
             } = other;
             *self.cie() == **cie
-                && crate::klibc::util::u64_as_usize(self.initial_address()) == *pc_begin
+                && self.initial_address().as_usize() == *pc_begin
                 && self.len() == *address_range as u64
         }
     }
@@ -549,9 +545,8 @@ mod tests {
                 gimli::CfaRule::Expression(_) => panic!("Expressions are not supported."),
             };
 
-            let metadata = self.start_address
-                == crate::klibc::util::u64_as_usize(other.start_address())
-                && self.end_address == crate::klibc::util::u64_as_usize(other.end_address())
+            let metadata = self.start_address == other.start_address().as_usize()
+                && self.end_address == other.end_address().as_usize()
                 && self.cfa_register == cfa_register.0 as u64
                 && self.cfa_offset == *cfa_offset;
 
