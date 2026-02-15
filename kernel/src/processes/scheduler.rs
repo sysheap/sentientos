@@ -141,10 +141,11 @@ impl CpuScheduler {
     }
 
     pub fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Tid, SchedulerError> {
+        let parent_tid = self.current_thread.lock().process().lock().main_tid();
         for (prog_name, elf) in PROGRAMS {
             if name == *prog_name {
                 let elf = ElfFile::parse(elf).expect("Cannot parse ELF file");
-                let process = Thread::from_elf(&elf, prog_name, args)?;
+                let process = Thread::from_elf(&elf, prog_name, args, parent_tid)?;
                 let tid = process.lock().get_tid();
                 process_table::THE.lock().add_thread(process);
                 return Ok(tid);

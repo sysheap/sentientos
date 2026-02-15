@@ -134,6 +134,7 @@ impl Thread {
             allocated_pages,
             true,
             Brk::empty(),
+            POWERSAVE_TID,
         )
     }
 
@@ -141,6 +142,7 @@ impl Thread {
         elf_file: &ElfFile,
         name: &str,
         args: &[&str],
+        parent_tid: Tid,
     ) -> Result<Arc<Spinlock<Self>>, LoaderError> {
         debug!("Create process from elf file");
 
@@ -165,6 +167,7 @@ impl Thread {
             allocated_pages,
             false,
             brk,
+            parent_tid,
         ))
     }
 
@@ -178,6 +181,7 @@ impl Thread {
         allocated_pages: Vec<PinnedHeapPages>,
         in_kernel_mode: bool,
         brk: Brk,
+        parent_tid: Tid,
     ) -> ThreadRef {
         let name = Arc::new(name.into());
         let process = Arc::new(Spinlock::new(Process::new(
@@ -186,6 +190,7 @@ impl Thread {
             allocated_pages,
             brk,
             tid,
+            parent_tid,
         )));
 
         let main_thread = Thread::new(

@@ -17,7 +17,7 @@ pub fn init() {
     let mut process_table = ProcessTable::new();
 
     let elf = ElfFile::parse(INIT).expect("Cannot parse ELF file");
-    let thread = Thread::from_elf(&elf, "init", &[]).expect("init must succeed");
+    let thread = Thread::from_elf(&elf, "init", &[], Tid(0)).expect("init must succeed");
     process_table.add_thread(thread);
 
     THE.initialize(Spinlock::new(process_table));
