@@ -120,6 +120,8 @@ impl<T> Spinlock<T> {
     }
 }
 
+// SAFETY: Spinlock provides mutual exclusion via an atomic lock, so it is safe
+// to share across threads as long as the inner type can be sent between threads.
 unsafe impl<T: Send> Sync for Spinlock<T> {}
 unsafe impl<T: Send> Send for Spinlock<T> {}
 
@@ -138,21 +140,21 @@ impl<T> Deref for SpinlockGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: We're (the SpinlockGuard) have exclusive rights to the data
+        // SAFETY: SpinlockGuard has exclusive access to the data
         unsafe { &*self.spinlock.data.get() }
     }
 }
 
 impl<T> DerefMut for SpinlockGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: We're (the SpinlockGuard) have exclusive rights to the data
+        // SAFETY: SpinlockGuard has exclusive access to the data
         unsafe { &mut *self.spinlock.data.get() }
     }
 }
 
 impl<T: Debug> Debug for SpinlockGuard<'_, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // SAFETY: We're (the SpinlockGuard) have exclusive rights to the data
+        // SAFETY: SpinlockGuard has exclusive access to the data
         unsafe { writeln!(f, "SpinlockGuard {{\n{:?}\n}}", *self.spinlock.data.get()) }
     }
 }
