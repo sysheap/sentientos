@@ -8,7 +8,7 @@ pub fn sbi_send_ipi(hart_mask: u64, hart_mask_base: i64) -> SbiRet {
         EID,
         FID_SEND_IPI,
         hart_mask,
-        u64::from_ne_bytes(hart_mask_base.to_ne_bytes()),
+        crate::klibc::util::bitcast_i64_to_u64(hart_mask_base),
         0,
     )
 }

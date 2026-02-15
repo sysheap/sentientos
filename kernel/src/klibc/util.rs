@@ -19,6 +19,12 @@ impl UsizeExt for u64 {
     }
 }
 
+/// Reinterpret the bits of a signed integer as unsigned without changing the bit pattern.
+#[allow(clippy::cast_sign_loss)]
+pub const fn bitcast_i64_to_u64(v: i64) -> u64 {
+    v as u64
+}
+
 pub fn wrapping_add_signed(base: usize, offset: i64) -> usize {
     if offset >= 0 {
         base.wrapping_add(offset.unsigned_abs().as_usize())
