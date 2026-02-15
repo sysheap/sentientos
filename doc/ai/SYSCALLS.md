@@ -120,7 +120,6 @@ impl KernelSyscalls for SyscallHandler {
     fn sys_exit(&mut self, status: UserspaceArgument<isize>);
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
     fn sys_wait(&mut self, tid) -> Result<(), SysWaitError>;
-    fn sys_mmap_pages(&mut self, number_of_pages) -> *mut u8;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
     fn sys_write_back_udp_socket(&mut self, desc, buf);
     fn sys_read_udp_socket(&mut self, desc, buf);
