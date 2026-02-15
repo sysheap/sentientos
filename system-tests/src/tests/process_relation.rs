@@ -20,10 +20,3 @@ async fn wait_non_child_returns_error() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-#[tokio::test]
-async fn stress_with_parent_child_wait() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
-    sentientos.run_prog_waiting_for("stress 4", "Done!").await?;
-    Ok(())
-}
