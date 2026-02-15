@@ -33,6 +33,8 @@ impl Plic {
 
     fn set_priority(&mut self, interrupt_id: u32, priority: u32) {
         assert!(priority <= 7);
+        // SAFETY: Each interrupt source has a 4-byte priority register at
+        // base + 4*interrupt_id, which is within the PLIC MMIO region.
         unsafe {
             self.priority_register_base
                 .add(interrupt_id as usize)

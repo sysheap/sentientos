@@ -14,7 +14,10 @@ impl<T> MMIO<T> {
         }
     }
 
+    /// # Safety
+    /// The resulting address must be within the same MMIO region.
     pub const unsafe fn add(&self, count: usize) -> Self {
+        // SAFETY: Caller guarantees the offset stays within the MMIO region.
         unsafe {
             Self {
                 addr: self.addr.add(count),
@@ -22,11 +25,18 @@ impl<T> MMIO<T> {
         }
     }
 
+    /// # Safety
+    /// The address must be valid for the target type `U`.
     pub const unsafe fn new_type<U>(&self) -> MMIO<U> {
+        // SAFETY: Forwarded to new_type_with_offset with offset 0.
         unsafe { self.new_type_with_offset(0) }
     }
 
+    /// # Safety
+    /// The address + offset must be valid for the target type `U` and within
+    /// the same MMIO region.
     pub const unsafe fn new_type_with_offset<U>(&self, offset: usize) -> MMIO<U> {
+        // SAFETY: Caller guarantees the resulting address is valid for U.
         unsafe {
             MMIO::<U> {
                 addr: self.addr.byte_add(offset) as *mut U,
@@ -37,10 +47,14 @@ impl<T> MMIO<T> {
 
 impl<T: Copy> MMIO<T> {
     pub fn read(&self) -> T {
+        // SAFETY: The MMIO address was provided at construction and is
+        // guaranteed to be valid for volatile reads of type T.
         unsafe { self.addr.read_volatile() }
     }
 
     pub fn write(&mut self, value: T) {
+        // SAFETY: The MMIO address was provided at construction and is
+        // guaranteed to be valid for volatile writes of type T.
         unsafe {
             self.addr.write_volatile(value);
         }
@@ -58,6 +72,7 @@ impl<T: Copy, const LENGTH: usize> MMIO<[T; LENGTH]> {
 
     fn get_index(&self, index: usize) -> MMIO<T> {
         assert!(index < LENGTH, "Access out of bounds");
+        // SAFETY: Bounds-checked above; the offset stays within the array region.
         unsafe { self.new_type_with_offset(index * core::mem::size_of::<T>()) }
     }
 }
@@ -74,6 +89,9 @@ impl<T: Number + BitAnd<T, Output = T>> BitAndAssign<T> for MMIO<T> {
     }
 }
 
+// SAFETY: MMIO addresses are fixed hardware registers, not heap-allocated.
+// Sharing across threads is safe because accesses are volatile and the
+// hardware handles concurrent access.
 unsafe impl<T> Send for MMIO<T> {}
 
 impl<T> core::fmt::Pointer for MMIO<T> {
@@ -109,6 +127,8 @@ macro_rules! mmio_struct {
                 $(
                     #[allow(dead_code)]
                     pub const fn $field_name(&self) -> $crate::klibc::mmio::MMIO<$field_type> {
+                        // SAFETY: offset_of! gives the correct byte offset for
+                        // this field within the MMIO struct layout.
                         unsafe {
                             self.new_type_with_offset(core::mem::offset_of!($name, $field_name))
                         }
