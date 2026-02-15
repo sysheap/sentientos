@@ -89,9 +89,9 @@ impl<T: Number + BitAnd<T, Output = T>> BitAndAssign<T> for MMIO<T> {
     }
 }
 
-// SAFETY: MMIO addresses are fixed hardware registers, not heap-allocated.
-// Sharing across threads is safe because accesses are volatile and the
-// hardware handles concurrent access.
+// SAFETY: MMIO wraps a raw pointer to a hardware register. Sending the
+// pointer to another thread is safe; callers must provide synchronization
+// for concurrent access (e.g., Spinlock).
 unsafe impl<T> Send for MMIO<T> {}
 
 impl<T> core::fmt::Pointer for MMIO<T> {
