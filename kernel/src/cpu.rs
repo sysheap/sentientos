@@ -126,8 +126,7 @@ impl Cpu {
             cpu_id < number_cpus,
             "cpu_id {cpu_id} must be less than number_cpus {number_cpus}"
         );
-        let kernel_stack =
-            Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()) as *mut _ as *mut u8;
+        let kernel_stack = Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()).as_mut_ptr();
         let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(true);
 
         let stack_start_virtual = (0usize).wrapping_sub(KERNEL_STACK_SIZE);
@@ -171,7 +170,7 @@ impl Cpu {
         // SAFETY: Cpu is statically allocated and offset
         // is calculated by the actual field offset.
         unsafe {
-            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET) as *mut TrapFrame;
+            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET).cast::<TrapFrame>();
             trap_frame_ptr.read_volatile()
         }
     }
@@ -181,7 +180,7 @@ impl Cpu {
         // SAFETY: Cpu is statically allocated and offset
         // is calculated by the actual field offset.
         unsafe {
-            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET) as *mut TrapFrame;
+            let trap_frame_ptr = cpu_ptr.byte_add(TRAP_FRAME_OFFSET).cast::<TrapFrame>();
             trap_frame_ptr.write_volatile(trap_frame);
         }
     }

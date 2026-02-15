@@ -50,14 +50,14 @@ pub struct DeviceTree {
 
 impl DeviceTree {
     fn new(device_tree_pointer: *const ()) -> &'static Self {
-        let magic = device_tree_pointer as *const BigEndian<u32>;
+        let magic = device_tree_pointer.cast::<BigEndian<u32>>();
         assert!(magic.is_aligned(), "Device tree must be 4 byte aligned");
         assert!(!device_tree_pointer.is_null());
         // SAFETY: The pointer is non-null and aligned (asserted above). We read
         // the magic value to verify this is actually a device tree blob.
         let header = unsafe {
             assert_eq!(magic.read().get(), FDT_MAGIC);
-            &*(device_tree_pointer as *const Header)
+            &*device_tree_pointer.cast::<Header>()
         };
         assert_eq!(
             header.version.get(),
@@ -77,12 +77,14 @@ impl DeviceTree {
 
     fn header(&self) -> &Header {
         // SAFETY: The data slice starts with a valid Header (verified in new()).
-        unsafe { &*(self.data.as_ptr() as *const Header) }
+        unsafe { &*self.data.as_ptr().cast::<Header>() }
     }
 
     fn offset_from_header<T>(&self, offset: usize) -> *const T {
         assert!(offset < self.header().totalsize.get() as usize);
-        (self as *const DeviceTree).wrapping_byte_add(offset) as *const T
+        (self as *const DeviceTree)
+            .wrapping_byte_add(offset)
+            .cast::<T>()
     }
 
     pub fn get_reserved_areas(&self) -> &[ReserveEntry] {
@@ -349,7 +351,7 @@ impl<'a> Iterator for Node<'a> {
 
 pub fn get_devicetree_range() -> Range<*const u8> {
     let size = THE.header().totalsize.get() as usize;
-    let device_tree_pointer = *THE as *const DeviceTree as *const u8;
+    let device_tree_pointer = (*THE as *const DeviceTree).cast::<u8>();
 
     device_tree_pointer..device_tree_pointer.wrapping_byte_add(size)
 }
@@ -377,7 +379,7 @@ mod tests {
     const DTB: &[u8] = include_bytes_align_as!(Header, "test/test_data/dtb");
 
     fn get_root_node() -> Node<'static> {
-        let device_tree = DeviceTree::new(DTB.as_ptr() as *const ());
+        let device_tree = DeviceTree::new(DTB.as_ptr().cast::<()>());
         assert!(device_tree.header().totalsize.get() as usize <= DTB.len());
         device_tree.root_node()
     }

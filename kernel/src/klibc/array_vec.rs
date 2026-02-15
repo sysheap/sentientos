@@ -104,13 +104,15 @@ impl<T, const LENGTH: usize> Deref for ArrayVec<T, LENGTH> {
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: MaybeUninit has the same memory layout as the underlying type
-        unsafe { core::slice::from_raw_parts(self.elements.as_ptr() as *const T, self.len()) }
+        unsafe { core::slice::from_raw_parts(self.elements.as_ptr().cast::<T>(), self.len()) }
     }
 }
 
 impl<T, const LENGTH: usize> DerefMut for ArrayVec<T, LENGTH> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: MaybeUninit has the same memory layout as the underlying type
-        unsafe { core::slice::from_raw_parts_mut(self.elements.as_mut_ptr() as *mut T, self.len()) }
+        unsafe {
+            core::slice::from_raw_parts_mut(self.elements.as_mut_ptr().cast::<T>(), self.len())
+        }
     }
 }

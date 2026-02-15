@@ -55,7 +55,7 @@ impl PagesAsSlice for [Page] {
         // is tied to &mut self.
         unsafe {
             core::slice::from_raw_parts_mut(
-                self.as_mut_ptr() as *mut u8,
+                self.as_mut_ptr().cast::<u8>(),
                 core::mem::size_of_val(self),
             )
         }
@@ -164,7 +164,7 @@ mod tests {
         let u8_slice = heap_pages.as_u8_slice();
         assert_eq!(u8_slice.len(), PAGE_SIZE * 2);
         assert_eq!(
-            u8_slice.as_ptr() as *const Page,
+            u8_slice.as_ptr().cast::<Page>(),
             heap_pages.allocation.as_ptr()
         );
     }

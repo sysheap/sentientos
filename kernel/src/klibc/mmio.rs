@@ -39,7 +39,7 @@ impl<T> MMIO<T> {
         // SAFETY: Caller guarantees the resulting address is valid for U.
         unsafe {
             MMIO::<U> {
-                addr: self.addr.byte_add(offset) as *mut U,
+                addr: self.addr.byte_add(offset).cast::<U>(),
             }
         }
     }
