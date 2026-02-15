@@ -36,7 +36,10 @@ impl ProcessTable {
 
     pub fn add_thread(&mut self, thread: ThreadRef) {
         let tid = thread.lock().get_tid();
-        self.threads.insert(tid, thread);
+        assert!(
+            self.threads.insert(tid, thread).is_none(),
+            "Duplicate TID {tid} in process table"
+        );
     }
 
     pub fn is_empty(&self) -> bool {

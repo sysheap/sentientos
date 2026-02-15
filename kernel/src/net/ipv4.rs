@@ -62,6 +62,12 @@ impl IpV4Header {
 
         let (ipv4_header, rest) = data.split_as::<IpV4Header>();
 
+        let version = ipv4_header.version_and_ihl.get() >> 4;
+        assert!(version == 4, "Not an IPv4 packet (version={version})");
+
+        let ihl = ipv4_header.version_and_ihl.get() & 0x0F;
+        assert!(ihl == 5, "IP options not supported (IHL={ihl})");
+
         assert!(ipv4_header.total_packet_length.get() as usize <= data.len());
 
         assert!(

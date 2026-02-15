@@ -53,14 +53,13 @@ impl Plic {
         match open_interrupt {
             0 => None,
             UART_INTERRUPT_NUMBER => Some(InterruptSource::Uart),
-            _ => Some(InterruptSource::Else),
+            id => panic!("Unknown PLIC interrupt source ID {id}"),
         }
     }
 
     pub fn complete_interrupt(&mut self, source: InterruptSource) {
         let interrupt_id = match source {
             InterruptSource::Uart => UART_INTERRUPT_NUMBER,
-            InterruptSource::Else => panic!("Invalid interrupt source to complete."),
         };
         self.claim_complete_register.write(interrupt_id);
     }
@@ -73,7 +72,6 @@ const UART_INTERRUPT_NUMBER: u32 = 10;
 #[derive(PartialEq, Eq)]
 pub enum InterruptSource {
     Uart,
-    Else,
 }
 
 pub fn init_uart_interrupt(hart_id: usize) {

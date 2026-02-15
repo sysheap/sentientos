@@ -83,7 +83,10 @@ impl Process {
     }
 
     pub fn add_thread(&mut self, tid: Tid, thread: ThreadWeakRef) {
-        self.threads.insert(tid, thread);
+        assert!(
+            self.threads.insert(tid, thread).is_none(),
+            "Duplicate TID {tid} in process"
+        );
     }
 
     pub fn read_userspace_slice<T: Clone>(
