@@ -11,7 +11,7 @@ This document analyzes all 11 custom syscalls in SentientOS and describes how ea
 | 2 | `sys_exit` | `exit_group` (NR 94) | `sesh.rs` | Trivial |
 | 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
 | 4 | `sys_wait` | `wait4` (NR 260) | `init.rs`, `sesh.rs`, `stress.rs` | Medium |
-| 5 | `sys_mmap_pages` | `mmap` (NR 222) | None | Trivial — delete |
+| 5 | `sys_mmap_pages` | `mmap` (NR 222) | None | **MIGRATED** — deleted |
 | 6 | `sys_open_udp_socket` | `socket` + `bind` | `udp.rs` | Hard |
 | 7 | `sys_write_back_udp_socket` | `sendto` | `udp.rs` | Hard |
 | 8 | `sys_read_udp_socket` | `recvfrom` | `udp.rs` | Hard |

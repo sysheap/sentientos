@@ -12,7 +12,6 @@ use crate::{
     cpu::Cpu,
     debug,
     io::stdin_buf::STDIN_BUFFER,
-    memory::page_tables::XWRMode,
     net::{self, arp, udp::UdpHeader},
     print, println,
     processes::{process::ProcessRef, thread::ThreadRef},
@@ -101,12 +100,6 @@ impl KernelSyscalls for SyscallHandler {
         } else {
             Err(SysWaitError::InvalidPid)
         }
-    }
-
-    fn sys_mmap_pages(&mut self, number_of_pages: UserspaceArgument<usize>) -> *mut u8 {
-        self.current_process
-            .lock()
-            .mmap_pages(*number_of_pages, XWRMode::ReadWrite)
     }
 
     fn sys_open_udp_socket(
