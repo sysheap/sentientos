@@ -28,6 +28,8 @@ mmio_struct! {
 
 pub static QEMU_UART: Spinlock<Uart> = Spinlock::new(Uart::new(UART_BASE_ADDRESS));
 
+// SAFETY: Uart wraps an MMIO address (fixed hardware register). Access is
+// serialized through a Spinlock, making it safe to share across threads.
 unsafe impl Sync for Uart {}
 unsafe impl Send for Uart {}
 

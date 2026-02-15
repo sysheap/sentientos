@@ -53,7 +53,8 @@ impl DeviceTree {
         let magic = device_tree_pointer as *const BigEndian<u32>;
         assert!(magic.is_aligned(), "Device tree must be 4 byte aligned");
         assert!(!device_tree_pointer.is_null());
-        // SAFETY: We need to read the magic value to determine if we really got a device tree
+        // SAFETY: The pointer is non-null and aligned (asserted above). We read
+        // the magic value to verify this is actually a device tree blob.
         let header = unsafe {
             assert_eq!(magic.read().get(), FDT_MAGIC);
             &*(device_tree_pointer as *const Header)
@@ -63,7 +64,8 @@ impl DeviceTree {
             FDT_VERSION,
             "Device tree version mismatch"
         );
-        // SAFETY: We validated the important fields above so this is probably a valid device tree
+        // SAFETY: We validated magic and version above. The firmware guarantees
+        // the DTB is a contiguous block of totalsize bytes at this address.
         unsafe {
             &*(core::ptr::from_raw_parts::<DeviceTree>(
                 device_tree_pointer,
@@ -74,6 +76,7 @@ impl DeviceTree {
     }
 
     fn header(&self) -> &Header {
+        // SAFETY: The data slice starts with a valid Header (verified in new()).
         unsafe { &*(self.data.as_ptr() as *const Header) }
     }
 
@@ -86,6 +89,8 @@ impl DeviceTree {
         let offset = self.header().off_mem_rsvmap.get();
         let start: *const ReserveEntry = self.offset_from_header(offset as usize);
         let mut len = 0;
+        // SAFETY: The reserved memory map is within the DTB (offset checked
+        // by offset_from_header). Entries are iterated until the sentinel.
         unsafe {
             loop {
                 let entry = &*start.add(len);
@@ -103,8 +108,8 @@ impl DeviceTree {
         let offset = self.header().off_dt_struct.get();
         let start = self.offset_from_header(offset as usize);
         debug!("Structure Block Start: {:p}", start);
-        // SAFETY: The data is provided by the firmware
-        // we cannot really do more here to provide safety
+        // SAFETY: The struct block is within the DTB blob. Offset and size are
+        // read from the validated header.
         let data =
             unsafe { slice::from_raw_parts(start, self.header().size_dt_struct.get() as usize) };
         let structure_block = ConsumableBuffer::new(data);
@@ -122,6 +127,8 @@ impl DeviceTree {
         if offset >= size {
             return None;
         }
+        // SAFETY: The strings block is within the DTB blob. Offset and size
+        // are read from the validated header.
         let strings_data = unsafe { slice::from_raw_parts(start, size) };
         let mut consumable_buffer = ConsumableBuffer::new(&strings_data[offset..]);
         consumable_buffer.consume_str()

@@ -58,6 +58,8 @@ pub trait BufferExtension {
 
 impl BufferExtension for [u8] {
     fn interpret_as<T>(&self) -> &T {
+        // SAFETY: Size and alignment are verified by assertions. The lifetime
+        // of the returned reference is tied to &self.
         unsafe {
             assert!(self.len() >= core::mem::size_of::<T>());
             let ptr: *const T = self.as_ptr() as *const T;
