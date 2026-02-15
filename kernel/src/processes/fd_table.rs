@@ -62,10 +62,12 @@ impl FdTable {
         self.table.get(&fd)
     }
 
-    pub fn allocate(&mut self, descriptor: FileDescriptor) -> RawFd {
-        let fd = (0..).find(|n| !self.table.contains_key(n)).unwrap();
+    pub fn allocate(&mut self, descriptor: FileDescriptor) -> Result<RawFd, Errno> {
+        let fd = (0..)
+            .find(|n| !self.table.contains_key(n))
+            .ok_or(Errno::EMFILE)?;
         self.table.insert(fd, descriptor);
-        fd
+        Ok(fd)
     }
 
     pub fn close(&mut self, fd: RawFd) -> Result<FileDescriptor, Errno> {
