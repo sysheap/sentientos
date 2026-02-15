@@ -12,7 +12,6 @@ use crate::{
     },
 };
 use alloc::{
-    collections::BTreeSet,
     string::String,
     sync::{Arc, Weak},
     vec::Vec,
@@ -91,7 +90,6 @@ pub struct Thread {
     wakeup_pending: bool,
     in_kernel_mode: bool,
     process: ProcessRef,
-    notify_on_die: BTreeSet<Tid>,
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     signal_state: SignalState,
     syscall_task: Option<SyscallTask>,
@@ -209,9 +207,6 @@ impl Thread {
         main_thread
     }
 
-    pub fn add_notify_on_die(&mut self, tid: Tid) {
-        self.notify_on_die.insert(tid);
-    }
     pub fn new(
         tid: Tid,
         process_name: Arc<String>,
@@ -229,7 +224,6 @@ impl Thread {
             wakeup_pending: false,
             in_kernel_mode,
             process,
-            notify_on_die: BTreeSet::new(),
             clear_child_tid: None,
             signal_state: SignalState::new(),
             syscall_task: None,
@@ -276,10 +270,6 @@ impl Thread {
     pub fn get_tid(&self) -> Tid {
         self.tid
     }
-    pub fn get_notifies_on_die(&self) -> impl Iterator<Item = &Tid> {
-        self.notify_on_die.iter()
-    }
-
     pub fn set_sigaction(&mut self, sig: c_uint, sigaction: sigaction) -> Result<sigaction, Errno> {
         if sig >= _NSIG {
             return Err(Errno::EINVAL);

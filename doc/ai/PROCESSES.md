@@ -60,7 +60,6 @@ pub struct Thread {
     state: ThreadState,                        // Running/Runnable/Waiting
     in_kernel_mode: bool,                      // Kernel vs user mode
     process: ProcessRef,                       // Parent process
-    notify_on_die: BTreeSet<Tid>,              // Threads to wake on exit
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     signal_state: SignalState,                 // Signal handlers, mask, altstack
     syscall_task: Option<SyscallTask>,         // Pending async syscall
@@ -162,6 +161,8 @@ pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>>;
 
 struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,
+    zombies: BTreeMap<Tid, ZombieEntry>,     // Exited children awaiting reaping
+    wait_wakers: Vec<Waker>,                 // Wakers for blocked wait4 callers
 }
 ```
 
@@ -171,10 +172,12 @@ struct ProcessTable {
 impl ProcessTable {
     fn init()                                    // Create init process
     fn add_thread(&mut self, thread: ThreadRef)
-    fn get_thread(&self, tid: Tid) -> Option<ThreadRef>
     fn next_runnable(&mut self) -> Option<ThreadRef>  // Get next runnable thread
-    fn kill(&mut self, tid: Tid)
+    fn kill(&mut self, tid: Tid)                 // Kill thread, create zombie, wake waiters
     fn is_empty(&self) -> bool
+    fn take_zombie(parent_tid, pid) -> Option<(Tid, i32)>  // Reap a zombie child
+    fn has_any_child_of(parent_tid) -> bool      // Check for live children or zombies
+    fn register_wait_waker(waker)                // Register waker for wait4
 }
 ```
 
@@ -186,9 +189,9 @@ Every process tracks its parent via `parent_tid: Tid`:
 - **Powersave** (idle): `parent_tid = POWERSAVE_TID`
 - **All others**: `parent_tid` = caller's `main_tid` at `sys_execute` time
 
-### sys_wait enforcement
+### wait4 / waitpid enforcement
 
-`sys_wait(tid)` verifies `target.parent_tid == caller.main_tid` before allowing the wait. Returns `SysWaitError::NotAChild` on mismatch.
+`wait4(pid, ...)` uses zombie tracking: when a child exits, a `ZombieEntry` is stored in ProcessTable. The `WaitChild` future checks for matching zombies under the process_table lock. Returns `ECHILD` if the caller has no children at all.
 
 ### Orphan reparenting
 

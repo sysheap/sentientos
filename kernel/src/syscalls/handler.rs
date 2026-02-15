@@ -1,5 +1,5 @@
 use common::{
-    errors::{SysExecuteError, SysSocketError, SysWaitError},
+    errors::{SysExecuteError, SysSocketError},
     net::UDPDescriptor,
     pid::Tid,
     pointer::Pointer,
@@ -48,6 +48,10 @@ impl SyscallHandler {
     }
 
     pub fn sys_exit(&mut self, status: isize) {
+        self.current_process.with_lock(|mut p| {
+            p.set_exit_status(i32::try_from(status).expect("exit status fits in i32"))
+        });
+
         Cpu::with_scheduler(|mut s| {
             s.kill_current_process();
         });
@@ -69,11 +73,6 @@ impl KernelSyscalls for SyscallHandler {
 
         let tid = Cpu::with_scheduler(|mut s| s.start_program(name, &args))?;
         Ok(tid)
-    }
-
-    fn sys_wait(&mut self, tid: UserspaceArgument<Tid>) -> Result<Tid, SysWaitError> {
-        Cpu::with_scheduler(|s| s.let_current_thread_wait_for(*tid))?;
-        Ok(*tid)
     }
 
     fn sys_open_udp_socket(

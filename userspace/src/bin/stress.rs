@@ -1,4 +1,4 @@
-use common::syscalls::{sys_execute, sys_wait};
+use common::syscalls::sys_execute;
 
 use std::{env, process::exit, vec::Vec};
 
@@ -34,7 +34,9 @@ fn main() {
     }
 
     for pid in pids {
-        let _ = sys_wait(pid);
+        unsafe {
+            libc::waitpid(pid.0 as i32, core::ptr::null_mut(), 0);
+        }
     }
 
     println!("Done!");

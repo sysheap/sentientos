@@ -84,6 +84,7 @@ fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Err
         .header("linux_headers/include/linux/mman.h")
         .header("linux_headers/include/linux/time.h")
         .header("linux_headers/include/linux/uio.h")
+        .header("linux_headers/include/linux/wait.h")
         .generate()?;
     let syscall_file_path = out_path.join("syscall_types.rs");
     bindings.write_to_file(syscall_file_path.clone())?;

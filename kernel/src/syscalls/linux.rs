@@ -7,6 +7,7 @@ use crate::{
         fd_table::{FdFlags, FileDescriptor},
         process::ProcessRef,
         timer,
+        wait_child::WaitChild,
     },
     syscalls::{handler::SyscallHandler, macros::linux_syscalls},
 };
@@ -45,6 +46,7 @@ linux_syscalls! {
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
+    SYSCALL_NR_WAIT4 => wait4(pid: c_int, status: Option<*mut c_int>, options: c_int, rusage: usize);
     SYSCALL_NR_WRITEV => writev(fd: c_int, iov: *const iovec, iovcnt: c_int);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
 }
@@ -462,6 +464,31 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     async fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
         Ok(isize::try_from(self.handler.current_tid().0).expect("tid fits in isize"))
+    }
+
+    async fn wait4(
+        &mut self,
+        pid: c_int,
+        status: LinuxUserspaceArg<Option<*mut c_int>>,
+        options: c_int,
+        _rusage: usize,
+    ) -> Result<isize, headers::errno::Errno> {
+        assert!(
+            pid > 0 || pid == -1,
+            "wait4: unsupported pid value {pid} (no process groups yet)"
+        );
+        let wnohang = (options & headers::syscall_types::WNOHANG as c_int) != 0;
+        assert!(
+            options & !(headers::syscall_types::WNOHANG as c_int) == 0,
+            "wait4: unsupported options {options:#x}"
+        );
+
+        let parent_main_tid = self.handler.current_process().lock().main_tid();
+        let (child_tid, wait_status) = WaitChild::new(parent_main_tid, pid, wnohang).await?;
+
+        status.write_if_not_none(wait_status)?;
+
+        Ok(isize::try_from(child_tid.0).expect("tid fits in isize"))
     }
 }
 

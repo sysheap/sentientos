@@ -8,4 +8,5 @@ pub mod task;
 pub mod thread;
 pub mod timer;
 pub mod userspace_ptr;
+pub mod wait_child;
 pub mod waker;
