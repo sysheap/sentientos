@@ -53,6 +53,7 @@ pub enum ThreadState {
     Running { cpu_id: usize },
     Runnable,
     Waiting,
+    Zombie(u8),
 }
 
 #[derive(Debug)]
@@ -236,6 +237,11 @@ impl Thread {
 
     pub fn set_syscall_task_and_suspend(&mut self, task: SyscallTask) {
         assert!(self.syscall_task.is_none(), "syscall task is already set");
+        if matches!(self.state, ThreadState::Zombie(_)) {
+            // Thread was killed by another CPU between poll() returning Pending
+            // and now. Don't store the task or suspend — the thread is dead.
+            return;
+        }
         self.syscall_task = Some(task);
         if self.wakeup_pending {
             // A waker fired between poll() returning Pending and now.

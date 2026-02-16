@@ -12,11 +12,6 @@ use crate::{
 
 use super::thread::{ThreadRef, ThreadState};
 
-pub struct ZombieEntry {
-    pub parent_tid: Tid,
-    pub exit_status: i32,
-}
-
 pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>> = RuntimeInitializedData::new();
 
 pub fn init() {
@@ -31,7 +26,7 @@ pub fn init() {
 
 pub struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,
-    zombies: BTreeMap<Tid, ZombieEntry>,
+    alive_count: usize,
     wait_wakers: Vec<Waker>,
 }
 
@@ -39,7 +34,7 @@ impl ProcessTable {
     pub fn new() -> Self {
         Self {
             threads: BTreeMap::new(),
-            zombies: BTreeMap::new(),
+            alive_count: 0,
             wait_wakers: Vec::new(),
         }
     }
@@ -50,20 +45,23 @@ impl ProcessTable {
             self.threads.insert(tid, thread).is_none(),
             "Duplicate TID {tid} in process table"
         );
+        self.alive_count += 1;
     }
 
     pub fn is_empty(&self) -> bool {
-        self.threads.is_empty()
+        self.alive_count == 0
     }
 
     pub fn get_highest_tid_without(&self, process_names: &[&str]) -> Option<Tid> {
         self.threads
             .iter()
-            .max_by_key(|(pid, _)| *pid)
-            .filter(|(_, p)| {
-                let p = p.lock();
-                !process_names.iter().any(|n| p.get_name() == *n) && p.get_tid() != POWERSAVE_TID
+            .filter(|(_, t)| {
+                let t = t.lock();
+                !matches!(t.get_state(), ThreadState::Zombie(_))
+                    && !process_names.iter().any(|n| t.get_name() == *n)
+                    && t.get_tid() != POWERSAVE_TID
             })
+            .max_by_key(|(pid, _)| *pid)
             .map(|(pid, _)| *pid)
     }
 
@@ -81,35 +79,43 @@ impl ProcessTable {
     }
 
     pub fn take_zombie(&mut self, parent_tid: Tid, pid: i32) -> Option<(Tid, i32)> {
-        if pid > 0 {
+        let is_zombie_of = |t: &ThreadRef| {
+            t.with_lock(|t| {
+                matches!(t.get_state(), ThreadState::Zombie(_))
+                    && t.process().lock().parent_tid() == parent_tid
+            })
+        };
+
+        let tid = if pid > 0 {
             let tid = Tid(u64::try_from(pid).expect("pid is positive"));
-            let entry = self.zombies.get(&tid)?;
-            if entry.parent_tid != parent_tid {
+            if !is_zombie_of(self.threads.get(&tid)?) {
                 return None;
             }
-            let status = entry.exit_status;
-            self.zombies.remove(&tid);
-            Some((tid, status))
+            tid
         } else {
-            // pid == -1: any child of parent
-            let tid = self
-                .zombies
+            // pid == -1: any zombie child of parent
+            *self
+                .threads
                 .iter()
-                .find(|(_, e)| e.parent_tid == parent_tid)
-                .map(|(tid, _)| *tid)?;
-            let entry = self.zombies.remove(&tid).expect("tid was just found");
-            Some((tid, entry.exit_status))
-        }
+                .find(|(_, t)| is_zombie_of(t))
+                .map(|(tid, _)| tid)?
+        };
+
+        let thread = self.threads.remove(&tid).expect("tid was just found");
+        let exit_code = thread.with_lock(|t| match t.get_state() {
+            ThreadState::Zombie(code) => code,
+            _ => unreachable!(),
+        });
+        Some((tid, i32::from(exit_code) << 8))
     }
 
     pub fn has_any_child_of(&self, parent_tid: Tid) -> bool {
         self.threads.values().any(|t| {
             t.with_lock(|t| {
                 let process = t.process();
-                let process = process.lock();
-                process.parent_tid() == parent_tid
+                process.lock().parent_tid() == parent_tid
             })
-        }) || self.zombies.values().any(|e| e.parent_tid == parent_tid)
+        })
     }
 
     pub fn register_wait_waker(&mut self, waker: Waker) {
@@ -127,10 +133,12 @@ impl ProcessTable {
             tid != POWERSAVE_TID,
             "We are not allowed to kill the never process"
         );
-        debug!("Removing tid={tid} from process table");
-        if let Some(thread) = self.threads.remove(&tid) {
-            let (main_tid, parent_tid) = thread.with_lock(|mut t| {
-                t.set_state(ThreadState::Waiting);
+        debug!("Killing tid={tid}");
+        let exit_code = u8::try_from(exit_status & 0xff).expect("masked to 8 bits");
+        if let Some(thread) = self.threads.get(&tid).cloned() {
+            self.alive_count -= 1;
+            let main_tid = thread.with_lock(|mut t| {
+                t.set_state(ThreadState::Zombie(exit_code));
                 Cpu::current().ipi_to_all_but_me();
 
                 if let Some(clear_child_tid) = t.get_clear_child_tid() {
@@ -139,17 +147,9 @@ impl ProcessTable {
                 }
 
                 let process = t.process();
-                let process = process.lock();
-                (process.main_tid(), process.parent_tid())
+                process.lock().main_tid()
             });
 
-            self.zombies.insert(
-                main_tid,
-                ZombieEntry {
-                    parent_tid,
-                    exit_status: (exit_status & 0xff) << 8,
-                },
-            );
             self.wake_wait_wakers();
 
             // Reparent orphans to init (Tid(1))
@@ -162,11 +162,6 @@ impl ProcessTable {
                         process.set_parent_tid(init_tid);
                     }
                 });
-            }
-            for zombie in self.zombies.values_mut() {
-                if zombie.parent_tid == main_tid {
-                    zombie.parent_tid = init_tid;
-                }
             }
         }
     }
