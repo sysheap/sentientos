@@ -22,6 +22,16 @@ impl QemuMcpServer {
             tool_router: Self::tool_router(),
         }
     }
+
+    async fn run_on_qemu(&self, command: &str) -> Result<CallToolResult, McpError> {
+        let mut guard = self.qemu.lock().await;
+        let instance = require_running(&mut guard)?;
+        let output = tokio::time::timeout(Duration::from_secs(10), instance.run_prog(command))
+            .await
+            .map_err(|_| mcp_err("Timed out waiting for output (10s)"))?
+            .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
+        text_result(output)
+    }
 }
 
 fn mcp_err(msg: impl Into<String>) -> McpError {
@@ -30,6 +40,30 @@ fn mcp_err(msg: impl Into<String>) -> McpError {
 
 fn text_result(text: impl Into<String>) -> Result<CallToolResult, McpError> {
     Ok(CallToolResult::success(vec![Content::text(text.into())]))
+}
+
+fn require_running(guard: &mut Option<QemuInstance>) -> Result<&mut QemuInstance, McpError> {
+    guard
+        .as_mut()
+        .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))
+}
+
+fn format_command_output(
+    label: &str,
+    success_word: &str,
+    output: &std::process::Output,
+) -> String {
+    format!(
+        "{} {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        label,
+        if output.status.success() {
+            success_word
+        } else {
+            "FAILED"
+        },
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    )
 }
 
 // --- Parameter types ---
@@ -171,18 +205,7 @@ impl QemuMcpServer {
         &self,
         Parameters(params): Parameters<RunProgramParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
-        let instance = guard
-            .as_mut()
-            .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
-
-        let output =
-            tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.program))
-                .await
-                .map_err(|_| mcp_err("Timed out waiting for program output (10s)"))?
-                .map_err(|e| mcp_err(format!("Failed to run program: {e}")))?;
-
-        text_result(output)
+        self.run_on_qemu(&params.program).await
     }
 
     #[tool(
@@ -192,18 +215,7 @@ impl QemuMcpServer {
         &self,
         Parameters(params): Parameters<SendCommandParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
-        let instance = guard
-            .as_mut()
-            .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
-
-        let output =
-            tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.command))
-                .await
-                .map_err(|_| mcp_err("Timed out waiting for command output (10s)"))?
-                .map_err(|e| mcp_err(format!("Failed to send command: {e}")))?;
-
-        text_result(output)
+        self.run_on_qemu(&params.command).await
     }
 
     #[tool(
@@ -214,9 +226,7 @@ impl QemuMcpServer {
         Parameters(params): Parameters<SendInputParams>,
     ) -> Result<CallToolResult, McpError> {
         let mut guard = self.qemu.lock().await;
-        let instance = guard
-            .as_mut()
-            .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
+        let instance = require_running(&mut guard)?;
 
         tokio::time::timeout(Duration::from_secs(10), async {
             instance
@@ -233,9 +243,7 @@ impl QemuMcpServer {
     #[tool(description = "Send Ctrl+C to the running program and wait for shell prompt.")]
     async fn send_ctrl_c(&self) -> Result<CallToolResult, McpError> {
         let mut guard = self.qemu.lock().await;
-        let instance = guard
-            .as_mut()
-            .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
+        let instance = require_running(&mut guard)?;
 
         tokio::time::timeout(Duration::from_secs(5), instance.ctrl_c_and_assert_prompt())
             .await
@@ -248,9 +256,7 @@ impl QemuMcpServer {
     #[tool(description = "Non-blocking read of any available console output from QEMU.")]
     async fn read_output(&self) -> Result<CallToolResult, McpError> {
         let mut guard = self.qemu.lock().await;
-        let instance = guard
-            .as_mut()
-            .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))?;
+        let instance = require_running(&mut guard)?;
 
         let data = instance.stdout().read_available().await;
         let output = String::from_utf8_lossy(&data);
@@ -279,16 +285,7 @@ impl QemuMcpServer {
         .map_err(|_| mcp_err("Build timed out (90s)"))?
         .map_err(|e| mcp_err(format!("Failed to run build: {e}")))?;
 
-        let mut result = format!(
-            "Build {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-            if output.status.success() {
-                "succeeded"
-            } else {
-                "FAILED"
-            },
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
+        let mut result = format_command_output("Build", "succeeded", &output);
 
         if params.clippy.unwrap_or(false) {
             let clippy_output = tokio::time::timeout(Duration::from_secs(90), async {
@@ -303,14 +300,8 @@ impl QemuMcpServer {
             .map_err(|e| mcp_err(format!("Failed to run clippy: {e}")))?;
 
             result.push_str(&format!(
-                "\n\nClippy {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                if clippy_output.status.success() {
-                    "succeeded"
-                } else {
-                    "FAILED"
-                },
-                String::from_utf8_lossy(&clippy_output.stdout),
-                String::from_utf8_lossy(&clippy_output.stderr),
+                "\n\n{}",
+                format_command_output("Clippy", "succeeded", &clippy_output)
             ));
         }
 
@@ -357,16 +348,7 @@ impl QemuMcpServer {
         .map_err(|_| mcp_err("System tests timed out (120s)"))?
         .map_err(|e| mcp_err(format!("Failed to run system tests: {e}")))?;
 
-        text_result(format!(
-            "Tests {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
-            if output.status.success() {
-                "PASSED"
-            } else {
-                "FAILED"
-            },
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        ))
+        text_result(format_command_output("Tests", "PASSED", &output))
     }
 }
 
