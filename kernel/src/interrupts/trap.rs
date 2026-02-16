@@ -101,6 +101,11 @@ fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> boo
                     t.set_program_counter(sepc);
                     true
                 }
+                ThreadState::Zombie(_) => {
+                    // Thread was killed by another CPU while we were in a syscall.
+                    // No need to save state — just reschedule.
+                    true
+                }
             }
         });
 

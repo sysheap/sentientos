@@ -72,7 +72,8 @@ pub struct Thread {
 pub enum ThreadState {
     Running { cpu_id: usize },  // Currently executing on specified CPU
     Runnable,                   // Ready to run, in run queue
-    Waiting,                    // Blocked (sleeping, waiting for I/O, or being killed)
+    Waiting,                    // Blocked (sleeping, waiting for I/O)
+    Zombie(u8),                 // Exited with exit code, awaiting reaping by parent
 }
 ```
 
@@ -160,8 +161,7 @@ Global registry of all threads:
 pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>>;
 
 struct ProcessTable {
-    threads: BTreeMap<Tid, ThreadRef>,
-    zombies: BTreeMap<Tid, ZombieEntry>,     // Exited children awaiting reaping
+    threads: BTreeMap<Tid, ThreadRef>,       // All threads including zombies
     wait_wakers: Vec<Waker>,                 // Wakers for blocked wait4 callers
 }
 ```
@@ -173,10 +173,10 @@ impl ProcessTable {
     fn init()                                    // Create init process
     fn add_thread(&mut self, thread: ThreadRef)
     fn next_runnable(&mut self) -> Option<ThreadRef>  // Get next runnable thread
-    fn kill(&mut self, tid: Tid)                 // Kill thread, create zombie, wake waiters
-    fn is_empty(&self) -> bool
-    fn take_zombie(parent_tid, pid) -> Option<(Tid, i32)>  // Reap a zombie child
-    fn has_any_child_of(parent_tid) -> bool      // Check for live children or zombies
+    fn kill(&mut self, tid: Tid)                 // Set thread to Zombie state, wake waiters
+    fn is_empty(&self) -> bool                   // True when no non-zombie threads remain
+    fn take_zombie(parent_tid, pid) -> Option<(Tid, i32)>  // Reap a zombie child (removes from table)
+    fn has_any_child_of(parent_tid) -> bool      // Check for children (alive or zombie)
     fn register_wait_waker(waker)                // Register waker for wait4
 }
 ```
@@ -191,7 +191,7 @@ Every process tracks its parent via `parent_tid: Tid`:
 
 ### wait4 / waitpid enforcement
 
-`wait4(pid, ...)` uses zombie tracking: when a child exits, a `ZombieEntry` is stored in ProcessTable. The `WaitChild` future checks for matching zombies under the process_table lock. Returns `ECHILD` if the caller has no children at all.
+`wait4(pid, ...)` uses zombie tracking: when a child exits, its thread stays in the process table with `ThreadState::Zombie(exit_code)`. The `WaitChild` future checks for threads in Zombie state under the process_table lock. Reaping removes the thread from the table. Returns `ECHILD` if the caller has no children at all.
 
 ### Orphan reparenting
 
