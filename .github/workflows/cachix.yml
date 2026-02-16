@@ -18,6 +18,7 @@ jobs:
         with:
           name: ${{ vars.CACHIX_CACHE_NAME }}
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipAddingSubstituter: true
       - name: Build and push devShell closure
         env:
           CACHE_NAME: ${{ vars.CACHIX_CACHE_NAME }}
