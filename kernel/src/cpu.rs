@@ -19,7 +19,26 @@ const SIE_STIE: usize = 5;
 const SSTATUS_SPP: usize = 8;
 const SIP_SSIP: usize = 1;
 
-pub static STARTING_CPU_ID: RuntimeInitializedData<usize> = RuntimeInitializedData::new();
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CpuId(usize);
+
+impl CpuId {
+    pub fn from_hart_id(hart_id: usize) -> Self {
+        Self(hart_id)
+    }
+
+    pub fn as_usize(self) -> usize {
+        self.0
+    }
+}
+
+impl core::fmt::Display for CpuId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub static STARTING_CPU_ID: RuntimeInitializedData<CpuId> = RuntimeInitializedData::new();
 
 pub const TRAP_FRAME_OFFSET: usize = offset_of!(Cpu, trap_frame);
 
@@ -29,7 +48,7 @@ pub struct Cpu {
     kernel_page_tables_satp_value: usize,
     trap_frame: TrapFrame,
     scheduler: Spinlock<CpuScheduler>,
-    cpu_id: usize,
+    cpu_id: CpuId,
     kernel_page_tables: RootPageTableHolder,
     number_cpus: usize,
 }
@@ -115,15 +134,15 @@ impl Cpu {
             "If we have more cpu's we need to use hart_mask_base, that is not implemented yet."
         );
         let mut mask = 0;
-        for id in (0..self.number_cpus).filter(|i| *i != self.cpu_id) {
+        for id in (0..self.number_cpus).filter(|i| *i != self.cpu_id.as_usize()) {
             mask |= 1 << id;
         }
         sbi_send_ipi(mask, 0).assert_success();
     }
 
-    pub fn init(cpu_id: usize, number_cpus: usize) -> *const Cpu {
+    pub fn init(cpu_id: CpuId, number_cpus: usize) -> *const Cpu {
         assert!(
-            cpu_id < number_cpus,
+            cpu_id.as_usize() < number_cpus,
             "cpu_id {cpu_id} must be less than number_cpus {number_cpus}"
         );
         let kernel_stack = Box::leak(vec![0u8; KERNEL_STACK_SIZE].into_boxed_slice()).as_mut_ptr();
@@ -213,7 +232,7 @@ impl Cpu {
         unsafe { Some(&(*ptr).kernel_page_tables) }
     }
 
-    pub fn cpu_id() -> usize {
+    pub fn cpu_id() -> CpuId {
         let ptr = Self::read_sscratch() as *mut Self;
         if ptr.is_null() {
             return *STARTING_CPU_ID;

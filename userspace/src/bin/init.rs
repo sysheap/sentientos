@@ -8,7 +8,7 @@ fn main() {
     let shell_name = "sesh";
     let shell_pid = sys_execute(shell_name, &[]).unwrap();
     unsafe {
-        libc::waitpid(shell_pid.0 as i32, core::ptr::null_mut(), 0);
+        libc::waitpid(shell_pid.as_u64() as i32, core::ptr::null_mut(), 0);
     }
     println!("Initial shell has exited...");
 }

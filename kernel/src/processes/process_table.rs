@@ -18,7 +18,7 @@ pub fn init() {
     let mut process_table = ProcessTable::new();
 
     let elf = ElfFile::parse(INIT).expect("Cannot parse ELF file");
-    let thread = Thread::from_elf(&elf, "init", &[], Tid(0)).expect("init must succeed");
+    let thread = Thread::from_elf(&elf, "init", &[], Tid::new(0)).expect("init must succeed");
     process_table.add_thread(thread);
 
     THE.initialize(Spinlock::new(process_table));
@@ -86,7 +86,7 @@ impl ProcessTable {
         };
 
         let tid = if pid > 0 {
-            let tid = Tid(u64::try_from(pid).expect("pid is positive"));
+            let tid = Tid::try_from_i32(pid).expect("pid is positive");
             if !is_zombie_of(self.threads.get(&tid)?) {
                 return None;
             }
@@ -150,8 +150,8 @@ impl ProcessTable {
 
             self.wake_wait_wakers();
 
-            // Reparent orphans to init (Tid(1))
-            let init_tid = Tid(1);
+            // Reparent orphans to init
+            let init_tid = Tid::new(1);
             for child_thread in self.threads.values() {
                 child_thread.with_lock(|t| {
                     let process = t.process();

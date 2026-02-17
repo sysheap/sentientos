@@ -4,13 +4,28 @@ use core::ops::{Add, Deref, DerefMut};
 
 pub const PAGE_SIZE: usize = 4096;
 
-pub struct Pages(pub usize);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pages(usize);
+
+impl Pages {
+    pub const fn new(count: usize) -> Self {
+        Self(count)
+    }
+
+    pub const fn count(self) -> usize {
+        self.0
+    }
+
+    pub const fn as_bytes(self) -> usize {
+        self.0 * PAGE_SIZE
+    }
+}
 
 impl Add<Pages> for usize {
     type Output = usize;
 
     fn add(self, rhs: Pages) -> Self::Output {
-        (rhs.0 * PAGE_SIZE) + self
+        rhs.as_bytes() + self
     }
 }
 
@@ -75,7 +90,7 @@ impl PinnedHeapPages {
     }
 
     pub fn new_pages(pages: Pages) -> Self {
-        Self::new(pages.0)
+        Self::new(pages.count())
     }
 
     pub fn fill(&mut self, data: &[u8], offset: usize) {

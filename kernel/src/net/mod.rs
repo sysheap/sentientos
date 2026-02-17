@@ -100,8 +100,8 @@ fn process_ipv4_packet(data: &[u8]) {
         UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
     open_sockets().lock().put_data(
         ipv4_header.source_ip,
-        udp_header.source_port(),
-        udp_header.destination_port(),
+        sockets::Port::new(udp_header.source_port()),
+        sockets::Port::new(udp_header.destination_port()),
         data,
     );
 }

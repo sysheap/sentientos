@@ -82,7 +82,7 @@ pub struct Cpu {
     kernel_page_tables_satp_value: usize,  # Kernel SATP for trap entry
     trap_frame: TrapFrame,                  # Saved registers on trap
     scheduler: Spinlock<CpuScheduler>,      # Per-CPU scheduler
-    cpu_id: usize,                          # Hart ID
+    cpu_id: CpuId,                          # Hart ID
     kernel_page_tables: RootPageTableHolder,# Kernel page tables
     number_cpus: usize,                     # Total CPU count
 }
