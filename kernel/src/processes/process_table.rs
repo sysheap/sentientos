@@ -26,7 +26,6 @@ pub fn init() {
 
 pub struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,
-    alive_count: usize,
     wait_wakers: Vec<Waker>,
 }
 
@@ -34,7 +33,6 @@ impl ProcessTable {
     pub fn new() -> Self {
         Self {
             threads: BTreeMap::new(),
-            alive_count: 0,
             wait_wakers: Vec::new(),
         }
     }
@@ -45,11 +43,12 @@ impl ProcessTable {
             self.threads.insert(tid, thread).is_none(),
             "Duplicate TID {tid} in process table"
         );
-        self.alive_count += 1;
     }
 
     pub fn is_empty(&self) -> bool {
-        self.alive_count == 0
+        self.threads
+            .values()
+            .all(|t| t.with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_))))
     }
 
     pub fn get_highest_tid_without(&self, process_names: &[&str]) -> Option<Tid> {
@@ -136,7 +135,6 @@ impl ProcessTable {
         debug!("Killing tid={tid}");
         let exit_code = u8::try_from(exit_status & 0xff).expect("masked to 8 bits");
         if let Some(thread) = self.threads.get(&tid).cloned() {
-            self.alive_count -= 1;
             let main_tid = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Zombie(exit_code));
                 Cpu::current().ipi_to_all_but_me();
