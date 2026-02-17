@@ -21,7 +21,7 @@ pub struct Process {
     fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
-    parent_tid: Tid,                           // Parent process (Tid(0) for init)
+    parent_tid: Tid,                           // Parent process (Tid::new(0) for init)
     brk: Brk,                                  // Heap break manager
 }
 ```
@@ -31,8 +31,8 @@ pub struct Process {
 ```rust
 impl Process {
     // Memory management
-    fn mmap_pages(&mut self, num_pages: usize, perm: XWRMode) -> *mut u8
-    fn mmap_pages_with_address(&mut self, num_pages: usize, addr: usize, perm: XWRMode) -> *mut u8
+    fn mmap_pages(&mut self, num_pages: Pages, perm: XWRMode) -> *mut u8
+    fn mmap_pages_with_address(&mut self, num_pages: Pages, addr: usize, perm: XWRMode) -> *mut u8
     fn brk(&mut self, brk: usize) -> usize
 
     // Userspace pointer access
@@ -70,7 +70,7 @@ pub struct Thread {
 
 ```rust
 pub enum ThreadState {
-    Running { cpu_id: usize },  // Currently executing on specified CPU
+    Running { cpu_id: CpuId },  // Currently executing on specified CPU
     Runnable,                   // Ready to run, in run queue
     Waiting,                    // Blocked (sleeping, waiting for I/O)
     Zombie(u8),                 // Exited with exit code, awaiting reaping by parent
@@ -185,7 +185,7 @@ impl ProcessTable {
 
 Every process tracks its parent via `parent_tid: Tid`:
 
-- **Init** (first process): `parent_tid = Tid(0)` (no real parent)
+- **Init** (first process): `parent_tid = Tid::new(0)` (no real parent)
 - **Powersave** (idle): `parent_tid = POWERSAVE_TID`
 - **All others**: `parent_tid` = caller's `main_tid` at `sys_execute` time
 
@@ -195,7 +195,7 @@ Every process tracks its parent via `parent_tid: Tid`:
 
 ### Orphan reparenting
 
-When a process dies in `ProcessTable::kill()`, orphans (children of the dying process) are reparented to init (`Tid(1)`).
+When a process dies in `ProcessTable::kill()`, orphans (children of the dying process) are reparented to init (`Tid::new(1)`).
 
 ### getppid syscall
 
@@ -336,7 +336,7 @@ let thread = Cpu::current_thread();
 
 // Work with current process
 Cpu::with_current_process(|process| {
-    process.mmap_pages(1, XWRMode::ReadWrite);
+    process.mmap_pages(Pages::new(1), XWRMode::ReadWrite);
 });
 ```
 

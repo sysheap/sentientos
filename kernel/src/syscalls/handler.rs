@@ -78,7 +78,10 @@ impl KernelSyscalls for SyscallHandler {
         port: UserspaceArgument<u16>,
     ) -> Result<UDPDescriptor, SysSocketError> {
         use crate::processes::fd_table::FileDescriptor;
-        let socket = match net::open_sockets().lock().try_get_socket(*port) {
+        let socket = match net::open_sockets()
+            .lock()
+            .try_get_socket(crate::net::sockets::Port::new(*port))
+        {
             None => return Err(SysSocketError::PortAlreadyUsed),
             Some(socket) => socket,
         };
@@ -113,9 +116,9 @@ impl KernelSyscalls for SyscallHandler {
                 .expect("There must be a receiver mac already in the arp cache.");
             let constructed_packet = UdpHeader::create_udp_packet(
                 recv_ip,
-                recv_port,
+                recv_port.as_u16(),
                 destination_mac,
-                socket.get_port(),
+                socket.get_port().as_u16(),
                 buffer,
             );
             crate::net::send_packet(constructed_packet);

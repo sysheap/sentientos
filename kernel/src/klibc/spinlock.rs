@@ -65,7 +65,7 @@ impl<T> Spinlock<T> {
         // lock is released in between, we just skip the check (no deadlock).
         // A false positive requires owner_cpu == our id, meaning we do hold it.
         if self.locked.load(Ordering::Relaxed) {
-            let cpu_id = Cpu::cpu_id();
+            let cpu_id = Cpu::cpu_id().as_usize();
             assert_ne!(
                 self.owner_cpu.load(Ordering::Relaxed),
                 cpu_id,
@@ -96,7 +96,8 @@ impl<T> Spinlock<T> {
 
     #[cfg(not(test))]
     fn set_owner(&self) {
-        self.owner_cpu.store(Cpu::cpu_id(), Ordering::Relaxed);
+        self.owner_cpu
+            .store(Cpu::cpu_id().as_usize(), Ordering::Relaxed);
     }
 
     #[cfg(test)]

@@ -6,7 +6,7 @@ use crate::{
     },
 };
 
-const BRK_SIZE: Pages = Pages(4);
+const BRK_SIZE: Pages = Pages::new(4);
 
 #[derive(Debug)]
 pub struct Brk {

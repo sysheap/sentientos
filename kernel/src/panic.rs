@@ -23,7 +23,7 @@ fn panic(info: &PanicInfo) -> ! {
         crate::Cpu::disable_global_interrupts();
     }
 
-    let cpu_id = Cpu::cpu_id() as isize;
+    let cpu_id = Cpu::cpu_id().as_usize() as isize;
 
     // Check if we are the first cpu encountering a panic
     if CPU_ENTERED_PANIC

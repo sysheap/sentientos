@@ -8,10 +8,29 @@ use alloc::{
 
 use crate::{debug, klibc::Spinlock};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Port(u16);
+
+impl Port {
+    pub const fn new(port: u16) -> Self {
+        Self(port)
+    }
+
+    pub fn as_u16(self) -> u16 {
+        self.0
+    }
+}
+
+impl core::fmt::Display for Port {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 pub type SharedAssignedSocket = Arc<Spinlock<AssignedSocket>>;
 type WeakSharedAssignedSocket = Weak<Spinlock<AssignedSocket>>;
 
-type SpinlockSocketMap = Spinlock<BTreeMap<u16, WeakSharedAssignedSocket>>;
+type SpinlockSocketMap = Spinlock<BTreeMap<Port, WeakSharedAssignedSocket>>;
 type SharedSocketMap = Arc<SpinlockSocketMap>;
 type WeakSharedSocketMap = Weak<SpinlockSocketMap>;
 
@@ -26,7 +45,7 @@ impl OpenSockets {
         }
     }
 
-    pub fn try_get_socket(&self, port: u16) -> Option<SharedAssignedSocket> {
+    pub fn try_get_socket(&self, port: Port) -> Option<SharedAssignedSocket> {
         let mut sockets = self.sockets.lock();
         if sockets.contains_key(&port) {
             return None;
@@ -45,10 +64,12 @@ impl OpenSockets {
         Some(arc_socket)
     }
 
-    pub fn put_data(&self, from: Ipv4Addr, from_port: u16, port: u16, data: &[u8]) {
+    pub fn put_data(&self, from: Ipv4Addr, from_port: Port, to_port: Port, data: &[u8]) {
         let mut sockets = self.sockets.lock();
-        match sockets.entry(port) {
-            Entry::Vacant(_) => debug!("Recived packet on {} but there is no listener.", port),
+        match sockets.entry(to_port) {
+            Entry::Vacant(_) => {
+                debug!("Recived packet on {} but there is no listener.", to_port)
+            }
             Entry::Occupied(mut entry) => entry
                 .get_mut()
                 .upgrade()
@@ -61,14 +82,14 @@ impl OpenSockets {
 
 pub struct AssignedSocket {
     buffer: Vec<u8>,
-    port: u16,
+    port: Port,
     received_from: Option<Ipv4Addr>,
-    received_port: Option<u16>,
+    received_port: Option<Port>,
     open_sockets: WeakSharedSocketMap,
 }
 
 impl AssignedSocket {
-    fn new(port: u16, open_sockets: WeakSharedSocketMap) -> Self {
+    fn new(port: Port, open_sockets: WeakSharedSocketMap) -> Self {
         Self {
             buffer: Vec::new(),
             port,
@@ -78,11 +99,11 @@ impl AssignedSocket {
         }
     }
 
-    pub fn get_port(&self) -> u16 {
+    pub fn get_port(&self) -> Port {
         self.port
     }
 
-    fn put_data(&mut self, from: Ipv4Addr, from_port: u16, data: &[u8]) {
+    fn put_data(&mut self, from: Ipv4Addr, from_port: Port, data: &[u8]) {
         self.received_from = Some(from);
         self.received_port = Some(from_port);
         self.buffer.extend_from_slice(data)
@@ -103,7 +124,7 @@ impl AssignedSocket {
         self.received_from
     }
 
-    pub fn get_received_port(&self) -> Option<u16> {
+    pub fn get_received_port(&self) -> Option<Port> {
         self.received_port
     }
 }
@@ -126,12 +147,12 @@ impl Drop for AssignedSocket {
 mod tests {
     use core::net::Ipv4Addr;
 
-    use super::OpenSockets;
+    use super::{OpenSockets, Port};
 
-    const PORT1: u16 = 1234;
+    const PORT1: Port = Port::new(1234);
     const FROM1: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1);
 
-    const PORT2: u16 = 4444;
+    const PORT2: Port = Port::new(4444);
     const FROM2: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 2);
 
     #[test_case]

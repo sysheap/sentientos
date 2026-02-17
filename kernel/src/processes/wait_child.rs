@@ -38,7 +38,7 @@ impl Future for WaitChild {
             }
 
             if self.wnohang {
-                return Poll::Ready(Ok((Tid(0), 0)));
+                return Poll::Ready(Ok((Tid::new(0), 0)));
             }
 
             pt.register_wait_waker(cx.waker().clone());

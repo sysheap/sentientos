@@ -35,7 +35,7 @@ fn main() {
 
     for pid in pids {
         unsafe {
-            libc::waitpid(pid.0 as i32, core::ptr::null_mut(), 0);
+            libc::waitpid(pid.as_u64() as i32, core::ptr::null_mut(), 0);
         }
     }
 

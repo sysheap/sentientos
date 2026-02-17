@@ -45,12 +45,12 @@ fn get_next_tid() -> Tid {
     static TID_COUNTER: AtomicU64 = AtomicU64::new(1);
     let next_tid = TID_COUNTER.fetch_add(1, Ordering::Relaxed);
     assert_ne!(next_tid, u64::MAX, "We ran out of process pids");
-    Tid(next_tid)
+    Tid::new(next_tid)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadState {
-    Running { cpu_id: usize },
+    Running { cpu_id: crate::cpu::CpuId },
     Runnable,
     Waiting,
     Zombie(u8),

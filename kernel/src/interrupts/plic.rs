@@ -1,4 +1,5 @@
 use crate::{
+    cpu::CpuId,
     info,
     klibc::{MMIO, Spinlock, runtime_initialized::RuntimeInitializedData},
 };
@@ -15,8 +16,8 @@ pub struct Plic {
 }
 
 impl Plic {
-    fn new(plic_base: usize, hart_id: usize) -> Self {
-        let context = hart_id * 2 + 1;
+    fn new(plic_base: usize, cpu_id: CpuId) -> Self {
+        let context = cpu_id.as_usize() * 2 + 1;
         // These constants are set to interrupt context 1 which corresponds to Supervisor Mode on Hart 0
         // If we support multiple harts, we will need to change these constants to be configurable
         Self {
@@ -74,10 +75,10 @@ pub enum InterruptSource {
     Uart,
 }
 
-pub fn init_uart_interrupt(hart_id: usize) {
+pub fn init_uart_interrupt(cpu_id: CpuId) {
     info!("Initializing plic uart interrupt");
 
-    PLIC.initialize(Spinlock::new(Plic::new(PLIC_BASE, hart_id)));
+    PLIC.initialize(Spinlock::new(Plic::new(PLIC_BASE, cpu_id)));
 
     let mut plic = PLIC.lock();
     plic.set_threshold(0);

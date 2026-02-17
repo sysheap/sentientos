@@ -68,7 +68,8 @@ extern crate alloc;
 // fixed symbol name. boot.S passes hart_id and device_tree_pointer.
 #[unsafe(no_mangle)]
 extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
-    cpu::STARTING_CPU_ID.initialize(hart_id);
+    let boot_cpu_id = cpu::CpuId::from_hart_id(hart_id);
+    cpu::STARTING_CPU_ID.initialize(boot_cpu_id);
 
     QEMU_UART.lock().init();
 
@@ -129,11 +130,11 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     process_table::init();
 
-    Cpu::write_sscratch(Cpu::init(hart_id, num_cpus) as usize);
+    Cpu::write_sscratch(Cpu::init(boot_cpu_id, num_cpus) as usize);
 
     Cpu::current().activate_kernel_page_table();
 
-    plic::init_uart_interrupt(hart_id);
+    plic::init_uart_interrupt(boot_cpu_id);
 
     let mut pci_devices = enumerate_devices(&pci_information);
 
@@ -175,14 +176,14 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
     unsafe extern "C" {
         fn start_hart();
     }
-    for cpu_id in 0..number_of_cpus {
-        if cpu_id == current_hart_id {
+    for hart_id in 0..number_of_cpus {
+        if hart_id == current_hart_id {
             continue;
         }
 
-        let cpu_struct = Cpu::init(cpu_id, number_of_cpus);
+        let cpu_struct = Cpu::init(cpu::CpuId::from_hart_id(hart_id), number_of_cpus);
         sbi::extensions::hart_state_extension::start_hart(
-            cpu_id,
+            hart_id,
             start_hart as *const () as usize,
             cpu_struct as usize,
         )
