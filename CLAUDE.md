@@ -149,7 +149,6 @@ just mcp-server                    # Build
 | `boot_qemu` | Start QEMU with SentientOS. Options: network, smp, force. |
 | `shutdown_qemu` | Send exit to shell and wait for QEMU to exit. |
 | `get_status` | Check if QEMU is running. |
-| `run_program` | Run a userspace program, return output. |
 | `send_command` | Send shell command, return output. |
 | `send_input` | Send raw input, wait for custom marker. |
 | `send_ctrl_c` | Send Ctrl+C, wait for prompt. |

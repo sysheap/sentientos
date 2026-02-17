@@ -22,16 +22,6 @@ impl QemuMcpServer {
             tool_router: Self::tool_router(),
         }
     }
-
-    async fn run_on_qemu(&self, command: &str) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
-        let instance = require_running(&mut guard)?;
-        let output = tokio::time::timeout(Duration::from_secs(10), instance.run_prog(command))
-            .await
-            .map_err(|_| mcp_err("Timed out waiting for output (10s)"))?
-            .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
-        text_result(output)
-    }
 }
 
 fn mcp_err(msg: impl Into<String>) -> McpError {
@@ -76,12 +66,6 @@ pub struct BootParams {
     pub smp: Option<bool>,
     #[schemars(description = "Force restart if already running")]
     pub force: Option<bool>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct RunProgramParams {
-    #[schemars(description = "Name of the userspace program to run")]
-    pub program: String,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -199,23 +183,19 @@ impl QemuMcpServer {
     }
 
     #[tool(
-        description = "Run a userspace program in SentientOS. Waits for shell prompt and returns output."
-    )]
-    async fn run_program(
-        &self,
-        Parameters(params): Parameters<RunProgramParams>,
-    ) -> Result<CallToolResult, McpError> {
-        self.run_on_qemu(&params.program).await
-    }
-
-    #[tool(
         description = "Send a shell command to SentientOS. Waits for shell prompt and returns output."
     )]
     async fn send_command(
         &self,
         Parameters(params): Parameters<SendCommandParams>,
     ) -> Result<CallToolResult, McpError> {
-        self.run_on_qemu(&params.command).await
+        let mut guard = self.qemu.lock().await;
+        let instance = require_running(&mut guard)?;
+        let output = tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.command))
+            .await
+            .map_err(|_| mcp_err("Timed out waiting for output (10s)"))?
+            .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
+        text_result(output)
     }
 
     #[tool(
@@ -361,7 +341,7 @@ impl ServerHandler for QemuMcpServer {
             server_info: Implementation::from_build_env(),
             instructions: Some(
                 "MCP server for interacting with SentientOS kernel running in QEMU. \
-                 Use boot_qemu to start, then run_program/send_command to interact, \
+                 Use boot_qemu to start, then send_command to interact, \
                  and shutdown_qemu when done. build_kernel and run_system_tests \
                  handle the build/test cycle."
                     .into(),
