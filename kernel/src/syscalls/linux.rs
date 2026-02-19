@@ -790,11 +790,16 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             p.read_userspace_slice(&ptr, 32)
         })?;
 
-        // We need to hold the arg strings in a buffer that outlives the loop
+        // Skip argv[0] (program name) since load_elf adds it automatically
         let mut arg_buffers: Vec<Vec<u8>> = Vec::new();
+        let mut first = true;
         for &arg_ptr in &argv_ptrs {
             if arg_ptr == 0 {
                 break;
+            }
+            if first {
+                first = false;
+                continue;
             }
             let arg_bytes = process.with_lock(|p| {
                 let ptr = crate::processes::userspace_ptr::UserspacePtr::new(arg_ptr as *const u8);
@@ -818,8 +823,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let elf = ElfFile::parse(elf_data).expect("Cannot parse ELF file");
         let loaded = loader::load_elf(&elf, name, &args).expect("ELF loading must succeed");
 
+        let process_name = Arc::new(String::from(name));
         let new_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
-            Arc::new(String::from(name)),
+            process_name.clone(),
             loaded.page_tables,
             loaded.allocated_pages,
             loaded.brk,
@@ -834,7 +840,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         old_process.lock().remove_thread(tid);
 
         current_thread.with_lock(|mut t| {
-            t.set_process(new_process.clone());
+            t.set_process(new_process.clone(), process_name);
             let mut regs = TrapFrame::zero();
             regs[Register::a0] = loaded.args_start;
             regs[Register::sp] = loaded.args_start;
