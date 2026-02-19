@@ -5,6 +5,7 @@ use crate::{
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 
+pub mod address;
 mod allocator;
 mod devic_tree_parser;
 mod lookup;
