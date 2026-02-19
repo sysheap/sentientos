@@ -23,6 +23,14 @@ impl<T> LinuxUserspaceArg<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn arg_nonzero(&self) -> bool {
+        self.arg != 0
+    }
+
+    pub fn raw_arg(&self) -> usize {
+        self.arg
+    }
 }
 
 impl<T> LinuxUserspaceArg<*const T> {

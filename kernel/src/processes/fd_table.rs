@@ -28,6 +28,7 @@ pub enum FileDescriptor {
     Stdin,
     Stdout,
     Stderr,
+    UnboundUdpSocket,
     UdpSocket(SharedAssignedSocket),
 }
 
@@ -37,6 +38,7 @@ impl fmt::Debug for FileDescriptor {
             FileDescriptor::Stdin => write!(f, "Stdin"),
             FileDescriptor::Stdout => write!(f, "Stdout"),
             FileDescriptor::Stderr => write!(f, "Stderr"),
+            FileDescriptor::UnboundUdpSocket => write!(f, "UnboundUdpSocket"),
             FileDescriptor::UdpSocket(_) => write!(f, "UdpSocket(..)"),
         }
     }
@@ -131,6 +133,16 @@ impl FdTable {
             },
         );
         Ok(fd)
+    }
+
+    pub fn replace_descriptor(
+        &mut self,
+        fd: RawFd,
+        descriptor: FileDescriptor,
+    ) -> Result<(), Errno> {
+        let entry = self.table.get_mut(&fd).ok_or(Errno::EBADF)?;
+        entry.descriptor = descriptor;
+        Ok(())
     }
 
     pub fn close(&mut self, fd: RawFd) -> Result<FdEntry, Errno> {
