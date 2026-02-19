@@ -111,7 +111,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     let mut runtime_mapping = Vec::new();
 
     runtime_mapping.push(MappingDescription {
-        virtual_address_start: pci_information.pci_host_bridge_address,
+        virtual_address_start: memory::VirtAddr::new(pci_information.pci_host_bridge_address),
         size: pci_information.pci_host_bridge_length,
         privileges: page_tables::XWRMode::ReadWrite,
         name: "PCI Space",
@@ -119,7 +119,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     for range in &pci_information.ranges {
         runtime_mapping.push(MappingDescription {
-            virtual_address_start: range.cpu_address,
+            virtual_address_start: memory::VirtAddr::new(range.cpu_address),
             size: range.size,
             privileges: page_tables::XWRMode::ReadWrite,
             name: "PCI Range",
