@@ -2,15 +2,12 @@ use core::fmt;
 
 /// Physical memory address (zero-cost wrapper around usize)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[allow(dead_code)]
 pub struct PhysAddr(usize);
 
 /// Virtual memory address (zero-cost wrapper around usize)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[allow(dead_code)]
 pub struct VirtAddr(usize);
 
-#[allow(dead_code)]
 impl PhysAddr {
     #[inline]
     pub const fn new(addr: usize) -> Self {
@@ -18,6 +15,7 @@ impl PhysAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
@@ -28,21 +26,25 @@ impl PhysAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn as_ptr<T>(self) -> *const T {
         self.0 as *const T
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn from_page_number(ppn: usize) -> Self {
         Self(ppn << 12)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn page_number(self) -> usize {
         self.0 >> 12
     }
@@ -53,32 +55,36 @@ impl PhysAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn align_down(self) -> Self {
         Self(self.0 & !0xFFF)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn align_up(self) -> Self {
         Self((self.0 + 0xFFF) & !0xFFF)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn add(self, offset: usize) -> Self {
         Self(self.0 + offset)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn sub(self, offset: usize) -> Self {
         Self(self.0 - offset)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn offset_from(self, other: Self) -> isize {
         self.0 as isize - other.0 as isize
     }
 }
 
-#[allow(dead_code)]
 impl VirtAddr {
     #[inline]
     pub const fn new(addr: usize) -> Self {
@@ -86,6 +92,7 @@ impl VirtAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
@@ -96,21 +103,25 @@ impl VirtAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn as_ptr<T>(self) -> *const T {
         self.0 as *const T
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn from_page_number(vpn: usize) -> Self {
         Self(vpn << 12)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn page_number(self) -> usize {
         self.0 >> 12
     }
@@ -121,38 +132,45 @@ impl VirtAddr {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn align_down(self) -> Self {
         Self(self.0 & !0xFFF)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn align_up(self) -> Self {
         Self((self.0 + 0xFFF) & !0xFFF)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn add(self, offset: usize) -> Self {
         Self(self.0 + offset)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn sub(self, offset: usize) -> Self {
         Self(self.0 - offset)
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn offset_from(self, other: Self) -> isize {
         self.0 as isize - other.0 as isize
     }
 
     /// Sv39 VPN index for page table level 0, 1, or 2.
     #[inline]
+    #[allow(dead_code)]
     pub const fn vpn_level(self, level: u8) -> usize {
         assert!(level < 3);
         (self.0 >> (12 + level as usize * 9)) & 0x1FF
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn page_offset(self) -> usize {
         self.0 & 0xFFF
     }
