@@ -47,13 +47,13 @@ pub struct MappingDescription {
 /// Keeps track of already mapped virtual address ranges
 /// We use that to prevent of overlapping mapping
 struct MappingEntry {
-    virtual_range: core::ops::Range<usize>,
+    virtual_range: core::ops::Range<VirtAddr>,
     name: String,
     privileges: XWRMode,
 }
 
 impl MappingEntry {
-    fn new(virtual_range: Range<usize>, name: String, privileges: XWRMode) -> Self {
+    fn new(virtual_range: Range<VirtAddr>, name: String, privileges: XWRMode) -> Self {
         Self {
             virtual_range,
             name,
@@ -61,7 +61,7 @@ impl MappingEntry {
         }
     }
 
-    fn contains(&self, range: &Range<usize>) -> bool {
+    fn contains(&self, range: &Range<VirtAddr>) -> bool {
         self.virtual_range.start <= range.end && range.start <= self.virtual_range.end
     }
 }
@@ -70,10 +70,10 @@ impl Display for MappingEntry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "{:#018x}-{:#018x} (Size: {:#010x}) ({:?})\t({})",
+            "{}-{} (Size: {:#010x}) ({:?})\t({})",
             self.virtual_range.start,
             self.virtual_range.end,
-            self.virtual_range.end - self.virtual_range.start,
+            self.virtual_range.end.as_usize() - self.virtual_range.start.as_usize(),
             self.privileges,
             self.name
         )
@@ -175,7 +175,7 @@ impl RootPageTableHolder {
 
         for mapping in LinkerInformation::all_mappings() {
             root_page_table_holder.map_identity_kernel(
-                mapping.virtual_address_start.as_usize(),
+                mapping.virtual_address_start,
                 mapping.size,
                 mapping.privileges,
                 mapping.name.to_string(),
@@ -198,21 +198,21 @@ impl RootPageTableHolder {
 
         if include_fixed_addresses {
             root_page_table_holder.map_identity_kernel(
-                plic::PLIC_BASE,
+                VirtAddr::new(plic::PLIC_BASE),
                 plic::PLIC_SIZE,
                 XWRMode::ReadWrite,
                 "PLIC".to_string(),
             );
 
             root_page_table_holder.map_identity_kernel(
-                timer::CLINT_BASE,
+                VirtAddr::new(timer::CLINT_BASE),
                 timer::CLINT_SIZE,
                 XWRMode::ReadWrite,
                 "CLINT".to_string(),
             );
 
             root_page_table_holder.map_identity_kernel(
-                TEST_DEVICE_ADDRESS,
+                VirtAddr::new(TEST_DEVICE_ADDRESS),
                 PAGE_SIZE,
                 XWRMode::ReadWrite,
                 "Qemu Test Device".to_string(),
@@ -220,7 +220,7 @@ impl RootPageTableHolder {
 
             for runtime_mapping in get_runtime_mappings() {
                 root_page_table_holder.map_identity_kernel(
-                    runtime_mapping.virtual_address_start.as_usize(),
+                    runtime_mapping.virtual_address_start,
                     runtime_mapping.size,
                     runtime_mapping.privileges,
                     runtime_mapping.name.to_string(),
@@ -249,10 +249,11 @@ impl RootPageTableHolder {
         );
     }
 
-    fn get_page_table_entry_for_address(&self, address: usize) -> Option<&PageTableEntry> {
+    fn get_page_table_entry_for_address(&self, address: VirtAddr) -> Option<&PageTableEntry> {
         let root_page_table = self.table();
 
-        let first_level_entry = root_page_table.get_entry_for_virtual_address(address, 2);
+        let first_level_entry =
+            root_page_table.get_entry_for_virtual_address(address.as_usize(), 2);
         if !first_level_entry.get_validity() {
             return None;
         }
@@ -260,14 +261,14 @@ impl RootPageTableHolder {
         // SAFETY: The pointer is valid because we checked the entry's validity bit above,
         // and &self guarantees no concurrent mutation.
         let second_level_entry = unsafe { &*first_level_entry.get_target_page_table() }
-            .get_entry_for_virtual_address(address, 1);
+            .get_entry_for_virtual_address(address.as_usize(), 1);
         if !second_level_entry.get_validity() {
             return None;
         }
 
         // SAFETY: Same as above — validity checked, &self guarantees no concurrent mutation.
         let third_level_entry = unsafe { &*second_level_entry.get_target_page_table() }
-            .get_entry_for_virtual_address(address, 0);
+            .get_entry_for_virtual_address(address.as_usize(), 0);
         if !third_level_entry.get_validity() {
             return None;
         }
@@ -312,7 +313,7 @@ impl RootPageTableHolder {
         let already_mapped = self
             .already_mapped
             .iter()
-            .find(|m| m.contains(&(virtual_address_start.as_usize()..virtual_end.as_usize())));
+            .find(|m| m.contains(&(virtual_address_start..virtual_end)));
 
         if let Some(mapping) = already_mapped {
             panic!("Cannot map {}. Overlaps with {}", name, mapping.name);
@@ -320,7 +321,7 @@ impl RootPageTableHolder {
 
         // Add mapping
         self.already_mapped.push(MappingEntry::new(
-            virtual_address_start.as_usize()..virtual_end.as_usize(),
+            virtual_address_start..virtual_end,
             name,
             privileges,
         ));
@@ -438,7 +439,7 @@ impl RootPageTableHolder {
 
     pub fn map_identity_kernel(
         &mut self,
-        virtual_address_start: usize,
+        virtual_address_start: VirtAddr,
         size: usize,
         privileges: XWRMode,
         name: String,
@@ -448,15 +449,15 @@ impl RootPageTableHolder {
 
     fn map_identity(
         &mut self,
-        virtual_address_start: usize,
+        virtual_address_start: VirtAddr,
         size: usize,
         privileges: XWRMode,
         is_user_mode_accessible: bool,
         name: String,
     ) {
         self.map(
-            VirtAddr::new(virtual_address_start),
-            PhysAddr::new(virtual_address_start),
+            virtual_address_start,
+            PhysAddr::new(virtual_address_start.as_usize()),
             size,
             privileges,
             is_user_mode_accessible,
@@ -464,7 +465,7 @@ impl RootPageTableHolder {
         );
     }
 
-    pub fn is_userspace_address(&self, address: usize) -> bool {
+    pub fn is_userspace_address(&self, address: VirtAddr) -> bool {
         self.get_page_table_entry_for_address(address)
             .is_some_and(|entry| entry.get_validity() && entry.get_user_mode_accessible())
     }
@@ -479,7 +480,10 @@ impl RootPageTableHolder {
         let end = start + (core::mem::size_of::<PTR::Pointee>() * len);
         // We only need to check for each PAGE_SIZE step if it is mapped
         for addr in (start..end).step_by(PAGE_SIZE) {
-            let entry = unwrap_or_return!(self.get_page_table_entry_for_address(addr), false);
+            let entry = unwrap_or_return!(
+                self.get_page_table_entry_for_address(VirtAddr::new(addr)),
+                false
+            );
             let xwr = entry.get_xwr_mode();
             if !entry.get_validity()
                 || !entry.get_user_mode_accessible()
@@ -506,14 +510,15 @@ impl RootPageTableHolder {
         ptr: PTR,
     ) -> Option<PTR> {
         let address = ptr.as_raw();
-        if !self.is_userspace_address(address) {
+        if !self.is_userspace_address(VirtAddr::new(address)) {
             return None;
         }
 
         let offset_from_page_start = address % PAGE_SIZE;
-        self.get_page_table_entry_for_address(address).map(|entry| {
-            PTR::as_pointer(entry.get_physical_address().as_usize() + offset_from_page_start)
-        })
+        self.get_page_table_entry_for_address(VirtAddr::new(address))
+            .map(|entry| {
+                PTR::as_pointer(entry.get_physical_address().as_usize() + offset_from_page_start)
+            })
     }
 
     pub fn get_satp_value_from_page_tables(&self) -> usize {
@@ -541,8 +546,8 @@ impl RootPageTableHolder {
         };
     }
 
-    pub fn unmap_userspace(&mut self, virtual_address_start: usize, size: usize) {
-        assert_eq!(virtual_address_start % PAGE_SIZE, 0);
+    pub fn unmap_userspace(&mut self, virtual_address_start: VirtAddr, size: usize) {
+        assert!(virtual_address_start.is_page_aligned());
         assert!(size > 0);
 
         let idx = self
@@ -556,7 +561,7 @@ impl RootPageTableHolder {
         let mut offset = 0;
 
         while offset < size {
-            let addr = virtual_address_start + offset;
+            let addr = virtual_address_start.add(offset).as_usize();
             let first_level_entry = root_page_table.get_entry_for_virtual_address_mut(addr, 2);
 
             assert!(
@@ -599,7 +604,7 @@ impl RootPageTableHolder {
         }
     }
 
-    pub fn is_mapped(&self, range: Range<usize>) -> bool {
+    pub fn is_mapped(&self, range: Range<VirtAddr>) -> bool {
         self.already_mapped.iter().any(|m| m.contains(&range))
     }
 }
@@ -662,22 +667,30 @@ mod tests {
 
     #[test_case]
     fn mapping_entry_overlap_detection() {
-        let m = MappingEntry::new(100..200, "test".to_string(), XWRMode::ReadOnly);
+        let m = MappingEntry::new(
+            VirtAddr::new(100)..VirtAddr::new(200),
+            "test".to_string(),
+            XWRMode::ReadOnly,
+        );
         // Contained
-        assert!(m.contains(&(120..180)));
+        assert!(m.contains(&(VirtAddr::new(120)..VirtAddr::new(180))));
         // Left overlap
-        assert!(m.contains(&(50..150)));
+        assert!(m.contains(&(VirtAddr::new(50)..VirtAddr::new(150))));
         // Right overlap
-        assert!(m.contains(&(150..250)));
+        assert!(m.contains(&(VirtAddr::new(150)..VirtAddr::new(250))));
         // Enclosing
-        assert!(m.contains(&(50..250)));
+        assert!(m.contains(&(VirtAddr::new(50)..VirtAddr::new(250))));
     }
 
     #[test_case]
     fn mapping_entry_no_overlap() {
-        let m = MappingEntry::new(100..200, "test".to_string(), XWRMode::ReadOnly);
-        assert!(!m.contains(&(0..99)));
-        assert!(!m.contains(&(201..300)));
+        let m = MappingEntry::new(
+            VirtAddr::new(100)..VirtAddr::new(200),
+            "test".to_string(),
+            XWRMode::ReadOnly,
+        );
+        assert!(!m.contains(&(VirtAddr::new(0)..VirtAddr::new(99))));
+        assert!(!m.contains(&(VirtAddr::new(201)..VirtAddr::new(300))));
     }
 
     #[test_case]
@@ -690,8 +703,8 @@ mod tests {
             XWRMode::ReadWrite,
             "A".to_string(),
         );
-        assert!(pt.is_mapped(0x1000..0x1FFF));
-        assert!(!pt.is_mapped(0x3000..0x3FFF));
+        assert!(pt.is_mapped(VirtAddr::new(0x1000)..VirtAddr::new(0x1FFF)));
+        assert!(!pt.is_mapped(VirtAddr::new(0x3000)..VirtAddr::new(0x3FFF)));
     }
 
     #[test_case]
@@ -704,9 +717,9 @@ mod tests {
             XWRMode::ReadWrite,
             "A".to_string(),
         );
-        assert!(pt.is_mapped(0x1000..0x1FFF));
-        pt.unmap_userspace(0x1000, 0x1000);
-        assert!(!pt.is_mapped(0x1000..0x1FFF));
+        assert!(pt.is_mapped(VirtAddr::new(0x1000)..VirtAddr::new(0x1FFF)));
+        pt.unmap_userspace(VirtAddr::new(0x1000), 0x1000);
+        assert!(!pt.is_mapped(VirtAddr::new(0x1000)..VirtAddr::new(0x1FFF)));
     }
 
     #[test_case]
@@ -719,8 +732,14 @@ mod tests {
             XWRMode::ReadWrite,
             "A".to_string(),
         );
-        assert!(pt.get_page_table_entry_for_address(0x1000).is_some());
-        pt.unmap_userspace(0x1000, 0x1000);
-        assert!(pt.get_page_table_entry_for_address(0x1000).is_none());
+        assert!(
+            pt.get_page_table_entry_for_address(VirtAddr::new(0x1000))
+                .is_some()
+        );
+        pt.unmap_userspace(VirtAddr::new(0x1000), 0x1000);
+        assert!(
+            pt.get_page_table_entry_for_address(VirtAddr::new(0x1000))
+                .is_none()
+        );
     }
 }

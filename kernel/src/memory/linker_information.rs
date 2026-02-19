@@ -1,20 +1,23 @@
 macro_rules! getter_address {
     ($name:ident) => {
         #[cfg(not(miri))]
-        pub fn $name() -> usize {
+        pub fn $name() -> VirtAddr {
             // SAFETY: These symbols are defined by the linker script. We only
             // take their address (never read their value), which is always safe.
             unsafe extern "C" {
                 static $name: usize;
             }
-            core::ptr::addr_of!($name) as usize
+            VirtAddr::new(core::ptr::addr_of!($name) as usize)
         }
         #[cfg(miri)]
-        pub fn $name() -> usize {
+        pub fn $name() -> VirtAddr {
             // When running under Miri we don't have any sections
             // Just choose any value which does not collide with any
             // other mappings
-            $crate::klibc::util::align_down(u32::MAX as usize, $crate::memory::PAGE_SIZE)
+            VirtAddr::new($crate::klibc::util::align_down(
+                u32::MAX as usize,
+                $crate::memory::PAGE_SIZE,
+            ))
         }
     };
 }
@@ -26,9 +29,9 @@ macro_rules! getter {
         getter_address!(${concat(__start_, $name)});
         getter_address!(${concat(__stop_, $name)});
         pub fn ${concat($name, _size)}() -> usize {
-            Self::${concat(__stop_, $name)}() - Self::${concat(__start_, $name)}()
+            Self::${concat(__stop_, $name)}().as_usize() - Self::${concat(__start_, $name)}().as_usize()
         }
-        pub fn ${concat($name, _range)}() -> core::ops::Range<usize> {
+        pub fn ${concat($name, _range)}() -> core::ops::Range<VirtAddr> {
             Self::${concat(__start_, $name)}()..Self::${concat(__stop_, $name)}()
         }
     };
@@ -60,15 +63,15 @@ macro_rules! sections {
             getter_address!(__start_symbols);
 
             // The heap will start directly page aligned after the symbols
-            pub fn __start_heap() -> usize {
-                align_up(debugging::symbols::symbols_end(), PAGE_SIZE)
+            pub fn __start_heap() -> VirtAddr {
+                VirtAddr::new(align_up(debugging::symbols::symbols_end(), PAGE_SIZE))
             }
 
             #[cfg(not(miri))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
-                      virtual_address_start: VirtAddr::new(LinkerInformation::${concat(__start_, $name)}()),
+                      virtual_address_start: LinkerInformation::${concat(__start_, $name)}(),
                       size: LinkerInformation::${concat($name, _size)}(),
                       privileges: $xwr,
                       name: stringify!($name)
