@@ -7,6 +7,7 @@ use self::{
 use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
 use linker_information::LinkerInformation;
 
+pub mod address;
 pub mod heap;
 pub mod linker_information;
 pub mod page;
