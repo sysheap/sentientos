@@ -39,22 +39,26 @@ fn handle_syscall() {
 
 | Syscall | Args | Description |
 |---------|------|-------------|
+| bind | fd, addr, addrlen | Bind socket to address/port |
 | brk | brk | Adjust heap break |
 | close | fd | Close file descriptor |
 | exit_group | status | Exit process (stores exit status, then kills process) |
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
 | gettid | | Get thread ID |
-| ioctl | fd, op | Device control (+ SentientOS extensions) |
+| ioctl | fd, op, arg | Device control (+ SentientOS extensions, FIONBIO for sockets) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
 | munmap | addr, len | Unmap memory |
 | nanosleep | duration, rem | Sleep |
 | ppoll | fds, n, timeout, mask | Poll file descriptors |
 | prctl | | Process control |
 | read | fd, buf, count | Read from fd |
+| recvfrom | fd, buf, len, flags, src_addr, addrlen | Receive UDP datagram with sender address |
 | rt_sigaction | sig, act, oact, size | Signal action |
 | rt_sigprocmask | how, set, oldset, size | Signal mask |
+| sendto | fd, buf, len, flags, dest_addr, addrlen | Send UDP datagram to destination |
 | set_tid_address | tidptr | Set clear_child_tid |
 | sigaltstack | uss, uoss | Signal stack |
+| socket | domain, type, protocol | Create socket (AF_INET + SOCK_DGRAM only) |
 | wait4 | pid, status, options, rusage | Wait for child process (supports WNOHANG) |
 | write | fd, buf, count | Write to fd |
 | writev | fd, iov, iovcnt | Vectored write |
@@ -126,9 +130,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 ```rust
 impl KernelSyscalls for SyscallHandler {
     fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
-    fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
-    fn sys_write_back_udp_socket(&mut self, desc, buf);
-    fn sys_read_udp_socket(&mut self, desc, buf);
 }
 ```
 

@@ -8,9 +8,9 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 |---|----------------|-----------------|---------|------------|
 | 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
 | ~~4~~ | ~~`sys_wait`~~ | ~~`wait4` (NR 260)~~ | ~~`init.rs`, `sesh.rs`, `stress.rs`~~ | ~~Medium~~ **DONE** |
-| 6 | `sys_open_udp_socket` | `socket` + `bind` | `udp.rs` | Hard |
-| 7 | `sys_write_back_udp_socket` | `sendto` | `udp.rs` | Hard |
-| 8 | `sys_read_udp_socket` | `recvfrom` | `udp.rs` | Hard |
+| ~~6~~ | ~~`sys_open_udp_socket`~~ | ~~`socket` + `bind`~~ | ~~`udp.rs`~~ | ~~Hard~~ **DONE** |
+| ~~7~~ | ~~`sys_write_back_udp_socket`~~ | ~~`sendto`~~ | ~~`udp.rs`~~ | ~~Hard~~ **DONE** |
+| ~~8~~ | ~~`sys_read_udp_socket`~~ | ~~`recvfrom`~~ | ~~`udp.rs`~~ | ~~Hard~~ **DONE** |
 
 ## Detailed Analysis
 
@@ -59,56 +59,21 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 
 ---
 
-### 6. `sys_open_udp_socket` — `socket` + `bind`
+### 6. `sys_open_udp_socket` — `socket` + `bind` (**DONE**)
 
-**Current behavior:** Takes a port number, acquires a socket from the global socket table, attaches it to the current process, and returns a `UDPDescriptor` (process-local handle).
-
-**Caller:** `udp.rs` via the `UdpSocket::try_open(port)` wrapper.
-
-**Linux equivalent:**
-- `socket(AF_INET, SOCK_DGRAM, 0)` — creates a UDP socket, returns an fd
-- `bind(fd, &sockaddr_in, len)` — binds to a port
-
-**Migration steps:**
-1. Implement `socket` syscall (NR 198) that creates a socket and returns an fd.
-2. Implement `bind` syscall (NR 200) that binds the socket to a port.
-3. Rewrite `udp.rs` to use `socket()` and `bind()` from musl libc.
-
-**Complexity:** Hard. Requires socket-to-fd integration.
+Migrated to `socket(AF_INET, SOCK_DGRAM, 0)` + `bind(fd, sockaddr_in, addrlen)`. Userspace uses `std::net::UdpSocket::bind()`.
 
 ---
 
-### 7. `sys_write_back_udp_socket` — `sendto`
+### 7. `sys_write_back_udp_socket` — `sendto` (**DONE**)
 
-**Current behavior:** Takes a `UDPDescriptor` and a byte buffer. Looks up the source IP/port from the last received packet on that socket, resolves the destination MAC from the ARP cache, constructs a UDP packet, and sends it. Only supports "reply to sender" — not arbitrary destinations.
-
-**Caller:** `udp.rs` via `socket.transmit(data)`.
-
-**Linux equivalent:** `sendto(fd, buf, len, flags, &dest_addr, addrlen)` (NR 206).
-
-**Migration steps:**
-1. Implement `sendto` syscall that takes a destination address (unlike the current reply-only semantics).
-2. The kernel network stack needs to accept an explicit destination IP/port rather than inferring from the last received packet.
-3. Rewrite `udp.rs` to use `sendto()` from musl libc with the destination address.
-
-**Complexity:** Hard. Coupled with the socket work from `sys_open_udp_socket`.
+Migrated to `sendto(fd, buf, len, flags, dest_addr, addrlen)`. Now supports arbitrary destinations (not just reply-to-sender). Userspace uses `std::net::UdpSocket::send_to()`.
 
 ---
 
-### 8. `sys_read_udp_socket` — `recvfrom`
+### 8. `sys_read_udp_socket` — `recvfrom` (**DONE**)
 
-**Current behavior:** Takes a `UDPDescriptor` and a mutable buffer. Calls `receive_and_process_packets()` first (processes any pending NIC packets), then reads available data from the socket buffer. Non-blocking — returns 0 if no data.
-
-**Caller:** `udp.rs` via `socket.receive(&mut buffer)`.
-
-**Linux equivalent:** `recvfrom(fd, buf, len, flags, &src_addr, &addrlen)` (NR 207).
-
-**Migration steps:**
-1. Implement `recvfrom` syscall that reads from a socket fd and provides the sender's address.
-2. Decide on blocking vs. non-blocking behavior. The current code is non-blocking (returns 0 immediately). Standard `recvfrom` is blocking unless `MSG_DONTWAIT` or `O_NONBLOCK` is set.
-3. Packet processing (`receive_and_process_packets`) should happen asynchronously (interrupt-driven or in a kernel thread) rather than synchronously during the syscall.
-
-**Complexity:** Hard. Coupled with the socket work.
+Migrated to `recvfrom(fd, buf, len, flags, src_addr, addrlen)`. Per-datagram buffering preserves sender address for each datagram. Supports `O_NONBLOCK` via `ioctl(FIONBIO)`. Userspace uses `std::net::UdpSocket::recv_from()`.
 
 ---
 
