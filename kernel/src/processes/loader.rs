@@ -122,8 +122,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     );
 
     page_tables.map_userspace(
-        STACK_END,
-        stack_addr,
+        crate::memory::VirtAddr::new(STACK_END),
+        crate::memory::PhysAddr::new(stack_addr),
         STACK_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
         "Stack".to_string(),
@@ -171,8 +171,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
-            program_header.virtual_address.as_usize() - offset,
-            pages_addr,
+            crate::memory::VirtAddr::new(program_header.virtual_address.as_usize() - offset),
+            crate::memory::PhysAddr::new(pages_addr),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
             "LOAD".to_string(),

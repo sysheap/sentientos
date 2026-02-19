@@ -42,6 +42,7 @@ macro_rules! count_idents {
 
 macro_rules! sections {
     ($($name:ident, $xwr:expr;)*) => {
+        use $crate::memory::address::VirtAddr;
         use $crate::memory::page_tables::MappingDescription;
         use $crate::memory::page_table_entry::XWRMode;
         use $crate::memory::PAGE_SIZE;
@@ -67,7 +68,7 @@ macro_rules! sections {
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
-                      virtual_address_start: LinkerInformation::${concat(__start_, $name)}(),
+                      virtual_address_start: VirtAddr::new(LinkerInformation::${concat(__start_, $name)}()),
                       size: LinkerInformation::${concat($name, _size)}(),
                       privileges: $xwr,
                       name: stringify!($name)

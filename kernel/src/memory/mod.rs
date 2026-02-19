@@ -16,6 +16,7 @@ pub mod page_table_entry;
 pub mod page_tables;
 mod runtime_mappings;
 
+pub use address::{PhysAddr, VirtAddr};
 pub use page::PAGE_SIZE;
 
 pub use runtime_mappings::initialize_runtime_mappings;

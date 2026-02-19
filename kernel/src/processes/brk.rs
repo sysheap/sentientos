@@ -21,8 +21,8 @@ impl Brk {
         let brk_start = align_up_page_size(bss_end);
         let pages = PinnedHeapPages::new_pages(BRK_SIZE);
         page_tables.map_userspace(
-            brk_start,
-            pages.addr(),
+            crate::memory::VirtAddr::new(brk_start),
+            crate::memory::PhysAddr::new(pages.addr()),
             pages.size(),
             crate::memory::page_tables::XWRMode::ReadWrite,
             "BRK".into(),
