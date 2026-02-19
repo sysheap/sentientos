@@ -151,8 +151,8 @@ impl Cpu {
         let stack_start_virtual = (0usize).wrapping_sub(KERNEL_STACK_SIZE);
 
         page_tables.map(
-            stack_start_virtual,
-            kernel_stack as usize,
+            crate::memory::VirtAddr::new(stack_start_virtual),
+            crate::memory::PhysAddr::new(kernel_stack as usize),
             KERNEL_STACK_SIZE,
             crate::memory::page_tables::XWRMode::ReadWrite,
             false,

@@ -177,8 +177,13 @@ impl Process {
             return null_mut();
         }
         let pages = PinnedHeapPages::new_pages(num_pages);
-        self.page_table
-            .map_userspace(addr, pages.addr(), length, permission, "mmap".into());
+        self.page_table.map_userspace(
+            crate::memory::VirtAddr::new(addr),
+            crate::memory::PhysAddr::new(pages.addr()),
+            length,
+            permission,
+            "mmap".into(),
+        );
         self.mmap_allocations.insert(addr, pages);
         core::ptr::without_provenance_mut(addr)
     }
@@ -188,8 +193,8 @@ impl Process {
         let pages = PinnedHeapPages::new_pages(num_pages);
         let addr = self.free_mmap_address;
         self.page_table.map_userspace(
-            addr,
-            pages.as_ptr() as usize,
+            crate::memory::VirtAddr::new(addr),
+            crate::memory::PhysAddr::new(pages.as_ptr() as usize),
             length,
             permission,
             "mmap".to_string(),
