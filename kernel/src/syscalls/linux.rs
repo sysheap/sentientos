@@ -720,12 +720,17 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let parent_pc = Cpu::read_sepc();
 
         let parent_process = self.handler.current_process().clone();
-        let parent_main_tid = parent_process.lock().main_tid();
+        let (parent_main_tid, parent_satp, child_name) = parent_process.with_lock(|p| {
+            (
+                p.main_tid(),
+                p.get_page_table().get_satp_value_from_page_tables(),
+                Arc::new(String::from(p.get_name())),
+            )
+        });
 
         let vfork_state = VforkState::new();
 
         let child_tid = get_next_tid();
-        let child_name = Arc::new(String::from(parent_process.lock().get_name()));
 
         let child_page_table =
             crate::memory::page_tables::RootPageTableHolder::new_with_kernel_mapping(false);
@@ -739,7 +744,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         )));
         child_process
             .lock()
-            .set_vfork_parent(parent_process.clone());
+            .set_vfork_parent(parent_process.clone(), parent_satp);
 
         let mut child_regs = parent_regs;
         child_regs[Register::a0] = 0; // child gets 0 from clone

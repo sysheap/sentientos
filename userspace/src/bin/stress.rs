@@ -1,6 +1,5 @@
-use common::syscalls::sys_execute;
-
 use std::{env, process::exit, vec::Vec};
+use userspace::spawn::spawn;
 
 extern crate alloc;
 extern crate userspace;
@@ -29,13 +28,13 @@ fn main() {
     println!("Starting loop {} times", instances);
     let mut pids = Vec::with_capacity(instances);
     for _ in 0..instances {
-        let pid = sys_execute("loop", &[]).expect("Process must be successfully startable");
+        let pid = spawn("loop", &[]).expect("Process must be successfully startable");
         pids.push(pid);
     }
 
     for pid in pids {
         unsafe {
-            libc::waitpid(pid.as_u64() as i32, core::ptr::null_mut(), 0);
+            libc::waitpid(pid, core::ptr::null_mut(), 0);
         }
     }
 

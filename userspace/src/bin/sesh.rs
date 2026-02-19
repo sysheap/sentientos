@@ -1,10 +1,10 @@
-use common::{ioctl::print_programs, syscalls::sys_execute};
+use common::ioctl::print_programs;
 use std::{
     io::{Write, stdout},
     string::{String, ToString},
     vec::Vec,
 };
-use userspace::util::read_line;
+use userspace::{spawn::spawn, util::read_line};
 
 extern crate alloc;
 extern crate userspace;
@@ -17,7 +17,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print!("$ ");
         stdout().flush()?;
         let input = read_line();
-        // Parse input and execute
         parse_command_and_execute(input);
     }
 }
@@ -46,24 +45,20 @@ fn parse_command_and_execute(mut command: String) {
                 command = command.trim().to_string();
             }
 
-            // Process arguments
             let mut split = command.split(' ');
-
             let prog_name = split.next().unwrap_or(&command);
-
             let args: Vec<&str> = split.filter(|arg| !arg.trim().is_empty()).collect();
 
-            let execute_result = sys_execute(prog_name, &args);
-            match execute_result {
+            match spawn(prog_name, &args) {
                 Ok(pid) => {
                     if !background {
                         unsafe {
-                            libc::waitpid(pid.as_u64() as i32, core::ptr::null_mut(), 0);
+                            libc::waitpid(pid, core::ptr::null_mut(), 0);
                         }
                     }
                 }
                 Err(err) => {
-                    println!("Error executing program: {:?}", err);
+                    println!("Error executing program: {err}");
                 }
             }
         }
