@@ -38,6 +38,7 @@ pub struct Process {
     main_tid: Tid,
     parent_tid: Tid,
     brk: Brk,
+    vfork_parent: Option<ProcessRef>,
 }
 
 impl Debug for Process {
@@ -77,6 +78,7 @@ impl Process {
             brk,
             main_tid: main_thread,
             parent_tid,
+            vfork_parent: None,
         }
     }
 
@@ -254,6 +256,29 @@ impl Process {
 
     pub fn fd_table_mut(&mut self) -> &mut FdTable {
         &mut self.fd_table
+    }
+
+    pub fn get_satp_value(&self) -> usize {
+        if let Some(parent) = &self.vfork_parent {
+            parent
+                .lock()
+                .get_page_table()
+                .get_satp_value_from_page_tables()
+        } else {
+            self.page_table.get_satp_value_from_page_tables()
+        }
+    }
+
+    pub fn set_vfork_parent(&mut self, parent: ProcessRef) {
+        self.vfork_parent = Some(parent);
+    }
+
+    pub fn vfork_parent(&self) -> Option<&ProcessRef> {
+        self.vfork_parent.as_ref()
+    }
+
+    pub fn remove_thread(&mut self, tid: Tid) {
+        self.threads.remove(&tid);
     }
 }
 

@@ -20,7 +20,7 @@ use core::{
 // SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
 extern "C" fn get_process_satp_value() -> usize {
-    Cpu::with_current_process(|p| p.get_page_table().get_satp_value_from_page_tables())
+    Cpu::with_current_process(|p| p.get_satp_value())
 }
 
 // SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
@@ -145,16 +145,29 @@ fn handle_syscall() {
         let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
         let mut cx = Context::from_waker(&waker);
         if let Poll::Ready(result) = task.poll(&mut cx) {
-            // Syscall completed synchronously
-            let ret = match result {
-                Ok(ret) => ret,
-                Err(errno) => -(errno as isize),
-            };
-            trap_frame[Register::a0] = ret.cast_unsigned();
+            let replaced = Cpu::with_scheduler(|s| {
+                s.get_current_thread().with_lock(|mut t| {
+                    let r = t.registers_replaced();
+                    if r {
+                        t.set_registers_replaced(false);
+                    }
+                    r
+                })
+            });
+            if replaced {
+                Cpu::with_scheduler(|s| s.set_cpu_reg_for_current_thread());
+            } else {
+                // Syscall completed synchronously - normal path
+                let ret = match result {
+                    Ok(ret) => ret,
+                    Err(errno) => -(errno as isize),
+                };
+                trap_frame[Register::a0] = ret.cast_unsigned();
 
-            if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
-                Cpu::write_trap_frame(trap_frame);
-                Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip ecall
+                if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
+                    Cpu::write_trap_frame(trap_frame);
+                    Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip ecall
+                }
             }
         } else {
             // Syscall pending - suspend and reschedule atomically.
