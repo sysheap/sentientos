@@ -83,6 +83,7 @@ fn generate_syscall_types(out_path: &Path) -> Result<(), Box<dyn std::error::Err
         .header("linux_headers/include/asm-generic/signal.h")
         .header("linux_headers/include/linux/auxvec.h")
         .header("linux_headers/include/linux/mman.h")
+        .header("linux_headers/include/linux/sched.h")
         .header("linux_headers/include/linux/time.h")
         .header("linux_headers/include/linux/uio.h")
         .header("linux_headers/include/linux/wait.h")
