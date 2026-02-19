@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use crate::klibc::util;
 
-use super::PCIRange;
+use super::{PCIRange, PciAddr, PciCpuAddr};
 
 /// This struct will store the free space in the PCI address space and the offset to the CPU address space.
 /// It will be used as a very simple one-way allocator. We assume we never ran out of space and therefore ignore
@@ -32,9 +32,10 @@ impl PCIAllocator {
             return None;
         }
         self.free_space_pci_space.start = aligned_current + size;
+        let pci_address = PciAddr::new(aligned_current);
         Some(PCIAllocatedSpace {
-            pci_address: aligned_current,
-            cpu_address: util::wrapping_add_signed(aligned_current, self.offset_to_cpu_space),
+            pci_address,
+            cpu_address: pci_address.to_cpu_addr(self.offset_to_cpu_space),
             size,
         })
     }
@@ -43,8 +44,8 @@ impl PCIAllocator {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct PCIAllocatedSpace {
-    pub pci_address: usize,
-    pub cpu_address: usize,
+    pub pci_address: PciAddr,
+    pub cpu_address: PciCpuAddr,
     pub size: usize,
 }
 
@@ -84,11 +85,11 @@ mod tests {
             .allocate(4096)
             .expect("Page-sized allocation must succeed");
         assert!(
-            allocation.cpu_address.is_multiple_of(4096),
+            allocation.cpu_address.as_usize().is_multiple_of(4096),
             "cpu address must be properly aligned"
         );
         assert!(
-            allocation.pci_address.is_multiple_of(4096),
+            allocation.pci_address.as_usize().is_multiple_of(4096),
             "pci address must be properly aligned"
         );
     }
