@@ -56,6 +56,10 @@ linux_syscalls! {
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
 }
 
+const AF_INET: c_int = 2;
+const SOCK_DGRAM: c_int = 2;
+const SOCK_CLOEXEC: c_int = 0x80000;
+
 pub struct LinuxSyscallHandler {
     handler: SyscallHandler,
 }
@@ -511,10 +515,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         typ: c_int,
         _protocol: c_int,
     ) -> Result<isize, Errno> {
-        const AF_INET: c_int = 2;
-        const SOCK_DGRAM: c_int = 2;
-        const SOCK_CLOEXEC: c_int = 0x80000;
-
         let masked_type = typ & !SOCK_CLOEXEC;
         assert!(
             domain == AF_INET && masked_type == SOCK_DGRAM,
@@ -551,9 +551,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         );
 
         let addr_bytes = addr.validate_slice(core::mem::size_of::<sockaddr_in>())?;
-        // SAFETY: addr_bytes has exactly size_of::<sockaddr_in>() bytes, validated above
+        // SAFETY: addr_bytes has exactly size_of::<sockaddr_in>() bytes; use read_unaligned
+        // because Vec<u8> may not satisfy sockaddr_in's alignment requirement
         let sin: sockaddr_in =
-            unsafe { core::ptr::read(addr_bytes.as_ptr().cast::<sockaddr_in>()) };
+            unsafe { core::ptr::read_unaligned(addr_bytes.as_ptr().cast::<sockaddr_in>()) };
         let port = Port::new(u16::from_be(sin.sin_port));
 
         let socket = net::open_sockets()
@@ -596,9 +597,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         let data = buf.validate_slice(len)?;
         let dest_bytes = dest_addr.validate_slice(core::mem::size_of::<sockaddr_in>())?;
-        // SAFETY: dest_bytes has exactly size_of::<sockaddr_in>() bytes, validated above
+        // SAFETY: dest_bytes has exactly size_of::<sockaddr_in>() bytes; use read_unaligned
+        // because Vec<u8> may not satisfy sockaddr_in's alignment requirement
         let sin: sockaddr_in =
-            unsafe { core::ptr::read(dest_bytes.as_ptr().cast::<sockaddr_in>()) };
+            unsafe { core::ptr::read_unaligned(dest_bytes.as_ptr().cast::<sockaddr_in>()) };
 
         let dest_ip = core::net::Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
         let dest_port = u16::from_be(sin.sin_port);
@@ -625,12 +627,12 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, Errno> {
         net::receive_and_process_packets();
 
-        let (socket, flags) = self
+        let socket = self
             .handler
             .current_process()
             .with_lock(|p| {
                 p.fd_table().get(fd).and_then(|e| match &e.descriptor {
-                    FileDescriptor::UdpSocket(s) => Some((s.clone(), e.flags)),
+                    FileDescriptor::UdpSocket(s) => Some(s.clone()),
                     _ => None,
                 })
             })
@@ -640,14 +642,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let result = socket.lock().get_datagram(&mut tmp_buf);
 
         match result {
-            None if flags.is_nonblocking() => Err(Errno::EAGAIN),
+            // TODO: blocking recvfrom should wait for data instead of returning EAGAIN
             None => Err(Errno::EAGAIN),
             Some((bytes_read, from_ip, from_port)) => {
                 buf.write_slice(&tmp_buf[..bytes_read])?;
 
                 if src_addr.arg_nonzero() {
                     let sin = sockaddr_in {
-                        sin_family: 2, // AF_INET
+                        sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
                         sin_port: from_port.as_u16().to_be(),
                         sin_addr: headers::syscall_types::in_addr {
                             s_addr: u32::from(from_ip).to_be(),
