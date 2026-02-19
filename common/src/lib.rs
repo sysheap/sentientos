@@ -11,7 +11,6 @@ pub mod constructable;
 pub mod errors;
 pub mod ioctl;
 pub mod macros;
-pub mod net;
 pub mod numbers;
 pub mod pid;
 pub mod pointer;

@@ -1,9 +1,5 @@
 use std::io::{Write, stdout};
-
-use userspace::net::UdpSocket;
-
-extern crate alloc;
-extern crate userspace;
+use std::net::UdpSocket;
 
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
@@ -17,17 +13,25 @@ fn main() {
         0
     );
 
-    let mut socket = UdpSocket::try_open(PORT).expect("Socket must be openable.");
+    let socket = UdpSocket::bind(format!("0.0.0.0:{PORT}")).expect("bind must work");
+    socket
+        .set_nonblocking(true)
+        .expect("nonblocking must work");
+
     let mut input = String::new();
+    let mut last_sender = None;
 
     loop {
         let mut buffer = [0; 64];
-        let count = socket.receive(&mut buffer);
-
-        if count > 0 {
-            let text = std::str::from_utf8(&buffer[0..count]).expect("Must be valid utf8");
-            print!("{}", text);
-            let _ = stdout().flush();
+        match socket.recv_from(&mut buffer) {
+            Ok((count, src_addr)) => {
+                last_sender = Some(src_addr);
+                let text = std::str::from_utf8(&buffer[..count]).expect("Must be valid utf8");
+                print!("{}", text);
+                let _ = stdout().flush();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => panic!("recv_from failed: {e}"),
         }
 
         let mut c = 0u8;
@@ -37,7 +41,11 @@ fn main() {
                 b'\r' | b'\n' => {
                     println!();
                     input.push(b'\n' as char);
-                    socket.transmit(input.as_bytes());
+                    if let Some(addr) = last_sender {
+                        socket
+                            .send_to(input.as_bytes(), addr)
+                            .expect("send must work");
+                    }
                     input.clear();
                 }
                 DELETE => {
