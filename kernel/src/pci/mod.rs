@@ -12,6 +12,7 @@ mod lookup;
 
 use lookup::lookup;
 
+pub use address::{PciAddr, PciCpuAddr};
 pub use devic_tree_parser::parse;
 
 use self::allocator::PCIAllocator;
@@ -191,11 +192,11 @@ impl PCIDevice {
 
         configuration_space.write_bar(
             index,
-            u32::try_from(space.pci_address & 0xFFFF_FFFF).expect("masked to 32 bits"),
+            u32::try_from(space.pci_address.as_usize() & 0xFFFF_FFFF).expect("masked to 32 bits"),
         );
         configuration_space.write_bar(
             index + 1,
-            u32::try_from(space.pci_address >> 32).expect("high 32 bits fit in u32"),
+            u32::try_from(space.pci_address.as_usize() >> 32).expect("high 32 bits fit in u32"),
         );
 
         configuration_space.set_command_register_bits(command_register::MEMORY_SPACE);
