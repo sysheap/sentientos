@@ -30,8 +30,8 @@ pub struct Process {
     name: Arc<String>,
     page_table: RootPageTableHolder,
     allocated_pages: Vec<PinnedHeapPages>,
-    mmap_allocations: BTreeMap<usize, PinnedHeapPages>,
-    free_mmap_address: usize,
+    mmap_allocations: BTreeMap<crate::memory::VirtAddr, PinnedHeapPages>,
+    free_mmap_address: crate::memory::VirtAddr,
     fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
@@ -70,7 +70,7 @@ impl Process {
             page_table,
             allocated_pages,
             mmap_allocations: BTreeMap::new(),
-            free_mmap_address: FREE_MMAP_START_ADDRESS,
+            free_mmap_address: crate::memory::VirtAddr::new(FREE_MMAP_START_ADDRESS),
             fd_table: FdTable::new(),
             threads: BTreeMap::new(),
             brk,
@@ -79,7 +79,7 @@ impl Process {
         }
     }
 
-    pub fn brk(&mut self, brk: usize) -> usize {
+    pub fn brk(&mut self, brk: crate::memory::VirtAddr) -> crate::memory::VirtAddr {
         self.brk.brk(brk)
     }
 
@@ -169,23 +169,23 @@ impl Process {
     pub fn mmap_pages_with_address(
         &mut self,
         num_pages: Pages,
-        addr: usize,
+        addr: crate::memory::VirtAddr,
         permission: XWRMode,
     ) -> *mut u8 {
         let length = num_pages.as_bytes();
-        if self.page_table.is_mapped(addr..addr + length) {
+        if self.page_table.is_mapped(addr..addr.add(length)) {
             return null_mut();
         }
         let pages = PinnedHeapPages::new_pages(num_pages);
         self.page_table.map_userspace(
-            crate::memory::VirtAddr::new(addr),
+            addr,
             crate::memory::PhysAddr::new(pages.addr()),
             length,
             permission,
             "mmap".into(),
         );
         self.mmap_allocations.insert(addr, pages);
-        core::ptr::without_provenance_mut(addr)
+        core::ptr::without_provenance_mut(addr.as_usize())
     }
 
     pub fn mmap_pages(&mut self, num_pages: Pages, permission: XWRMode) -> *mut u8 {
@@ -193,18 +193,22 @@ impl Process {
         let pages = PinnedHeapPages::new_pages(num_pages);
         let addr = self.free_mmap_address;
         self.page_table.map_userspace(
-            crate::memory::VirtAddr::new(addr),
+            addr,
             crate::memory::PhysAddr::new(pages.as_ptr() as usize),
             length,
             permission,
             "mmap".to_string(),
         );
         self.mmap_allocations.insert(addr, pages);
-        self.free_mmap_address += length;
-        core::ptr::without_provenance_mut(addr)
+        self.free_mmap_address = self.free_mmap_address.add(length);
+        core::ptr::without_provenance_mut(addr.as_usize())
     }
 
-    pub fn munmap_pages(&mut self, addr: usize, length: usize) -> Result<(), Errno> {
+    pub fn munmap_pages(
+        &mut self,
+        addr: crate::memory::VirtAddr,
+        length: usize,
+    ) -> Result<(), Errno> {
         let pages = self.mmap_allocations.remove(&addr).ok_or(Errno::EINVAL)?;
         if pages.size() != length {
             self.mmap_allocations.insert(addr, pages);
@@ -313,8 +317,9 @@ mod tests {
         let process = thread.process();
         let mut process = process.lock();
 
+        use crate::memory::VirtAddr;
         assert!(
-            process.free_mmap_address == FREE_MMAP_START_ADDRESS,
+            process.free_mmap_address == VirtAddr::new(FREE_MMAP_START_ADDRESS),
             "Free MMAP Address must set to correct start"
         );
         let ptr = process.mmap_pages(Pages::new(1), XWRMode::ReadWrite);
@@ -323,7 +328,7 @@ mod tests {
             "Returned pointer must have the value of the initial free mmap start address."
         );
         assert!(
-            process.free_mmap_address == FREE_MMAP_START_ADDRESS + PAGE_SIZE,
+            process.free_mmap_address == VirtAddr::new(FREE_MMAP_START_ADDRESS + PAGE_SIZE),
             "Free mmap address must have the value of the next free value"
         );
         let ptr = process.mmap_pages(Pages::new(2), XWRMode::ReadWrite);
@@ -332,7 +337,7 @@ mod tests {
             "Returned pointer must have the value of the initial free mmap start address."
         );
         assert!(
-            process.free_mmap_address == FREE_MMAP_START_ADDRESS + (3 * PAGE_SIZE),
+            process.free_mmap_address == VirtAddr::new(FREE_MMAP_START_ADDRESS + (3 * PAGE_SIZE)),
             "Free mmap address must have the value of the next free value"
         );
     }
@@ -348,14 +353,23 @@ mod tests {
         let process = thread.process();
         let mut process = process.lock();
 
+        use crate::memory::VirtAddr;
         let ptr = process.mmap_pages(Pages::new(1), XWRMode::ReadWrite);
-        let addr = ptr as usize;
-        assert!(process.get_page_table().is_mapped(addr..addr + PAGE_SIZE));
+        let addr = VirtAddr::new(ptr as usize);
+        assert!(
+            process
+                .get_page_table()
+                .is_mapped(addr..addr.add(PAGE_SIZE))
+        );
 
         process
             .munmap_pages(addr, PAGE_SIZE)
             .expect("munmap must succeed");
-        assert!(!process.get_page_table().is_mapped(addr..addr + PAGE_SIZE));
+        assert!(
+            !process
+                .get_page_table()
+                .is_mapped(addr..addr.add(PAGE_SIZE))
+        );
     }
 
     #[test_case]
@@ -369,7 +383,8 @@ mod tests {
         let process = thread.process();
         let mut process = process.lock();
 
-        let result = process.munmap_pages(0xDEAD_0000, PAGE_SIZE);
+        use crate::memory::VirtAddr;
+        let result = process.munmap_pages(VirtAddr::new(0xDEAD_0000), PAGE_SIZE);
         assert_eq!(result, Err(headers::errno::Errno::EINVAL));
     }
 
@@ -384,12 +399,15 @@ mod tests {
         let process = thread.process();
         let mut process = process.lock();
 
+        use crate::memory::VirtAddr;
         let ptr = process.mmap_pages(Pages::new(1), XWRMode::ReadWrite);
-        let addr = ptr as usize;
+        let addr = VirtAddr::new(ptr as usize);
         let result = process.munmap_pages(addr, PAGE_SIZE * 2);
         assert_eq!(result, Err(headers::errno::Errno::EINVAL));
         assert!(
-            process.get_page_table().is_mapped(addr..addr + PAGE_SIZE),
+            process
+                .get_page_table()
+                .is_mapped(addr..addr.add(PAGE_SIZE)),
             "mapping must still exist after failed munmap"
         );
     }
