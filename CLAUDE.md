@@ -120,6 +120,7 @@ Kernel unit tests use `#[test_case]` macro (custom test framework).
 | Process struct | kernel/src/processes/process.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |
 | Page tables | kernel/src/memory/page_tables.rs |
+| Address types | kernel/src/memory/address.rs, kernel/src/pci/address.rs |
 | Trap handler | kernel/src/interrupts/trap.rs |
 | QEMU infra | qemu-infra/src/qemu.rs |
 | MCP server | mcp-server/src/server.rs |
