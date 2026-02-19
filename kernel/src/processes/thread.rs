@@ -414,8 +414,9 @@ impl Thread {
         self.process.clone()
     }
 
-    pub fn set_process(&mut self, new_process: ProcessRef) {
+    pub fn set_process(&mut self, new_process: ProcessRef, name: Arc<String>) {
         self.process = new_process;
+        self.process_name = name;
     }
 
     pub fn set_vfork_state(&mut self, state: Arc<Spinlock<VforkState>>) {
