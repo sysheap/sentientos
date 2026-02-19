@@ -73,18 +73,30 @@ impl CpuScheduler {
         let waker = ThreadWaker::new_waker(Arc::downgrade(&self.current_thread));
         let mut cx = Context::from_waker(&waker);
         if let Poll::Ready(result) = task.poll(&mut cx) {
-            let ret = match result {
-                Ok(ret) => ret,
-                Err(errno) => -(errno as isize),
-            };
-            self.current_thread.with_lock(|mut t| {
-                t.clear_wakeup_pending();
-                let trap_frame = t.get_register_state_mut();
-                trap_frame[Register::a0] = ret.cast_unsigned();
-                let pc = t.get_program_counter();
-                t.set_program_counter(pc + 4); // Skip the ecall instruction
+            let replaced = self.current_thread.with_lock(|mut t| {
+                let r = t.registers_replaced();
+                if r {
+                    t.set_registers_replaced(false);
+                }
+                r
             });
-            self.set_cpu_reg_for_current_thread();
+            if replaced {
+                self.current_thread.lock().clear_wakeup_pending();
+                self.set_cpu_reg_for_current_thread();
+            } else {
+                let ret = match result {
+                    Ok(ret) => ret,
+                    Err(errno) => -(errno as isize),
+                };
+                self.current_thread.with_lock(|mut t| {
+                    t.clear_wakeup_pending();
+                    let trap_frame = t.get_register_state_mut();
+                    trap_frame[Register::a0] = ret.cast_unsigned();
+                    let pc = t.get_program_counter();
+                    t.set_program_counter(pc + 4); // Skip the ecall instruction
+                });
+                self.set_cpu_reg_for_current_thread();
+            }
             true
         } else {
             // Use self.current_thread directly instead of Cpu::with_current_thread

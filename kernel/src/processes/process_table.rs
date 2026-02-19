@@ -144,6 +144,10 @@ impl ProcessTable {
                     let _ = clear_child_tid.write_with_process_lock(&process.lock(), 0);
                 }
 
+                if let Some(vfork_state) = t.take_vfork_state() {
+                    vfork_state.lock().wake();
+                }
+
                 let process = t.process();
                 process.lock().main_tid()
             });
