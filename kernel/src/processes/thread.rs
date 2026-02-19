@@ -154,15 +154,15 @@ impl Thread {
         } = loader::load_elf(elf_file, name, args)?;
 
         let mut register_state = TrapFrame::zero();
-        register_state[Register::a0] = args_start;
-        register_state[Register::sp] = args_start;
+        register_state[Register::a0] = args_start.as_usize();
+        register_state[Register::sp] = args_start.as_usize();
 
         Ok(Self::new_process(
             name,
             get_next_tid(),
             register_state,
             page_table,
-            entry_address,
+            entry_address.as_usize(),
             allocated_pages,
             false,
             brk,

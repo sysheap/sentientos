@@ -4,6 +4,7 @@ use crate::{
     debug, info,
     interrupts::plic::{InterruptSource, PLIC},
     io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
+    memory::VirtAddr,
     processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
     syscalls::{
         self,
@@ -183,7 +184,7 @@ fn handle_unhandled_exception() {
     let mut scheduler = cpu.scheduler().lock();
     let (message, from_userspace) = scheduler.get_current_process().with_lock(|p| {
         let from_userspace =
-            p.get_page_table().is_userspace_address(sepc);
+            p.get_page_table().is_userspace_address(VirtAddr::new(sepc));
         (format!(
             "Unhandled exception!\nName: {}\nException code: {}\nstval: 0x{:x}\nsepc: 0x{:x}\nFrom Userspace: {}\nProcess name: {}\n{:?}",
             cause.get_reason(),

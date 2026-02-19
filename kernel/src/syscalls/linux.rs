@@ -277,9 +277,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn brk(&mut self, brk: c_ulong) -> Result<isize, headers::errno::Errno> {
-        self.handler
-            .current_process()
-            .with_lock(|mut p| Ok(p.brk(brk.as_usize()) as isize))
+        self.handler.current_process().with_lock(|mut p| {
+            Ok(p.brk(crate::memory::VirtAddr::new(brk.as_usize()))
+                .as_usize() as isize)
+        })
     }
 
     async fn mmap(
@@ -320,7 +321,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         // Handle special PROT_NONE case and map it to the null pointer
         if prot == PROT_NONE {
             return self.handler.current_process().with_lock(|mut p| {
-                if p.get_page_table().is_mapped(addr..addr + length) {
+                if p.get_page_table()
+                    .is_mapped(VirtAddr::new(addr)..VirtAddr::new(addr + length))
+                {
                     return Err(Errno::EEXIST);
                 }
                 p.get_page_table_mut().map_userspace(
@@ -341,20 +344,29 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         };
         self.handler.current_process().with_lock(|mut p| {
             if (flags & MAP_FIXED) > 0 {
-                if p.get_page_table().is_mapped(addr..addr + length) {
+                if p.get_page_table()
+                    .is_mapped(VirtAddr::new(addr)..VirtAddr::new(addr + length))
+                {
                     return Err(Errno::EEXIST);
                 }
-                let ptr =
-                    p.mmap_pages_with_address(Pages::new(length / PAGE_SIZE), addr, permission);
+                let ptr = p.mmap_pages_with_address(
+                    Pages::new(length / PAGE_SIZE),
+                    VirtAddr::new(addr),
+                    permission,
+                );
                 return Ok(ptr as isize);
             }
-            if addr == 0 || p.get_page_table().is_mapped(addr..addr + length) {
+            if addr == 0
+                || p.get_page_table()
+                    .is_mapped(VirtAddr::new(addr)..VirtAddr::new(addr + length))
+            {
                 return Ok(p.mmap_pages(Pages::new(length / PAGE_SIZE), permission) as isize);
             }
-            Ok(
-                p.mmap_pages_with_address(Pages::new(length / PAGE_SIZE), addr, permission)
-                    as isize,
-            )
+            Ok(p.mmap_pages_with_address(
+                Pages::new(length / PAGE_SIZE),
+                VirtAddr::new(addr),
+                permission,
+            ) as isize)
         })
     }
 
@@ -364,7 +376,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
         self.handler
             .current_process()
-            .with_lock(|mut p| p.munmap_pages(addr, length))?;
+            .with_lock(|mut p| p.munmap_pages(VirtAddr::new(addr), length))?;
         Ok(0)
     }
 

@@ -18,23 +18,28 @@ use crate::{
     processes::brk::Brk,
 };
 
-pub const STACK_START: usize = usize::MAX;
+pub const STACK_START: crate::memory::VirtAddr = crate::memory::VirtAddr::new(usize::MAX);
 
 pub const STACK_SIZE_PAGES: usize = 4;
 pub const STACK_SIZE: usize = PAGE_SIZE * STACK_SIZE_PAGES;
 
-pub const STACK_END: usize = STACK_START - STACK_SIZE + 1;
+pub const STACK_END: crate::memory::VirtAddr =
+    crate::memory::VirtAddr::new(usize::MAX - STACK_SIZE + 1);
 
 #[derive(Debug)]
 pub struct LoadedElf {
-    pub entry_address: usize,
+    pub entry_address: crate::memory::VirtAddr,
     pub page_tables: RootPageTableHolder,
     pub allocated_pages: Vec<PinnedHeapPages>,
-    pub args_start: usize,
+    pub args_start: crate::memory::VirtAddr,
     pub brk: Brk,
 }
 
-fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize, LoaderError> {
+fn set_up_arguments(
+    stack: &mut [u8],
+    name: &str,
+    args: &[&str],
+) -> Result<crate::memory::VirtAddr, LoaderError> {
     // layout:
     // [argc, argv[0], argv[n], NULL, envp[0], envp[1], NULL, AUXV AT_NULL, NULL, name, args[0], args[1]...]
     let argc = 1 + args.len(); // name + amount of args
@@ -57,16 +62,19 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
         return Err(LoaderError::StackToSmall);
     }
 
-    let real_start = STACK_START - total_length + 1;
-    let mut addr_current_string = real_start + start_of_strings_offset;
+    let real_start = STACK_START.sub(total_length).add(1);
+    let mut addr_current_string = real_start.add(start_of_strings_offset);
 
     // Patch pointers
-    argv[0] = addr_current_string;
-    addr_current_string = addr_current_string.wrapping_add(name.len() + 1);
+    argv[0] = addr_current_string.as_usize();
+    addr_current_string =
+        crate::memory::VirtAddr::new(addr_current_string.as_usize().wrapping_add(name.len() + 1));
     for (idx, arg) in args.iter().enumerate() {
-        argv[idx + 1] = addr_current_string;
+        argv[idx + 1] = addr_current_string.as_usize();
         // It could overflow on the last element, so just use wrapping_add
-        addr_current_string = addr_current_string.wrapping_add(arg.len() + 1);
+        addr_current_string = crate::memory::VirtAddr::new(
+            addr_current_string.as_usize().wrapping_add(arg.len() + 1),
+        );
     }
 
     let offset = stack.len() - total_length;
@@ -100,7 +108,7 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<usize
         .map_err(|_| LoaderError::StackToSmall)?;
 
     // We want to point into the arguments
-    Ok(STACK_START - total_length + 1)
+    Ok(STACK_START.sub(total_length).add(1))
 }
 
 pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
@@ -118,11 +126,12 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     allocated_pages.push(stack);
 
     debug!(
-        "before mapping stack: stack_start={STACK_START:#x} stack_size={STACK_SIZE:#x} stack_end={STACK_END:#x}"
+        "before mapping stack: stack_start={} stack_size={STACK_SIZE:#x} stack_end={}",
+        STACK_START, STACK_END
     );
 
     page_tables.map_userspace(
-        crate::memory::VirtAddr::new(STACK_END),
+        STACK_END,
         crate::memory::PhysAddr::new(stack_addr),
         STACK_SIZE,
         crate::memory::page_tables::XWRMode::ReadWrite,
@@ -185,7 +194,10 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     let brk = match bss_end {
         Some(bss_end) => {
-            let (pages, brk) = Brk::new(bss_end.as_usize(), &mut page_tables);
+            let (pages, brk) = Brk::new(
+                crate::memory::VirtAddr::new(bss_end.as_usize()),
+                &mut page_tables,
+            );
             allocated_pages.push(pages);
             brk
         }
@@ -193,7 +205,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     };
 
     Ok(LoadedElf {
-        entry_address: elf_header.entry_point.as_usize(),
+        entry_address: crate::memory::VirtAddr::new(elf_header.entry_point.as_usize()),
         page_tables,
         allocated_pages,
         args_start,

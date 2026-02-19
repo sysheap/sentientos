@@ -2,7 +2,6 @@ use crate::{
     debug, info, klibc::runtime_initialized::RuntimeInitializedData,
     memory::linker_information::LinkerInformation,
 };
-use core::ffi::c_char;
 
 pub static THE: RuntimeInitializedData<&'static str> = RuntimeInitializedData::new();
 
@@ -10,7 +9,7 @@ pub fn init() {
     let symbols_start = LinkerInformation::__start_symbols();
     // SAFETY: The symbols section is null-terminated by the build process
     // (objcopy --update-section appends a NUL byte).
-    let cstr = unsafe { core::ffi::CStr::from_ptr(symbols_start as *const c_char) };
+    let cstr = unsafe { core::ffi::CStr::from_ptr(symbols_start.as_ptr()) };
     let str = cstr.to_str().expect("Symbols must be UTF-8");
     info!("Initialized symbols ({} bytes)", str.len());
     THE.initialize(str);
@@ -19,7 +18,7 @@ pub fn init() {
 pub fn symbols_end() -> usize {
     let size = symbols_size();
     let symbols_start = LinkerInformation::__start_symbols();
-    symbols_start + size
+    symbols_start.as_usize() + size
 }
 
 #[cfg(not(miri))]

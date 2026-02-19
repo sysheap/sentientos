@@ -53,7 +53,7 @@ pub fn heap_size() -> usize {
         .expect("Memory node must have a reg property");
 
     let ram_end_address = reg.address + reg.size;
-    ram_end_address - LinkerInformation::__start_heap()
+    ram_end_address - LinkerInformation::__start_heap().as_usize()
 }
 
 pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
@@ -62,9 +62,9 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
 
     info!("Initializing page allocator");
     info!(
-        "Heap Start: {:#x}-{:#x} (size: {:#x} -> {})",
+        "Heap Start: {}-{} (size: {:#x} -> {})",
         heap_start,
-        heap_start + heap_size,
+        heap_start.add(heap_size),
         heap_size,
         crate::klibc::util::PrintMemorySizeHumanFriendly(heap_size)
     );
@@ -72,7 +72,8 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
     // SAFETY: The heap region [heap_start, heap_start+heap_size) is reserved
     // by the linker script and not used by any other code. MaybeUninit<u8>
     // has no validity requirements.
-    let memory = unsafe { from_raw_parts_mut(heap_start as *mut MaybeUninit<u8>, heap_size) };
+    let memory =
+        unsafe { from_raw_parts_mut(heap_start.as_mut_ptr::<MaybeUninit<u8>>(), heap_size) };
     PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
 }
 
