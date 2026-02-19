@@ -642,7 +642,7 @@ impl PageTable {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
     use super::{MappingEntry, RootPageTableHolder};
     use crate::memory::{PhysAddr, VirtAddr, page_table_entry::XWRMode};

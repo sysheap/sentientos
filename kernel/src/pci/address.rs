@@ -3,15 +3,12 @@ use core::fmt;
 
 /// PCI address space (device-side view)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct PciAddr(usize);
 
 /// PCI address as seen from CPU (after translation)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct PciCpuAddr(usize);
 
-#[allow(dead_code)]
 impl PciAddr {
     #[inline]
     pub const fn new(addr: usize) -> Self {
@@ -31,9 +28,9 @@ impl PciAddr {
     }
 }
 
-#[allow(dead_code)]
 impl PciCpuAddr {
     #[inline]
+    #[allow(dead_code)]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
@@ -45,6 +42,7 @@ impl PciCpuAddr {
 
     /// CPU-visible PCI addresses are identity-mapped to physical addresses.
     #[inline]
+    #[allow(dead_code)]
     pub const fn as_phys_addr(self) -> PhysAddr {
         PhysAddr::new(self.0)
     }
