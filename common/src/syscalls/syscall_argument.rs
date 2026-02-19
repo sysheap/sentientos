@@ -1,6 +1,6 @@
 use core::any::Any;
 
-use crate::{net::UDPDescriptor, numbers::Number, pid::Tid, pointer::FatPointer};
+use crate::{numbers::Number, pid::Tid, pointer::FatPointer};
 use alloc::{boxed::Box, vec::Vec};
 
 extern crate alloc;
@@ -81,14 +81,6 @@ impl<'a> SyscallArgument for &'a [&'a str] {
         storage.add(temp_vec);
 
         converted
-    }
-}
-
-impl SyscallArgument for UDPDescriptor {
-    type Converted = UDPDescriptor;
-
-    fn convert(self, _storage: &mut SyscallTempStorage) -> Self::Converted {
-        self
     }
 }
 
