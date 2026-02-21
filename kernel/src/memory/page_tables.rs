@@ -73,7 +73,7 @@ impl Display for MappingEntry {
             "{}-{} (Size: {:#010x}) ({:?})\t({})",
             self.virtual_range.start,
             self.virtual_range.end,
-            self.virtual_range.end.as_usize() - self.virtual_range.start.as_usize(),
+            self.virtual_range.end - self.virtual_range.start,
             self.privileges,
             self.name
         )
@@ -295,8 +295,8 @@ impl RootPageTableHolder {
 
         size = align_up(size, PAGE_SIZE);
 
-        let virtual_end = virtual_address_start.add(size - 1);
-        let physical_end = physical_address_start.add(size - 1);
+        let virtual_end = virtual_address_start + (size - 1);
+        let physical_end = physical_address_start + (size - 1);
 
         debug!(
             "Map {}-{} -> {}-{} (Size: {:#010x}) ({:?})\t({})",
@@ -330,8 +330,8 @@ impl RootPageTableHolder {
 
         let mut offset = 0;
 
-        let virtual_address_with_offset = |offset| virtual_address_start.add(offset).as_usize();
-        let physical_address_with_offset = |offset| physical_address_start.add(offset);
+        let virtual_address_with_offset = |offset| (virtual_address_start + offset).as_usize();
+        let physical_address_with_offset = |offset| physical_address_start + offset;
 
         let can_be_mapped_with = |mapped_bytes, offset| {
             mapped_bytes <= (size - offset)
@@ -517,7 +517,7 @@ impl RootPageTableHolder {
         let offset_from_page_start = address % PAGE_SIZE;
         self.get_page_table_entry_for_address(VirtAddr::new(address))
             .map(|entry| {
-                PTR::as_pointer(entry.get_physical_address().as_usize() + offset_from_page_start)
+                PTR::as_pointer((entry.get_physical_address() + offset_from_page_start).as_usize())
             })
     }
 
@@ -561,7 +561,7 @@ impl RootPageTableHolder {
         let mut offset = 0;
 
         while offset < size {
-            let addr = virtual_address_start.add(offset).as_usize();
+            let addr = (virtual_address_start + offset).as_usize();
             let first_level_entry = root_page_table.get_entry_for_virtual_address_mut(addr, 2);
 
             assert!(

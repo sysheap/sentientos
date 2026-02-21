@@ -78,7 +78,7 @@ impl NetworkDevice {
         let config_bar = pci_device.get_or_initialize_bar(common_cfg.bar().read());
 
         let common_cfg: MMIO<virtio_pci_common_cfg> =
-            MMIO::new(config_bar.cpu_address.as_usize() + common_cfg.offset().read() as usize);
+            MMIO::new((config_bar.cpu_address + common_cfg.offset().read() as usize).as_usize());
 
         debug!("Common config: {:#x?}", common_cfg);
 
@@ -139,8 +139,9 @@ impl NetworkDevice {
 
         let net_config_bar = pci_device.get_or_initialize_bar(net_cfg_cap.bar().read());
 
-        let net_cfg: MMIO<virtio_net_config> =
-            MMIO::new(net_config_bar.cpu_address.as_usize() + net_cfg_cap.offset().read() as usize);
+        let net_cfg: MMIO<virtio_net_config> = MMIO::new(
+            (net_config_bar.cpu_address + net_cfg_cap.offset().read() as usize).as_usize(),
+        );
 
         debug!("Net config: {:#x?}", net_cfg);
 
