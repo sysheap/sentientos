@@ -1,5 +1,7 @@
-use std::io::{Write, stdout};
-use std::net::UdpSocket;
+use std::{
+    io::{Write, stdout},
+    net::UdpSocket,
+};
 
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
@@ -14,9 +16,7 @@ fn main() {
     );
 
     let socket = UdpSocket::bind(format!("0.0.0.0:{PORT}")).expect("bind must work");
-    socket
-        .set_nonblocking(true)
-        .expect("nonblocking must work");
+    socket.set_nonblocking(true).expect("nonblocking must work");
 
     let mut input = String::new();
     let mut last_sender = None;
