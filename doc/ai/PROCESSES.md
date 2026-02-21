@@ -140,9 +140,6 @@ impl CpuScheduler {
     // Schedule next process
     fn schedule(&mut self)
 
-    // Start a new program
-    fn start_program(&mut self, name: &str, args: &[&str]) -> Result<Tid, SchedulerError>
-
     // Kill current process
     fn kill_current_process(&mut self)
 
@@ -187,7 +184,7 @@ Every process tracks its parent via `parent_tid: Tid`:
 
 - **Init** (first process): `parent_tid = Tid::new(0)` (no real parent)
 - **Powersave** (idle): `parent_tid = POWERSAVE_TID`
-- **All others**: `parent_tid` = caller's `main_tid` at `sys_execute` time
+- **All others**: `parent_tid` = caller's `main_tid` at `clone` time
 
 ### wait4 / waitpid enforcement
 
@@ -321,13 +318,6 @@ Used with Process methods to safely read/write userspace memory.
 | kernel/src/processes/userspace_ptr.rs | Userspace pointer wrapper |
 
 ## Common Operations
-
-### Start a New Program
-```rust
-Cpu::with_scheduler(|mut s| {
-    s.start_program("prog1", &["arg1", "arg2"])?;
-});
-```
 
 ### Access Current Thread/Process
 ```rust

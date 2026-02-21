@@ -40,7 +40,6 @@ Inspired by [SerenityOS](https://github.com/SerenityOS/serenity), this project e
 - TCP
 - GUI
 - DHCP / configurable IP addressing
-- clone/execve (currently uses a custom sys_execute)
 
 ## How Do I Run It?
 

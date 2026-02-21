@@ -129,7 +129,7 @@ Custom syscalls with bit 63 set for synchronous execution:
 
 ```rust
 impl KernelSyscalls for SyscallHandler {
-    fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
+    // All legacy syscalls removed (sys_execute, UDP socket syscalls)
 }
 ```
 
