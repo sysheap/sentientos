@@ -30,7 +30,6 @@ impl PciAddr {
 
 impl PciCpuAddr {
     #[inline]
-    #[allow(dead_code)]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
