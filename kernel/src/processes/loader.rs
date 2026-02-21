@@ -11,35 +11,30 @@ use crate::{
         util::{InBytes, UsizeExt, minimum_amount_of_pages},
     },
     memory::{
-        PAGE_SIZE,
+        PAGE_SIZE, PhysAddr, VirtAddr,
         page::{PagesAsSlice, PinnedHeapPages},
-        page_tables::RootPageTableHolder,
+        page_tables::{RootPageTableHolder, XWRMode},
     },
     processes::brk::Brk,
 };
 
-pub const STACK_START: crate::memory::VirtAddr = crate::memory::VirtAddr::new(usize::MAX);
+pub const STACK_START: VirtAddr = VirtAddr::new(usize::MAX);
 
 pub const STACK_SIZE_PAGES: usize = 4;
 pub const STACK_SIZE: usize = PAGE_SIZE * STACK_SIZE_PAGES;
 
-pub const STACK_END: crate::memory::VirtAddr =
-    crate::memory::VirtAddr::new(usize::MAX - STACK_SIZE + 1);
+pub const STACK_END: VirtAddr = VirtAddr::new(usize::MAX - STACK_SIZE + 1);
 
 #[derive(Debug)]
 pub struct LoadedElf {
-    pub entry_address: crate::memory::VirtAddr,
+    pub entry_address: VirtAddr,
     pub page_tables: RootPageTableHolder,
     pub allocated_pages: Vec<PinnedHeapPages>,
-    pub args_start: crate::memory::VirtAddr,
+    pub args_start: VirtAddr,
     pub brk: Brk,
 }
 
-fn set_up_arguments(
-    stack: &mut [u8],
-    name: &str,
-    args: &[&str],
-) -> Result<crate::memory::VirtAddr, LoaderError> {
+fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<VirtAddr, LoaderError> {
     // layout:
     // [argc, argv[0], argv[n], NULL, envp[0], envp[1], NULL, AUXV AT_NULL, NULL, name, args[0], args[1]...]
     let argc = 1 + args.len(); // name + amount of args
@@ -68,13 +63,12 @@ fn set_up_arguments(
     // Patch pointers
     argv[0] = addr_current_string.as_usize();
     addr_current_string =
-        crate::memory::VirtAddr::new(addr_current_string.as_usize().wrapping_add(name.len() + 1));
+        VirtAddr::new(addr_current_string.as_usize().wrapping_add(name.len() + 1));
     for (idx, arg) in args.iter().enumerate() {
         argv[idx + 1] = addr_current_string.as_usize();
         // It could overflow on the last element, so just use wrapping_add
-        addr_current_string = crate::memory::VirtAddr::new(
-            addr_current_string.as_usize().wrapping_add(arg.len() + 1),
-        );
+        addr_current_string =
+            VirtAddr::new(addr_current_string.as_usize().wrapping_add(arg.len() + 1));
     }
 
     let offset = stack.len() - total_length;
@@ -132,9 +126,9 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     page_tables.map_userspace(
         STACK_END,
-        crate::memory::PhysAddr::new(stack_addr),
+        PhysAddr::new(stack_addr),
         STACK_SIZE,
-        crate::memory::page_tables::XWRMode::ReadWrite,
+        XWRMode::ReadWrite,
         "Stack".to_string(),
     );
 
@@ -180,8 +174,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         allocated_pages.push(pages);
 
         page_tables.map_userspace(
-            crate::memory::VirtAddr::new(program_header.virtual_address.as_usize() - offset),
-            crate::memory::PhysAddr::new(pages_addr),
+            VirtAddr::new(program_header.virtual_address.as_usize() - offset),
+            PhysAddr::new(pages_addr),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
             "LOAD".to_string(),
@@ -194,10 +188,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
 
     let brk = match bss_end {
         Some(bss_end) => {
-            let (pages, brk) = Brk::new(
-                crate::memory::VirtAddr::new(bss_end.as_usize()),
-                &mut page_tables,
-            );
+            let (pages, brk) = Brk::new(VirtAddr::new(bss_end.as_usize()), &mut page_tables);
             allocated_pages.push(pages);
             brk
         }
@@ -205,7 +196,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     };
 
     Ok(LoadedElf {
-        entry_address: crate::memory::VirtAddr::new(elf_header.entry_point.as_usize()),
+        entry_address: VirtAddr::new(elf_header.entry_point.as_usize()),
         page_tables,
         allocated_pages,
         args_start,

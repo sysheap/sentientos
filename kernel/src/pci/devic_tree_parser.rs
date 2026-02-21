@@ -6,9 +6,11 @@ use crate::{
 };
 use alloc::vec::Vec;
 
+use super::{PciAddr, PciCpuAddr};
+
 #[derive(Debug)]
 pub struct PCIInformation {
-    pub pci_host_bridge_address: usize,
+    pub pci_host_bridge_address: PciCpuAddr,
     pub pci_host_bridge_length: usize,
     pub ranges: Vec<PCIRange>,
 }
@@ -81,14 +83,14 @@ impl From<u32> for PCIBitField {
 #[derive(Debug)]
 pub struct PCIRange {
     pub pci_bitfield: PCIBitField,
-    pub pci_address: usize,
-    pub cpu_address: usize,
+    pub pci_address: PciAddr,
+    pub cpu_address: PciCpuAddr,
     pub size: usize,
 }
 
 pub fn parse() -> Option<PCIInformation> {
     let mut pci_information = PCIInformation {
-        pci_host_bridge_address: 0,
+        pci_host_bridge_address: PciCpuAddr::new(0),
         pci_host_bridge_length: 0,
         ranges: Vec::new(),
     };
@@ -99,7 +101,7 @@ pub fn parse() -> Option<PCIInformation> {
 
     let reg_property = node.parse_reg_property()?;
 
-    pci_information.pci_host_bridge_address = reg_property.address;
+    pci_information.pci_host_bridge_address = PciCpuAddr::new(reg_property.address);
     pci_information.pci_host_bridge_length = reg_property.size;
 
     let mut ranges_property = node.get_property("ranges")?;
@@ -142,8 +144,8 @@ pub fn parse() -> Option<PCIInformation> {
 
         pci_information.ranges.push(PCIRange {
             pci_bitfield: pci_bitfield.into(),
-            pci_address: pci_child_address,
-            cpu_address: parent_address,
+            pci_address: PciAddr::new(pci_child_address),
+            cpu_address: PciCpuAddr::new(parent_address),
             size,
         });
     }
