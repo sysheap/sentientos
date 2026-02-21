@@ -6,22 +6,8 @@ pub enum LoaderError {
 }
 
 #[derive(Debug)]
-pub enum SchedulerError {
-    InvalidProgramName,
-    LoaderError(LoaderError),
-}
-
-#[derive(Debug)]
 pub enum ValidationError {
     InvalidPtr,
-}
-
-#[derive(Debug)]
-#[repr(usize)]
-pub enum SysExecuteError {
-    InvalidProgram,
-    ValidationError(ValidationError),
-    SchedulerError(SchedulerError),
 }
 
 #[derive(Debug)]
@@ -41,8 +27,5 @@ pub enum SysSocketError {
     TooManyOpenFiles,
 }
 
-impl_from_to!(ValidationError, SysExecuteError);
 impl_from_to!(ValidationError, SysSocketError);
 impl_from_to!(ValidationError, SysArgError);
-impl_from_to!(LoaderError, SchedulerError);
-impl_from_to!(SchedulerError, SysExecuteError);

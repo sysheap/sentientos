@@ -1,5 +1,5 @@
 use common::{
-    errors::{SysExecuteError, SysSocketError},
+    errors::SysSocketError,
     net::UDPDescriptor,
     pid::Tid,
     pointer::Pointer,
@@ -60,18 +60,6 @@ impl SyscallHandler {
 
 impl KernelSyscalls for SyscallHandler {
     type ArgWrapper<T: SyscallArgument> = UserspaceArgument<T>;
-
-    fn sys_execute<'a>(
-        &mut self,
-        name: UserspaceArgument<&str>,
-        args: UserspaceArgument<&'a [&'a str]>,
-    ) -> Result<Tid, SysExecuteError> {
-        let name = name.validate(self)?;
-        let args = args.validate(self)?;
-
-        let tid = Cpu::with_scheduler(|mut s| s.start_program(name, &args))?;
-        Ok(tid)
-    }
 
     fn sys_open_udp_socket(
         &mut self,
