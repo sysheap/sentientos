@@ -1,20 +1,23 @@
 macro_rules! getter_address {
     ($name:ident) => {
         #[cfg(not(miri))]
-        pub fn $name() -> usize {
+        pub fn $name() -> VirtAddr {
             // SAFETY: These symbols are defined by the linker script. We only
             // take their address (never read their value), which is always safe.
             unsafe extern "C" {
                 static $name: usize;
             }
-            core::ptr::addr_of!($name) as usize
+            VirtAddr::new(core::ptr::addr_of!($name) as usize)
         }
         #[cfg(miri)]
-        pub fn $name() -> usize {
+        pub fn $name() -> VirtAddr {
             // When running under Miri we don't have any sections
             // Just choose any value which does not collide with any
             // other mappings
-            $crate::klibc::util::align_down(u32::MAX as usize, $crate::memory::PAGE_SIZE)
+            VirtAddr::new($crate::klibc::util::align_down(
+                u32::MAX as usize,
+                $crate::memory::PAGE_SIZE,
+            ))
         }
     };
 }
@@ -28,7 +31,7 @@ macro_rules! getter {
         pub fn ${concat($name, _size)}() -> usize {
             Self::${concat(__stop_, $name)}() - Self::${concat(__start_, $name)}()
         }
-        pub fn ${concat($name, _range)}() -> core::ops::Range<usize> {
+        pub fn ${concat($name, _range)}() -> core::ops::Range<VirtAddr> {
             Self::${concat(__start_, $name)}()..Self::${concat(__stop_, $name)}()
         }
     };
@@ -42,6 +45,7 @@ macro_rules! count_idents {
 
 macro_rules! sections {
     ($($name:ident, $xwr:expr;)*) => {
+        use $crate::memory::address::VirtAddr;
         use $crate::memory::page_tables::MappingDescription;
         use $crate::memory::page_table_entry::XWRMode;
         use $crate::memory::PAGE_SIZE;
@@ -59,8 +63,8 @@ macro_rules! sections {
             getter_address!(__start_symbols);
 
             // The heap will start directly page aligned after the symbols
-            pub fn __start_heap() -> usize {
-                align_up(debugging::symbols::symbols_end(), PAGE_SIZE)
+            pub fn __start_heap() -> VirtAddr {
+                VirtAddr::new(align_up(debugging::symbols::symbols_end(), PAGE_SIZE))
             }
 
             #[cfg(not(miri))]

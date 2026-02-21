@@ -3,7 +3,7 @@ use crate::klibc::{
     util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
 };
 
-use super::page_tables::PageTable;
+use super::{address::PhysAddr, page_tables::PageTable};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,9 +104,10 @@ impl PageTableEntry {
         mode != XWRMode::PointerToNextLevel
     }
 
-    pub(super) fn set_physical_address(&mut self, address: *mut PageTable) {
+    pub(super) fn set_physical_address(&mut self, address: PhysAddr) {
         let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
-        self.0 = address.map_addr(|new_address| {
+        let address_ptr: *mut PageTable = address.as_mut_ptr();
+        self.0 = address_ptr.map_addr(|new_address| {
             let mut original = self.0.addr();
             original &= mask;
             original |=
@@ -115,30 +116,35 @@ impl PageTableEntry {
         });
     }
 
-    pub(super) fn set_leaf_address(&mut self, address: usize) {
+    pub(super) fn set_leaf_address(&mut self, address: PhysAddr) {
         assert!(
-            address & 0xFFF == 0,
-            "Leaf address {address:#x} is not page-aligned"
+            address.is_page_aligned(),
+            "Leaf address {} is not page-aligned",
+            address
         );
         let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
+        let address_usize = address.as_usize();
         self.0 = self.0.map_addr(|_| {
             let mut original = self.0.addr();
             original &= mask;
-            original |= ((address >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
+            original |=
+                ((address_usize >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
             original
         });
     }
 
-    pub(super) fn get_physical_address(&self) -> *mut PageTable {
-        self.0.map_addr(|addr| {
+    pub(super) fn get_physical_address(&self) -> PhysAddr {
+        let ptr = self.0.map_addr(|addr| {
             ((addr >> Self::PHYSICAL_PAGE_BIT_POS) & Self::PHYSICAL_PAGE_BITS) << 12
-        })
+        });
+        PhysAddr::new(ptr as usize)
     }
 
     pub(super) fn get_target_page_table(&self) -> *mut PageTable {
         assert!(!self.is_leaf());
-        assert!(!self.get_physical_address().is_null());
-        self.get_physical_address()
+        let phys_addr = self.get_physical_address();
+        assert!(phys_addr != PhysAddr::zero());
+        phys_addr.as_mut_ptr()
     }
 }
 
@@ -216,9 +222,9 @@ mod tests {
     #[test_case]
     fn page_table_entry_leaf_address_roundtrip() {
         let mut entry = PageTableEntry(null_mut());
-        let addr = 0x8020_0000usize;
+        let addr = PhysAddr::new(0x8020_0000);
         entry.set_leaf_address(addr);
-        let got = entry.get_physical_address() as usize;
+        let got = entry.get_physical_address();
         assert_eq!(got, addr);
     }
 
@@ -228,7 +234,7 @@ mod tests {
         entry.set_validity(true);
         entry.set_xwr_mode(XWRMode::ReadWrite);
         entry.set_user_mode_accessible(true);
-        entry.set_leaf_address(0x8020_0000);
+        entry.set_leaf_address(PhysAddr::new(0x8020_0000));
         assert!(entry.get_validity());
         assert_eq!(entry.get_xwr_mode(), XWRMode::ReadWrite);
         assert!(entry.get_user_mode_accessible());

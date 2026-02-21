@@ -5,12 +5,14 @@ use crate::{
 };
 use alloc::{collections::BTreeMap, vec::Vec};
 
+pub mod address;
 mod allocator;
 mod devic_tree_parser;
 mod lookup;
 
 use lookup::lookup;
 
+pub use address::{PciAddr, PciCpuAddr};
 pub use devic_tree_parser::parse;
 
 use self::allocator::PCIAllocator;
@@ -127,8 +129,8 @@ impl PCIDevice {
 
     /// # Safety
     /// `address` must point to a valid PCI configuration space MMIO region.
-    unsafe fn try_new(address: usize) -> Option<Self> {
-        let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address);
+    unsafe fn try_new(address: PciCpuAddr) -> Option<Self> {
+        let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address.as_usize());
         if pci_device.vendor_id().read() == INVALID_VENDOR_ID {
             return None;
         }
@@ -190,11 +192,11 @@ impl PCIDevice {
 
         configuration_space.write_bar(
             index,
-            u32::try_from(space.pci_address & 0xFFFF_FFFF).expect("masked to 32 bits"),
+            u32::try_from(space.pci_address.as_usize() & 0xFFFF_FFFF).expect("masked to 32 bits"),
         );
         configuration_space.write_bar(
             index + 1,
-            u32::try_from(space.pci_address >> 32).expect("high 32 bits fit in u32"),
+            u32::try_from(space.pci_address.as_usize() >> 32).expect("high 32 bits fit in u32"),
         );
 
         configuration_space.set_command_register_bits(command_register::MEMORY_SPACE);
@@ -228,7 +230,7 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
                     let device_id = device.configuration_space.device_id().read();
                     let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
                     info!(
-                        "PCI Device {:#x}:{:#x} found at {:#x} ({})",
+                        "PCI Device {:#x}:{:#x} found at {} ({})",
                         vendor_id, device_id, address, name
                     );
                     pci_devices.push(device);
@@ -239,7 +241,7 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
     pci_devices
 }
 
-fn pci_address(starting_address: usize, bus: u8, device: u8, function: u8) -> usize {
+fn pci_address(starting_address: PciCpuAddr, bus: u8, device: u8, function: u8) -> PciCpuAddr {
     assert!(device < 32);
     assert!(function < 8);
     let offset = ((bus as usize) << 20) | ((device as usize) << 15) | ((function as usize) << 12);
