@@ -1,5 +1,4 @@
 use common::{
-    errors::SysExecuteError,
     pid::Tid,
     pointer::Pointer,
     syscalls::{SyscallStatus, kernel::KernelSyscalls, syscall_argument::SyscallArgument},
@@ -58,18 +57,6 @@ impl SyscallHandler {
 
 impl KernelSyscalls for SyscallHandler {
     type ArgWrapper<T: SyscallArgument> = UserspaceArgument<T>;
-
-    fn sys_execute<'a>(
-        &mut self,
-        name: UserspaceArgument<&str>,
-        args: UserspaceArgument<&'a [&'a str]>,
-    ) -> Result<Tid, SysExecuteError> {
-        let name = name.validate(self)?;
-        let args = args.validate(self)?;
-
-        let tid = Cpu::with_scheduler(|mut s| s.start_program(name, &args))?;
-        Ok(tid)
-    }
 
     #[doc = r" Validate a pointer such that it is a valid userspace pointer"]
     fn validate_and_translate_pointer<PTR: Pointer>(&self, ptr: PTR) -> Option<PTR> {

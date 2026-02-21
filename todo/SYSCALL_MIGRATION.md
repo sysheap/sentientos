@@ -6,7 +6,7 @@ This document analyzes the remaining custom syscalls in SentientOS and describes
 
 | # | Custom Syscall | Linux Equivalent | Callers | Difficulty |
 |---|----------------|-----------------|---------|------------|
-| 3 | `sys_execute` | `clone` + `execve` | `init.rs`, `sesh.rs`, `stress.rs` | Hard |
+| ~~3~~ | ~~`sys_execute`~~ | ~~`clone` + `execve`~~ | ~~`init.rs`, `sesh.rs`, `stress.rs`~~ | ~~Hard~~ **DONE** |
 | ~~4~~ | ~~`sys_wait`~~ | ~~`wait4` (NR 260)~~ | ~~`init.rs`, `sesh.rs`, `stress.rs`~~ | ~~Medium~~ **DONE** |
 | ~~6~~ | ~~`sys_open_udp_socket`~~ | ~~`socket` + `bind`~~ | ~~`udp.rs`~~ | ~~Hard~~ **DONE** |
 | ~~7~~ | ~~`sys_write_back_udp_socket`~~ | ~~`sendto`~~ | ~~`udp.rs`~~ | ~~Hard~~ **DONE** |
