@@ -57,8 +57,8 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<VirtA
         return Err(LoaderError::StackToSmall);
     }
 
-    let real_start = STACK_START.sub(total_length).add(1);
-    let mut addr_current_string = real_start.add(start_of_strings_offset);
+    let real_start = STACK_START - total_length + 1;
+    let mut addr_current_string = real_start + start_of_strings_offset;
 
     // Patch pointers
     argv[0] = addr_current_string.as_usize();
@@ -102,7 +102,7 @@ fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<VirtA
         .map_err(|_| LoaderError::StackToSmall)?;
 
     // We want to point into the arguments
-    Ok(STACK_START.sub(total_length).add(1))
+    Ok(STACK_START - total_length + 1)
 }
 
 pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {

@@ -29,7 +29,7 @@ macro_rules! getter {
         getter_address!(${concat(__start_, $name)});
         getter_address!(${concat(__stop_, $name)});
         pub fn ${concat($name, _size)}() -> usize {
-            Self::${concat(__stop_, $name)}().as_usize() - Self::${concat(__start_, $name)}().as_usize()
+            Self::${concat(__stop_, $name)}() - Self::${concat(__start_, $name)}()
         }
         pub fn ${concat($name, _range)}() -> core::ops::Range<VirtAddr> {
             Self::${concat(__start_, $name)}()..Self::${concat(__stop_, $name)}()

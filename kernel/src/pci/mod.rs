@@ -245,5 +245,5 @@ fn pci_address(starting_address: PciCpuAddr, bus: u8, device: u8, function: u8) 
     assert!(device < 32);
     assert!(function < 8);
     let offset = ((bus as usize) << 20) | ((device as usize) << 15) | ((function as usize) << 12);
-    PciCpuAddr::new(starting_address.as_usize() + offset)
+    starting_address + offset
 }

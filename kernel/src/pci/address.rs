@@ -1,5 +1,5 @@
 use crate::memory::address::PhysAddr;
-use core::fmt;
+use core::{fmt, ops::Add};
 
 /// PCI address space (device-side view)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,18 +10,15 @@ pub struct PciAddr(usize);
 pub struct PciCpuAddr(usize);
 
 impl PciAddr {
-    #[inline]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
 
-    #[inline]
     pub const fn as_usize(self) -> usize {
         self.0
     }
 
     /// Apply device-tree offset to translate from PCI to CPU address space.
-    #[inline]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub const fn to_cpu_addr(self, offset: i64) -> PciCpuAddr {
         PciCpuAddr((self.0 as i64 + offset) as usize)
@@ -29,21 +26,25 @@ impl PciAddr {
 }
 
 impl PciCpuAddr {
-    #[inline]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
 
-    #[inline]
     pub const fn as_usize(self) -> usize {
         self.0
     }
 
     /// CPU-visible PCI addresses are identity-mapped to physical addresses.
-    #[inline]
     #[allow(dead_code)]
     pub const fn as_phys_addr(self) -> PhysAddr {
         PhysAddr::new(self.0)
+    }
+}
+
+impl Add<usize> for PciCpuAddr {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self {
+        Self(self.0 + rhs)
     }
 }
 

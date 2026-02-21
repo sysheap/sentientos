@@ -18,7 +18,7 @@ pub fn init() {
 pub fn symbols_end() -> usize {
     let size = symbols_size();
     let symbols_start = LinkerInformation::__start_symbols();
-    symbols_start.as_usize() + size
+    (symbols_start + size).as_usize()
 }
 
 #[cfg(not(miri))]

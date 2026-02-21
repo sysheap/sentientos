@@ -1,4 +1,7 @@
-use core::fmt;
+use core::{
+    fmt,
+    ops::{Add, AddAssign, Sub},
+};
 
 /// Physical memory address (zero-cost wrapper around usize)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -9,170 +12,166 @@ pub struct PhysAddr(usize);
 pub struct VirtAddr(usize);
 
 impl PhysAddr {
-    #[inline]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
 
-    #[inline]
     pub const fn as_usize(self) -> usize {
         self.0
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn as_ptr<T>(self) -> *const T {
         self.0 as *const T
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn from_page_number(ppn: usize) -> Self {
         Self(ppn << 12)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn page_number(self) -> usize {
         self.0 >> 12
     }
 
-    #[inline]
     pub const fn is_page_aligned(self) -> bool {
         self.0 & 0xFFF == 0
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn align_down(self) -> Self {
         Self(self.0 & !0xFFF)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn align_up(self) -> Self {
         Self((self.0 + 0xFFF) & !0xFFF)
     }
-
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset)
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset)
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn offset_from(self, other: Self) -> isize {
-        self.0 as isize - other.0 as isize
-    }
 }
 
 impl VirtAddr {
-    #[inline]
     pub const fn new(addr: usize) -> Self {
         Self(addr)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
 
-    #[inline]
     pub const fn as_usize(self) -> usize {
         self.0
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn as_ptr<T>(self) -> *const T {
         self.0 as *const T
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn from_page_number(vpn: usize) -> Self {
         Self(vpn << 12)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn page_number(self) -> usize {
         self.0 >> 12
     }
 
-    #[inline]
     pub const fn is_page_aligned(self) -> bool {
         self.0 & 0xFFF == 0
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn align_down(self) -> Self {
         Self(self.0 & !0xFFF)
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn align_up(self) -> Self {
         Self((self.0 + 0xFFF) & !0xFFF)
     }
 
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn add(self, offset: usize) -> Self {
-        Self(self.0 + offset)
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn sub(self, offset: usize) -> Self {
-        Self(self.0 - offset)
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    pub const fn offset_from(self, other: Self) -> isize {
-        self.0 as isize - other.0 as isize
-    }
-
     /// Sv39 VPN index for page table level 0, 1, or 2.
-    #[inline]
     #[allow(dead_code)]
     pub const fn vpn_level(self, level: u8) -> usize {
         assert!(level < 3);
         (self.0 >> (12 + level as usize * 9)) & 0x1FF
     }
 
-    #[inline]
     #[allow(dead_code)]
     pub const fn page_offset(self) -> usize {
         self.0 & 0xFFF
+    }
+}
+
+impl Add<usize> for PhysAddr {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self {
+        Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign<usize> for PhysAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl Sub<usize> for PhysAddr {
+    type Output = Self;
+    fn sub(self, rhs: usize) -> Self {
+        Self(self.0 - rhs)
+    }
+}
+
+impl Sub for PhysAddr {
+    type Output = usize;
+    fn sub(self, rhs: Self) -> usize {
+        self.0 - rhs.0
+    }
+}
+
+impl Add<usize> for VirtAddr {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self {
+        Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign<usize> for VirtAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl Sub<usize> for VirtAddr {
+    type Output = Self;
+    fn sub(self, rhs: usize) -> Self {
+        Self(self.0 - rhs)
+    }
+}
+
+impl Sub for VirtAddr {
+    type Output = usize;
+    fn sub(self, rhs: Self) -> usize {
+        self.0 - rhs.0
     }
 }
 
@@ -233,12 +232,11 @@ mod tests {
     #[test_case]
     fn test_arithmetic() {
         let addr = PhysAddr::new(0x8000_0000);
-        assert_eq!(addr.add(0x1000).as_usize(), 0x8000_1000);
-        assert_eq!(addr.sub(0x1000).as_usize(), 0x7FFF_F000);
+        assert_eq!((addr + 0x1000).as_usize(), 0x8000_1000);
+        assert_eq!((addr - 0x1000).as_usize(), 0x7FFF_F000);
 
         let other = PhysAddr::new(0x8000_2000);
-        assert_eq!(other.offset_from(addr), 0x2000);
-        assert_eq!(addr.offset_from(other), -0x2000);
+        assert_eq!(other - addr, 0x2000);
     }
 
     #[test_case]
