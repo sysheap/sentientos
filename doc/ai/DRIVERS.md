@@ -92,7 +92,7 @@ Parses PCI information from device tree:
 pub fn parse() -> Result<PCIInformation, PCIError>
 
 pub struct PCIInformation {
-    pub pci_host_bridge_address: usize,
+    pub pci_host_bridge_address: PciCpuAddr,
     pub pci_host_bridge_length: usize,
     pub ranges: Vec<PCIRange>,
 }
