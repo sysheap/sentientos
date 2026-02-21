@@ -1,6 +1,7 @@
 use crate::{
     debug,
     memory::{
+        PhysAddr, VirtAddr,
         page::{Pages, PinnedHeapPages},
         page_tables::{RootPageTableHolder, XWRMode},
     },
@@ -30,8 +31,8 @@ pub struct Process {
     name: Arc<String>,
     page_table: RootPageTableHolder,
     allocated_pages: Vec<PinnedHeapPages>,
-    mmap_allocations: BTreeMap<crate::memory::VirtAddr, PinnedHeapPages>,
-    free_mmap_address: crate::memory::VirtAddr,
+    mmap_allocations: BTreeMap<VirtAddr, PinnedHeapPages>,
+    free_mmap_address: VirtAddr,
     fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
@@ -70,7 +71,7 @@ impl Process {
             page_table,
             allocated_pages,
             mmap_allocations: BTreeMap::new(),
-            free_mmap_address: crate::memory::VirtAddr::new(FREE_MMAP_START_ADDRESS),
+            free_mmap_address: VirtAddr::new(FREE_MMAP_START_ADDRESS),
             fd_table: FdTable::new(),
             threads: BTreeMap::new(),
             brk,
@@ -79,7 +80,7 @@ impl Process {
         }
     }
 
-    pub fn brk(&mut self, brk: crate::memory::VirtAddr) -> crate::memory::VirtAddr {
+    pub fn brk(&mut self, brk: VirtAddr) -> VirtAddr {
         self.brk.brk(brk)
     }
 
@@ -169,7 +170,7 @@ impl Process {
     pub fn mmap_pages_with_address(
         &mut self,
         num_pages: Pages,
-        addr: crate::memory::VirtAddr,
+        addr: VirtAddr,
         permission: XWRMode,
     ) -> *mut u8 {
         let length = num_pages.as_bytes();
@@ -179,7 +180,7 @@ impl Process {
         let pages = PinnedHeapPages::new_pages(num_pages);
         self.page_table.map_userspace(
             addr,
-            crate::memory::PhysAddr::new(pages.addr()),
+            PhysAddr::new(pages.addr()),
             length,
             permission,
             "mmap".into(),
@@ -194,7 +195,7 @@ impl Process {
         let addr = self.free_mmap_address;
         self.page_table.map_userspace(
             addr,
-            crate::memory::PhysAddr::new(pages.as_ptr() as usize),
+            PhysAddr::new(pages.as_ptr() as usize),
             length,
             permission,
             "mmap".to_string(),
@@ -204,11 +205,7 @@ impl Process {
         core::ptr::without_provenance_mut(addr.as_usize())
     }
 
-    pub fn munmap_pages(
-        &mut self,
-        addr: crate::memory::VirtAddr,
-        length: usize,
-    ) -> Result<(), Errno> {
+    pub fn munmap_pages(&mut self, addr: VirtAddr, length: usize) -> Result<(), Errno> {
         let pages = self.mmap_allocations.remove(&addr).ok_or(Errno::EINVAL)?;
         if pages.size() != length {
             self.mmap_allocations.insert(addr, pages);

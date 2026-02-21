@@ -21,8 +21,10 @@ impl PCIAllocator {
     }
 
     pub fn init(&mut self, pci_range: &PCIRange) {
-        self.free_space_pci_space = pci_range.pci_address..pci_range.pci_address + pci_range.size;
-        self.offset_to_cpu_space = pci_range.cpu_address as i64 - pci_range.pci_address as i64;
+        self.free_space_pci_space =
+            pci_range.pci_address.as_usize()..pci_range.pci_address.as_usize() + pci_range.size;
+        self.offset_to_cpu_space =
+            pci_range.cpu_address.as_usize() as i64 - pci_range.pci_address.as_usize() as i64;
     }
 
     pub fn allocate(&mut self, size: usize) -> Option<PCIAllocatedSpace> {
@@ -56,10 +58,11 @@ mod tests {
     use super::PCIAllocator;
 
     fn init_allocator(size: usize) -> PCIAllocator {
+        use crate::pci::{PciAddr, PciCpuAddr};
         let mut allocator = PCIAllocator::new();
         allocator.init(&PCIRange {
-            cpu_address: 4096,
-            pci_address: 8192,
+            cpu_address: PciCpuAddr::new(4096),
+            pci_address: PciAddr::new(8192),
             size,
             pci_bitfield: PCIBitField::from(0),
         });
