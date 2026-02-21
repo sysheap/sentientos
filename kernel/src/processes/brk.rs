@@ -31,7 +31,7 @@ impl Brk {
             XWRMode::ReadWrite,
             "BRK".into(),
         );
-        let brk_end = brk_start.add(BRK_SIZE.as_bytes());
+        let brk_end = brk_start + BRK_SIZE.as_bytes();
         (
             pages,
             Self {

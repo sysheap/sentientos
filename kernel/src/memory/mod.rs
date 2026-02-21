@@ -64,7 +64,7 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
     info!(
         "Heap Start: {}-{} (size: {:#x} -> {})",
         heap_start,
-        heap_start.add(heap_size),
+        heap_start + heap_size,
         heap_size,
         crate::klibc::util::PrintMemorySizeHumanFriendly(heap_size)
     );
