@@ -101,7 +101,7 @@ pub struct Process {
     threads: BTreeMap<Tid, ThreadWeakRef>,  # Process threads
     brk: usize,                             # Heap break pointer
     free_mmap_address: usize,               # Next mmap address
-    udp_sockets: BTreeMap<UDPDescriptor, Socket>,
+    fd_table: FdTable,                     # File descriptor table
 }
 ```
 

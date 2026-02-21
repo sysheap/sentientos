@@ -1,10 +1,8 @@
 use super::handler::SyscallHandler;
-use crate::net::sockets::SharedAssignedSocket;
 use alloc::vec::Vec;
 use common::{
     constructable::Constructable,
-    errors::{SysSocketError, ValidationError},
-    net::UDPDescriptor,
+    errors::ValidationError,
     pid::Tid,
     pointer::{FatPointer, Pointer},
     syscalls::syscall_argument::SyscallArgument,
@@ -26,23 +24,6 @@ pub trait Validatable<T: Sized> {
     type Error;
 
     fn validate(self, handler: &mut SyscallHandler) -> Result<T, Self::Error>;
-}
-
-impl Validatable<SharedAssignedSocket> for UserspaceArgument<UDPDescriptor> {
-    type Error = SysSocketError;
-
-    fn validate(self, handler: &mut SyscallHandler) -> Result<SharedAssignedSocket, Self::Error> {
-        use crate::processes::fd_table::FileDescriptor;
-        let fd = i32::try_from(self.inner.get()).expect("fd fits in i32");
-        let descriptor = handler
-            .current_process()
-            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
-            .ok_or(SysSocketError::InvalidDescriptor)?;
-        match descriptor {
-            FileDescriptor::UdpSocket(socket) => Ok(socket),
-            _ => Err(SysSocketError::InvalidDescriptor),
-        }
-    }
 }
 
 impl<'a> Validatable<&'a str> for UserspaceArgument<&'a str> {

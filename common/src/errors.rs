@@ -32,17 +32,7 @@ pub enum SysArgError {
     SpaceTooSmall,
 }
 
-#[derive(Debug)]
-pub enum SysSocketError {
-    PortAlreadyUsed,
-    ValidationError(ValidationError),
-    InvalidDescriptor,
-    NoReceiveIPYet,
-    TooManyOpenFiles,
-}
-
 impl_from_to!(ValidationError, SysExecuteError);
-impl_from_to!(ValidationError, SysSocketError);
 impl_from_to!(ValidationError, SysArgError);
 impl_from_to!(LoaderError, SchedulerError);
 impl_from_to!(SchedulerError, SysExecuteError);
