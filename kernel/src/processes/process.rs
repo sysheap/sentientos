@@ -37,6 +37,8 @@ pub struct Process {
     main_tid: Tid,
     parent_tid: Tid,
     brk: Brk,
+    vfork_parent: Option<ProcessRef>,
+    vfork_parent_satp: Option<usize>,
 }
 
 impl Debug for Process {
@@ -76,6 +78,8 @@ impl Process {
             brk,
             main_tid: main_thread,
             parent_tid,
+            vfork_parent: None,
+            vfork_parent_satp: None,
         }
     }
 
@@ -248,6 +252,28 @@ impl Process {
 
     pub fn fd_table_mut(&mut self) -> &mut FdTable {
         &mut self.fd_table
+    }
+
+    pub fn get_satp_value(&self) -> usize {
+        // For vfork children, we use the cached parent SATP to avoid locking
+        // the parent process (which would risk ABBA deadlock). The parent's
+        // page table doesn't change while the child is alive (parent is
+        // blocked on VforkWait).
+        self.vfork_parent_satp
+            .unwrap_or_else(|| self.page_table.get_satp_value_from_page_tables())
+    }
+
+    pub fn set_vfork_parent(&mut self, parent: ProcessRef, parent_satp: usize) {
+        self.vfork_parent = Some(parent);
+        self.vfork_parent_satp = Some(parent_satp);
+    }
+
+    pub fn vfork_parent(&self) -> Option<&ProcessRef> {
+        self.vfork_parent.as_ref()
+    }
+
+    pub fn remove_thread(&mut self, tid: Tid) {
+        self.threads.remove(&tid);
     }
 }
 

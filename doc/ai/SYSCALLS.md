@@ -125,7 +125,6 @@ Custom syscalls with bit 63 set for synchronous execution:
 
 ```rust
 impl KernelSyscalls for SyscallHandler {
-    fn sys_execute(&mut self, name, args) -> Result<Tid, SysExecuteError>;
     fn sys_open_udp_socket(&mut self, port) -> Result<UDPDescriptor, SysSocketError>;
     fn sys_write_back_udp_socket(&mut self, desc, buf);
     fn sys_read_udp_socket(&mut self, desc, buf);

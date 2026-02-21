@@ -1,6 +1,6 @@
-mod brk;
+pub(crate) mod brk;
 pub mod fd_table;
-mod loader;
+pub(crate) mod loader;
 pub mod process;
 pub mod process_table;
 pub mod scheduler;
