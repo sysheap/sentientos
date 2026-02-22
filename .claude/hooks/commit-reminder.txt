@@ -4,12 +4,14 @@ COMMIT CHECK REQUIRED
 Before stopping, check if you made code changes:
 
 1. Run `git status` to see if there are uncommitted changes
-2. Run cargo fmt to format all the code
-3. If changes exist from your work, commit them NOW
-4. Commit incrementally - each small working step, not one big commit
-5. Run `just clippy` before committing to ensure no warnings
-6. Remove any dead/unused code before committing
-7. After committing, run the commit-review agent (Task tool with subagent_type: commit-review)
+2. If changes exist from your work, commit them NOW
+3. Commit incrementally - each small working step, not one big commit
+4. Run `just clippy` before committing to ensure no warnings
+5. Remove any dead/unused code before committing
+6. After committing, run the commit-review agent (Task tool with subagent_type: commit-review)
+
+NOTE: The pre-commit hook automatically formats staged Rust files and runs `just clippy`.
+A commit will be blocked if clippy reports warnings.
 
 DO NOT wait for user to ask you to commit. Commit automatically.
 
