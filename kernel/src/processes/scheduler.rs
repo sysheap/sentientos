@@ -6,6 +6,7 @@ use super::{
 use crate::{
     cpu::Cpu,
     debug, info,
+    memory::VirtAddr,
     processes::{
         thread::{SyscallTask, Thread},
         timer,
@@ -147,7 +148,7 @@ impl CpuScheduler {
             // - Runnable: state was saved, thread was woken by another CPU
             if t.get_state() == (ThreadState::Running { cpu_id }) {
                 t.set_state(ThreadState::Runnable);
-                t.set_program_counter(Cpu::read_sepc());
+                t.set_program_counter(VirtAddr::new(Cpu::read_sepc()));
                 t.set_register_state(Cpu::read_trap_frame());
             }
             debug!("Saved thread {} back", *t);
@@ -209,7 +210,7 @@ impl CpuScheduler {
 
             let pc = t.get_program_counter();
             Cpu::write_trap_frame(t.get_register_state().clone());
-            Cpu::write_sepc(pc);
+            Cpu::write_sepc(pc.as_usize());
             Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
         });
     }

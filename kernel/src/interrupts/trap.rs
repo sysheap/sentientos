@@ -99,7 +99,7 @@ fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> boo
                     // Save state before rescheduling.
                     let sepc = Cpu::read_sepc() + 4; // Skip ecall
                     t.set_register_state(trap_frame);
-                    t.set_program_counter(sepc);
+                    t.set_program_counter(VirtAddr::new(sepc));
                     true
                 }
                 ThreadState::Zombie(_) => {
@@ -180,7 +180,7 @@ fn handle_syscall() {
                 let sepc = Cpu::read_sepc();
                 s.get_current_thread().with_lock(|mut t| {
                     t.set_register_state(trap_frame);
-                    t.set_program_counter(sepc);
+                    t.set_program_counter(VirtAddr::new(sepc));
                     t.set_syscall_task_and_suspend(task);
                 });
                 s.schedule();

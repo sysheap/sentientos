@@ -2,7 +2,7 @@ use super::process::ProcessRef;
 use crate::{
     debug,
     klibc::elf::ElfFile,
-    memory::{page::PinnedHeapPages, page_tables::RootPageTableHolder},
+    memory::{VirtAddr, page::PinnedHeapPages, page_tables::RootPageTableHolder},
     processes::{
         brk::Brk,
         loader::{self, LoadedElf},
@@ -135,7 +135,7 @@ pub struct Thread {
     tid: Tid,
     process_name: Arc<String>,
     register_state: TrapFrame,
-    program_counter: usize,
+    program_counter: VirtAddr,
     state: ThreadState,
     wakeup_pending: bool,
     in_kernel_mode: bool,
@@ -151,7 +151,7 @@ impl core::fmt::Display for Thread {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "tid={} process_name={} pc={:#x} state={:?} wakeup_pending={} in_kernel_mode={}",
+            "tid={} process_name={} pc={} state={:?} wakeup_pending={} in_kernel_mode={}",
             self.tid,
             self.process_name,
             self.program_counter,
@@ -180,7 +180,7 @@ impl Thread {
             POWERSAVE_TID,
             register_state,
             page_table,
-            powersave as *const () as usize,
+            VirtAddr::new(powersave as *const () as usize),
             allocated_pages,
             true,
             Brk::empty(),
@@ -213,7 +213,7 @@ impl Thread {
             get_next_tid(),
             register_state,
             page_table,
-            entry_address.as_usize(),
+            entry_address,
             allocated_pages,
             false,
             brk,
@@ -227,7 +227,7 @@ impl Thread {
         tid: Tid,
         register_state: TrapFrame,
         page_table: RootPageTableHolder,
-        program_counter: usize,
+        program_counter: VirtAddr,
         allocated_pages: Vec<PinnedHeapPages>,
         in_kernel_mode: bool,
         brk: Brk,
@@ -263,7 +263,7 @@ impl Thread {
         tid: Tid,
         process_name: Arc<String>,
         register_state: TrapFrame,
-        program_counter: usize,
+        program_counter: VirtAddr,
         in_kernel_mode: bool,
         process: ProcessRef,
     ) -> ThreadRef {
@@ -390,11 +390,11 @@ impl Thread {
         self.register_state = register_state;
     }
 
-    pub fn get_program_counter(&self) -> usize {
+    pub fn get_program_counter(&self) -> VirtAddr {
         self.program_counter
     }
 
-    pub fn set_program_counter(&mut self, program_counter: usize) {
+    pub fn set_program_counter(&mut self, program_counter: VirtAddr) {
         self.program_counter = program_counter;
     }
 
