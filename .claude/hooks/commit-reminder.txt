@@ -10,8 +10,8 @@ Before stopping, check if you made code changes:
 5. Remove any dead/unused code before committing
 6. After committing, run the commit-review agent (Task tool with subagent_type: commit-review)
 
-NOTE: The pre-commit hook automatically formats staged Rust files and runs `just clippy`.
-A commit will be blocked if clippy reports warnings.
+NOTE: The pre-commit hook automatically formats staged Rust files and runs `just test`.
+A commit will be blocked if tests fail.
 
 DO NOT wait for user to ask you to commit. Commit automatically.
 

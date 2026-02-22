@@ -8,5 +8,5 @@ if [ -n "$staged_rs_files" ]; then
     echo "$staged_rs_files" | xargs git add
 fi
 
-# Run clippy — commit is blocked on warnings
-just clippy
+# Run tests — commit is blocked if any test fails
+just test
