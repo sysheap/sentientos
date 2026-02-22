@@ -1,17 +1,10 @@
-use common::{
-    pid::Tid,
-    pointer::Pointer,
-    syscalls::{SyscallStatus, kernel::KernelSyscalls, syscall_argument::SyscallArgument},
-    unwrap_or_return,
-};
+use common::pid::Tid;
 
 use crate::{
     cpu::Cpu,
     debug,
     processes::{process::ProcessRef, thread::ThreadRef},
 };
-
-use super::validator::{UserspaceArgument, Validatable};
 
 pub(super) struct SyscallHandler {
     current_process: ProcessRef,
@@ -53,28 +46,4 @@ impl SyscallHandler {
 
         debug!("Exit process with status: {status}\n");
     }
-}
-
-impl KernelSyscalls for SyscallHandler {
-    type ArgWrapper<T: SyscallArgument> = UserspaceArgument<T>;
-
-    #[doc = r" Validate a pointer such that it is a valid userspace pointer"]
-    fn validate_and_translate_pointer<PTR: Pointer>(&self, ptr: PTR) -> Option<PTR> {
-        self.current_process.with_lock(|p| {
-            let pt = p.get_page_table();
-            if !pt.is_valid_userspace_ptr(ptr, true) {
-                return None;
-            }
-            let physical_address = unwrap_or_return!(
-                pt.translate_userspace_address_to_physical_address(ptr),
-                None
-            );
-            Some(physical_address)
-        })
-    }
-}
-
-pub fn handle_syscall(nr: usize, arg: usize, ret: usize) -> SyscallStatus {
-    let mut handler = SyscallHandler::new();
-    handler.dispatch(nr, arg, ret)
 }

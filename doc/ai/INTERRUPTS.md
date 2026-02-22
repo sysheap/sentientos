@@ -100,22 +100,14 @@ fn handle_external_interrupt() {
 Called on ecall from U-mode:
 ```rust
 fn handle_syscall() {
-    let nr = trap_frame[Register::a7];  // Syscall number
-
-    if (1 << 63) & nr > 0 {
-        // Fast syscall (bit 63 set) - synchronous
-        let ret = syscalls::handle_syscall(nr, arg, ret);
-        trap_frame[Register::a0] = ret;
+    let trap_frame = Cpu::read_trap_frame();
+    let task = Task::new(async { handler.handle(&trap_frame).await });
+    if let Poll::Ready(result) = task.poll(&mut cx) {
+        trap_frame[Register::a0] = result;
         sepc += 4;  // Skip ecall
     } else {
-        // Normal syscall - async
-        let task = Task::new(async { handler.handle(&trap_frame).await });
-        if Poll::Ready(result) = task.poll(&mut cx) {
-            trap_frame[Register::a0] = result;
-            sepc += 4;
-        } else {
-            thread.set_syscall_task_and_suspend(task);
-        }
+        thread.set_syscall_task_and_suspend(task);
+        scheduler.schedule();
     }
 }
 ```

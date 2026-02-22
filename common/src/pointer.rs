@@ -32,24 +32,3 @@ impl<T> Pointer for *mut T {
         ptr as *mut T
     }
 }
-
-#[derive(Clone, Copy, Debug)]
-pub struct FatPointer<Ptr: Pointer> {
-    ptr: Ptr,
-    len: usize,
-}
-
-impl<Ptr: Pointer> FatPointer<Ptr> {
-    pub fn new(ptr: Ptr, len: usize) -> Self {
-        Self { ptr, len }
-    }
-
-    pub fn ptr(&self) -> Ptr {
-        self.ptr
-    }
-
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.len
-    }
-}

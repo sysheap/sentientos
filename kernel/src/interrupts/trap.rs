@@ -6,10 +6,7 @@ use crate::{
     io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
     memory::VirtAddr,
     processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
-    syscalls::{
-        self,
-        linux::{LinuxSyscallHandler, LinuxSyscalls},
-    },
+    syscalls::linux::{LinuxSyscallHandler, LinuxSyscalls},
 };
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::{
@@ -121,75 +118,58 @@ fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> boo
 
 fn handle_syscall() {
     let mut trap_frame = Cpu::read_trap_frame();
-    let nr = trap_frame[Register::a7];
-    let arg = trap_frame[Register::a1];
-    let ret = trap_frame[Register::a2];
 
-    if (1 << 63) & nr > 0 {
-        // legacy syscalls - not compatible with linux
-        // will be removed in the future
-        let ret = syscalls::handle_syscall(nr, arg, ret);
-        trap_frame[Register::a0] = ret as usize;
+    let task_trap_frame = trap_frame.clone();
+    let mut task = Task::new(async move {
+        let mut handler = LinuxSyscallHandler::new();
+        handler.handle(&task_trap_frame).await
+    });
+    let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
+    let mut cx = Context::from_waker(&waker);
+    if let Poll::Ready(result) = task.poll(&mut cx) {
+        let replaced = Cpu::with_scheduler(|s| {
+            s.get_current_thread().with_lock(|mut t| {
+                let r = t.registers_replaced();
+                if r {
+                    t.set_registers_replaced(false);
+                }
+                r
+            })
+        });
+        if replaced {
+            Cpu::with_scheduler(|mut s| {
+                if !s.set_cpu_reg_for_current_thread() {
+                    s.schedule();
+                }
+            });
+        } else {
+            let ret = match result {
+                Ok(ret) => ret,
+                Err(errno) => -(errno as isize),
+            };
+            trap_frame[Register::a0] = ret.cast_unsigned();
 
-        if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
-            Cpu::write_trap_frame(trap_frame);
-            Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip the ecall instruction
+            if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
+                Cpu::write_trap_frame(trap_frame);
+                Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip ecall
+            }
         }
     } else {
-        // Normal syscall - async
-        let task_trap_frame = trap_frame.clone();
-        let mut task = Task::new(async move {
-            let mut handler = LinuxSyscallHandler::new();
-            handler.handle(&task_trap_frame).await
+        // Syscall pending - suspend and reschedule atomically.
+        // We must hold the scheduler lock across suspend+schedule to prevent
+        // another CPU from waking and stealing this thread before we reschedule.
+        Cpu::with_scheduler(|mut s| {
+            // Save register state BEFORE suspending.
+            // When thread suspends, queue_current_process_back won't save registers
+            // (since state is Waiting, not Running), so we must save them here.
+            let sepc = Cpu::read_sepc();
+            s.get_current_thread().with_lock(|mut t| {
+                t.set_register_state(trap_frame);
+                t.set_program_counter(VirtAddr::new(sepc));
+                t.set_syscall_task_and_suspend(task);
+            });
+            s.schedule();
         });
-        let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
-        let mut cx = Context::from_waker(&waker);
-        if let Poll::Ready(result) = task.poll(&mut cx) {
-            let replaced = Cpu::with_scheduler(|s| {
-                s.get_current_thread().with_lock(|mut t| {
-                    let r = t.registers_replaced();
-                    if r {
-                        t.set_registers_replaced(false);
-                    }
-                    r
-                })
-            });
-            if replaced {
-                Cpu::with_scheduler(|mut s| {
-                    if !s.set_cpu_reg_for_current_thread() {
-                        s.schedule();
-                    }
-                });
-            } else {
-                // Syscall completed synchronously - normal path
-                let ret = match result {
-                    Ok(ret) => ret,
-                    Err(errno) => -(errno as isize),
-                };
-                trap_frame[Register::a0] = ret.cast_unsigned();
-
-                if check_thread_ownership_and_reschedule_if_needed(trap_frame.clone()) {
-                    Cpu::write_trap_frame(trap_frame);
-                    Cpu::write_sepc(Cpu::read_sepc() + 4); // Skip ecall
-                }
-            }
-        } else {
-            // Syscall pending - suspend and reschedule atomically.
-            // We must hold the scheduler lock across suspend+schedule to prevent
-            // another CPU from waking and stealing this thread before we reschedule.
-            Cpu::with_scheduler(|mut s| {
-                // Save register state BEFORE suspending.
-                // When thread suspends, queue_current_process_back won't save registers
-                // (since state is Waiting, not Running), so we must save them here.
-                let sepc = Cpu::read_sepc();
-                s.get_current_thread().with_lock(|mut t| {
-                    t.set_register_state(trap_frame);
-                    t.set_program_counter(VirtAddr::new(sepc));
-                    t.set_syscall_task_and_suspend(task);
-                });
-                s.schedule();
-            });
-        }
     }
 }
 

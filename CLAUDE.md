@@ -116,7 +116,7 @@ Kernel unit tests use `#[test_case]` macro (custom test framework).
 | Purpose | File |
 |---------|------|
 | Kernel entry | kernel/src/main.rs |
-| Syscall dispatch | kernel/src/syscalls/handler.rs |
+| Syscall handlers | kernel/src/syscalls/linux.rs |
 | Process struct | kernel/src/processes/process.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |
 | Page tables | kernel/src/memory/page_tables.rs |
