@@ -225,6 +225,28 @@ mod tests {
 }
 ```
 
+### Test-Only Methods Convention
+
+Test-only helper methods on kernel types must live inside `#[cfg(test)] mod tests` as a separate `impl` block, not as `#[cfg(test)]`-annotated methods on the main `impl`. This works because child modules can access private fields of parent types.
+
+```rust
+// GOOD: test-only method inside mod tests
+#[cfg(test)]
+mod tests {
+    impl super::MyStruct {
+        pub fn helper(&self) -> bool {
+            !self.private_field.is_empty()
+        }
+    }
+}
+
+// BAD: #[cfg(test)] on a method in the main impl
+impl MyStruct {
+    #[cfg(test)]
+    pub fn helper(&self) -> bool { ... }
+}
+```
+
 ### Run Unit Tests
 
 ```bash

@@ -113,11 +113,6 @@ impl AssignedSocket {
         });
     }
 
-    #[cfg(test)]
-    pub fn has_data(&self) -> bool {
-        !self.datagrams.is_empty()
-    }
-
     pub fn get_datagram(&mut self, out_buffer: &mut [u8]) -> Option<(usize, Ipv4Addr, Port)> {
         let datagram = self.datagrams.pop_front()?;
         let len = usize::min(datagram.data.len(), out_buffer.len());
@@ -145,6 +140,12 @@ mod tests {
     use core::net::Ipv4Addr;
 
     use super::{OpenSockets, Port};
+
+    impl super::AssignedSocket {
+        pub fn has_data(&self) -> bool {
+            !self.datagrams.is_empty()
+        }
+    }
 
     const PORT1: Port = Port::new(1234);
     const FROM1: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 1);

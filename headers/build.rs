@@ -64,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_syscall_nr_file(&out_path)?;
     generate_syscall_types(&out_path)?;
     generate_error_types(&out_path)?;
+    generate_socket_types(&out_path)?;
     Ok(())
 }
 
@@ -163,6 +164,35 @@ fn generate_syscall_nr_file(out_path: &Path) -> Result<(), Box<dyn std::error::E
     drop(syscall_names_file);
 
     format_file(syscall_file_path)?;
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+struct SocketConstantCallback;
+
+impl ParseCallbacks for SocketConstantCallback {
+    fn int_macro(&self, _name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
+        Some(bindgen::callbacks::IntKind::I32)
+    }
+}
+
+fn generate_socket_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let bindings = bindgen::Builder::default()
+        .clang_arg("-Imusl_headers")
+        .header("musl_headers/sys/socket.h")
+        .header("musl_headers/netinet/in.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .parse_callbacks(Box::new(SocketConstantCallback))
+        .use_core()
+        .allowlist_var("AF_INET")
+        .allowlist_var("SOCK_DGRAM")
+        .allowlist_var("SOCK_CLOEXEC")
+        .allowlist_type("sockaddr_in")
+        .allowlist_type("in_addr")
+        .derive_copy(true)
+        .generate()?;
+    let socket_path = out_path.join("socket_types.rs");
+    bindings.write_to_file(socket_path)?;
     Ok(())
 }
 
