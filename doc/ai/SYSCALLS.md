@@ -2,48 +2,41 @@
 
 ## Overview
 
-SentientOS provides two syscall interfaces:
-1. **Linux syscalls** - Async handlers for musl libc compatibility
-2. **Kernel syscalls** - Custom syscalls (bit 63 set in syscall number)
-
-Always use Linux syscalls for new development. Kernel syscalls are obsolete and will be remove in the future.
-
-Also linux syscall got support for async code (currently nanosleep and read). This makes writing blocking code way easier.
+SentientOS uses Linux-compatible syscalls exclusively. All syscall handlers are async, enabling blocking operations (e.g. nanosleep, read) without blocking the kernel.
 
 ## Syscall Dispatch
 
-**File:** `kernel/src/interrupts/trap.rs:64`
+**File:** `kernel/src/interrupts/trap.rs`
 
 ```rust
 fn handle_syscall() {
-    let nr = trap_frame[Register::a7];  // Syscall number
-
-    if (1 << 63) & nr > 0 {
-        // Fast syscall - synchronous, immediate return
-        let ret = syscalls::handle_syscall(nr, arg, ret);
-        trap_frame[Register::a0] = ret;
-        sepc += 4;
+    let trap_frame = Cpu::read_trap_frame();
+    let task = Task::new(async { handler.handle(&trap_frame).await });
+    if let Poll::Ready(result) = task.poll(&mut cx) {
+        trap_frame[Register::a0] = result;
+        sepc += 4;  // Skip ecall
     } else {
-        // Linux syscall - async
-        let task = Task::new(async { handler.handle(&trap_frame).await });
-        // Poll and either return or suspend thread
+        thread.set_syscall_task_and_suspend(task);
+        scheduler.schedule();
     }
 }
 ```
 
-## Linux Syscalls
+## Supported Syscalls
 
 **File:** `kernel/src/syscalls/linux.rs`
-
-### Supported Syscalls
 
 | Syscall | Args | Description |
 |---------|------|-------------|
 | bind | fd, addr, addrlen | Bind socket to address/port |
 | brk | brk | Adjust heap break |
+| clock_nanosleep | clockid, flags, request, remain | Sleep with clock selection |
+| clone | flags, stack, ptid, tls, ctid | Create child process (CLONE_VM\|CLONE_VFORK) |
 | close | fd | Close file descriptor |
+| execve | filename, argv, envp | Replace process image |
 | exit_group | status | Exit process (stores exit status, then kills process) |
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
+| getppid | | Get parent process ID |
 | gettid | | Get thread ID |
 | ioctl | fd, op, arg | Device control (+ SentientOS extensions, FIONBIO for sockets) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
@@ -78,61 +71,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 }
 ```
 
-### Async Read Example
-
-```rust
-async fn read(&mut self, fd: c_int, buf: LinuxUserspaceArg<*mut u8>, count: usize)
-    -> Result<isize, Errno>
-{
-    if fd != 0 { return Err(Errno::EBADF); }
-
-    let data = ReadStdin::new(count).await;  // Async wait for input
-    buf.write_slice(&data)?;
-    Ok(data.len() as isize)
-}
-```
-
-### mmap Implementation
-
-```rust
-async fn mmap(&mut self, addr: usize, length: usize, prot: c_uint,
-              flags: c_uint, fd: c_int, offset: isize) -> Result<isize, Errno>
-{
-    // Convert prot to XWRMode
-    let permission = match (prot & PROT_READ, prot & PROT_WRITE, prot & PROT_EXEC) {
-        // ...
-    };
-
-    // Allocate pages
-    if flags & MAP_FIXED != 0 {
-        process.mmap_pages_with_address(num_pages, addr, permission)
-    } else {
-        process.mmap_pages(num_pages, permission)
-    }
-}
-```
-
-### SentientOS ioctl Extensions
-
-Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspace wrappers defined in `common/src/ioctl.rs`.
-
-| Command | Value | Description |
-|---------|-------|-------------|
-| SENTIENT_PANIC | 0x5301 | Trigger kernel panic from userspace |
-| SENTIENT_LIST_PROGRAMS | 0x5302 | Print list of available programs |
-
-## Kernel Syscalls (Fast Path)
-
-**File:** `kernel/src/syscalls/handler.rs`
-
-Custom syscalls with bit 63 set for synchronous execution:
-
-```rust
-impl KernelSyscalls for SyscallHandler {
-    // All legacy syscalls removed (sys_execute, UDP socket syscalls)
-}
-```
-
 ### SyscallHandler
 
 ```rust
@@ -151,19 +89,16 @@ impl SyscallHandler {
 }
 ```
 
+### SentientOS ioctl Extensions
+
+Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspace wrappers defined in `common/src/ioctl.rs`.
+
+| Command | Value | Description |
+|---------|-------|-------------|
+| SENTIENT_PANIC | 0x5301 | Trigger kernel panic from userspace |
+| SENTIENT_LIST_PROGRAMS | 0x5302 | Print list of available programs |
+
 ## Userspace Pointer Validation
-
-**File:** `kernel/src/syscalls/validator.rs`
-
-All userspace pointers must be validated:
-
-```rust
-pub struct UserspaceArgument<T>(T);
-
-impl<T: Pointer> UserspaceArgument<T> {
-    pub fn validate(&self, handler: &SyscallHandler) -> Result<T, ValidationError>;
-}
-```
 
 **File:** `kernel/src/syscalls/linux_validator.rs`
 
@@ -190,7 +125,7 @@ impl LinuxUserspaceArg<*mut T> {
 3. Verify page permissions (read/write)
 4. Return kernel-accessible physical address
 
-## Adding a New Linux Syscall
+## Adding a New Syscall
 
 1. Add to `linux_syscalls!` macro in `kernel/src/syscalls/linux.rs`:
 ```rust
@@ -209,12 +144,6 @@ async fn mysyscall(&mut self, arg1: LinuxUserspaceArg<type1>, arg2: LinuxUserspa
     Ok(0)
 }
 ```
-
-## Adding a New Kernel Syscall
-
-1. Add to `KernelSyscalls` trait in `common/src/syscalls/kernel.rs`
-2. Implement in `SyscallHandler` in `kernel/src/syscalls/handler.rs`
-3. Add userspace wrapper in `userspace/src/lib.rs`
 
 ## Error Handling
 
@@ -236,11 +165,9 @@ trap_frame[Register::a0] = ret as usize;
 |------|---------|
 | kernel/src/syscalls/mod.rs | Module exports |
 | kernel/src/syscalls/linux.rs | Linux syscall implementations |
-| kernel/src/syscalls/handler.rs | SyscallHandler, kernel syscalls |
+| kernel/src/syscalls/handler.rs | SyscallHandler |
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro |
-| kernel/src/syscalls/validator.rs | UserspaceArgument validation |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
 | common/src/ioctl.rs | SentientOS ioctl constants + userspace wrappers |
-| common/src/syscalls/kernel.rs | KernelSyscalls trait |
 | headers/src/syscall_types.rs | Syscall type definitions |
 | headers/src/errno.rs | Error codes |
