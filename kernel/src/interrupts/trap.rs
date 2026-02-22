@@ -155,7 +155,11 @@ fn handle_syscall() {
                 })
             });
             if replaced {
-                Cpu::with_scheduler(|s| s.set_cpu_reg_for_current_thread());
+                Cpu::with_scheduler(|mut s| {
+                    if !s.set_cpu_reg_for_current_thread() {
+                        s.schedule();
+                    }
+                });
             } else {
                 // Syscall completed synchronously - normal path
                 let ret = match result {
