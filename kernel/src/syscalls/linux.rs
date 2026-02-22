@@ -756,7 +756,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             child_tid,
             child_name,
             child_regs,
-            parent_pc + 4, // skip ecall
+            VirtAddr::new(parent_pc + 4), // skip ecall
             false,
             child_process.clone(),
         );
@@ -842,8 +842,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         current_thread.with_lock(|mut t| {
             t.set_process(new_process.clone(), process_name);
             let mut regs = TrapFrame::zero();
-            regs[Register::a0] = loaded.args_start;
-            regs[Register::sp] = loaded.args_start;
+            regs[Register::a0] = loaded.args_start.as_usize();
+            regs[Register::sp] = loaded.args_start.as_usize();
             t.set_register_state(regs);
             t.set_program_counter(loaded.entry_address);
             t.set_registers_replaced(true);
