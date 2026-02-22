@@ -13,5 +13,6 @@ mcp-server/target/
 /.gdb_sources
 /musl
 /coreutils
+/headers/musl_headers
 
 __pycache__/

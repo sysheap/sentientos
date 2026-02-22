@@ -85,11 +85,12 @@
         ];
 
         hook = ''
-          rm -rf musl coreutils headers/linux_headers kernel/compiled_userspace_nix
+          rm -rf musl coreutils headers/linux_headers headers/musl_headers kernel/compiled_userspace_nix
 
           ln -sf ${musl-riscv}/src musl
           ln -sf ${coreutils}/src coreutils
           ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
+          ln -sf ${musl-riscv.dev}/include headers/musl_headers
 
           mkdir kernel/compiled_userspace_nix
           for target in ${lib.concatStringsSep " " (map (p: "'${p}'") userBins)}; do
