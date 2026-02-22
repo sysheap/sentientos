@@ -1,8 +1,5 @@
 use core::{fmt, ops::Add};
 
-#[cfg(test)]
-use crate::memory::address::PhysAddr;
-
 /// PCI address space (device-side view)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PciAddr(usize);
@@ -59,6 +56,7 @@ impl fmt::Display for PciCpuAddr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::address::PhysAddr;
 
     // Test-only methods for PciCpuAddr
     impl PciCpuAddr {
