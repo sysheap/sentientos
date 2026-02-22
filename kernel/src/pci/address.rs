@@ -1,5 +1,7 @@
-use crate::memory::address::PhysAddr;
 use core::{fmt, ops::Add};
+
+#[cfg(test)]
+use crate::memory::address::PhysAddr;
 
 /// PCI address space (device-side view)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,12 +35,6 @@ impl PciCpuAddr {
     pub const fn as_usize(self) -> usize {
         self.0
     }
-
-    /// CPU-visible PCI addresses are identity-mapped to physical addresses.
-    #[allow(dead_code)]
-    pub const fn as_phys_addr(self) -> PhysAddr {
-        PhysAddr::new(self.0)
-    }
 }
 
 impl Add<usize> for PciCpuAddr {
@@ -63,6 +59,14 @@ impl fmt::Display for PciCpuAddr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test-only methods for PciCpuAddr
+    impl PciCpuAddr {
+        /// CPU-visible PCI addresses are identity-mapped to physical addresses.
+        pub const fn as_phys_addr(self) -> PhysAddr {
+            PhysAddr::new(self.0)
+        }
+    }
 
     #[test_case]
     fn test_pci_addr_basic() {
