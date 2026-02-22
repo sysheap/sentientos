@@ -16,7 +16,6 @@ impl PhysAddr {
         Self(addr)
     }
 
-    #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
@@ -25,38 +24,8 @@ impl PhysAddr {
         self.0
     }
 
-    #[allow(dead_code)]
-    pub const fn as_ptr<T>(self) -> *const T {
-        self.0 as *const T
-    }
-
-    #[allow(dead_code)]
-    pub const fn as_mut_ptr<T>(self) -> *mut T {
-        self.0 as *mut T
-    }
-
-    #[allow(dead_code)]
-    pub const fn from_page_number(ppn: usize) -> Self {
-        Self(ppn << 12)
-    }
-
-    #[allow(dead_code)]
-    pub const fn page_number(self) -> usize {
-        self.0 >> 12
-    }
-
     pub const fn is_page_aligned(self) -> bool {
         self.0 & 0xFFF == 0
-    }
-
-    #[allow(dead_code)]
-    pub const fn align_down(self) -> Self {
-        Self(self.0 & !0xFFF)
-    }
-
-    #[allow(dead_code)]
-    pub const fn align_up(self) -> Self {
-        Self((self.0 + 0xFFF) & !0xFFF)
     }
 }
 
@@ -65,7 +34,6 @@ impl VirtAddr {
         Self(addr)
     }
 
-    #[allow(dead_code)]
     pub const fn zero() -> Self {
         Self(0)
     }
@@ -74,50 +42,16 @@ impl VirtAddr {
         self.0
     }
 
-    #[allow(dead_code)]
     pub const fn as_ptr<T>(self) -> *const T {
         self.0 as *const T
     }
 
-    #[allow(dead_code)]
     pub const fn as_mut_ptr<T>(self) -> *mut T {
         self.0 as *mut T
     }
 
-    #[allow(dead_code)]
-    pub const fn from_page_number(vpn: usize) -> Self {
-        Self(vpn << 12)
-    }
-
-    #[allow(dead_code)]
-    pub const fn page_number(self) -> usize {
-        self.0 >> 12
-    }
-
     pub const fn is_page_aligned(self) -> bool {
         self.0 & 0xFFF == 0
-    }
-
-    #[allow(dead_code)]
-    pub const fn align_down(self) -> Self {
-        Self(self.0 & !0xFFF)
-    }
-
-    #[allow(dead_code)]
-    pub const fn align_up(self) -> Self {
-        Self((self.0 + 0xFFF) & !0xFFF)
-    }
-
-    /// Sv39 VPN index for page table level 0, 1, or 2.
-    #[allow(dead_code)]
-    pub const fn vpn_level(self, level: u8) -> usize {
-        assert!(level < 3);
-        (self.0 >> (12 + level as usize * 9)) & 0x1FF
-    }
-
-    #[allow(dead_code)]
-    pub const fn page_offset(self) -> usize {
-        self.0 & 0xFFF
     }
 }
 
@@ -190,6 +124,54 @@ impl fmt::Display for VirtAddr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test-only methods for PhysAddr
+    impl PhysAddr {
+        pub const fn from_page_number(ppn: usize) -> Self {
+            Self(ppn << 12)
+        }
+
+        pub const fn page_number(self) -> usize {
+            self.0 >> 12
+        }
+
+        pub const fn align_down(self) -> Self {
+            Self(self.0 & !0xFFF)
+        }
+
+        pub const fn align_up(self) -> Self {
+            Self((self.0 + 0xFFF) & !0xFFF)
+        }
+    }
+
+    // Test-only methods for VirtAddr
+    impl VirtAddr {
+        pub const fn from_page_number(vpn: usize) -> Self {
+            Self(vpn << 12)
+        }
+
+        pub const fn page_number(self) -> usize {
+            self.0 >> 12
+        }
+
+        pub const fn align_down(self) -> Self {
+            Self(self.0 & !0xFFF)
+        }
+
+        pub const fn align_up(self) -> Self {
+            Self((self.0 + 0xFFF) & !0xFFF)
+        }
+
+        /// Sv39 VPN index for page table level 0, 1, or 2.
+        pub const fn vpn_level(self, level: u8) -> usize {
+            assert!(level < 3);
+            (self.0 >> (12 + level as usize * 9)) & 0x1FF
+        }
+
+        pub const fn page_offset(self) -> usize {
+            self.0 & 0xFFF
+        }
+    }
 
     #[test_case]
     fn test_phys_addr_basic() {
