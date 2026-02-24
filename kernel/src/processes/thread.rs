@@ -314,15 +314,15 @@ impl Thread {
         }
     }
 
-    pub fn wake_up(&mut self) {
+    pub fn wake_up(&mut self) -> bool {
         if self.state == ThreadState::Waiting {
             self.state = ThreadState::Runnable;
-        } else if matches!(self.state, ThreadState::Running { .. }) {
-            // Waker fired while thread is Running (between poll() and suspend()).
-            // Record it so set_syscall_task_and_suspend() knows not to sleep.
+            return true;
+        }
+        if matches!(self.state, ThreadState::Running { .. }) {
             self.wakeup_pending = true;
         }
-        // If Runnable, the thread will be scheduled and re-poll naturally.
+        false
     }
 
     fn suspend(&mut self) {
@@ -345,6 +345,7 @@ impl Thread {
     pub fn set_parent_tid(&mut self, parent_tid: Tid) {
         self.parent_tid = parent_tid;
     }
+
     pub fn set_sigaction(&mut self, sig: c_uint, sigaction: sigaction) -> Result<sigaction, Errno> {
         if sig >= _NSIG {
             return Err(Errno::EINVAL);
