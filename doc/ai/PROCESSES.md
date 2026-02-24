@@ -21,7 +21,6 @@ pub struct Process {
     fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
-    parent_tid: Tid,                           // Parent process (Tid::new(0) for init)
     brk: Brk,                                  // Heap break manager
 }
 ```
@@ -54,12 +53,13 @@ impl Process {
 ```rust
 pub struct Thread {
     tid: Tid,
+    parent_tid: Tid,                           // Parent process (Tid::new(0) for init)
     process_name: Arc<String>,
     register_state: TrapFrame,                 // All 32 GP registers
     program_counter: usize,                    // Current PC
     state: ThreadState,                        // Running/Runnable/Waiting
     in_kernel_mode: bool,                      // Kernel vs user mode
-    process: ProcessRef,                       // Parent process
+    process: ProcessRef,                       // Owning process
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     signal_state: SignalState,                 // Signal handlers, mask, altstack
     syscall_task: Option<SyscallTask>,         // Pending async syscall
@@ -114,8 +114,8 @@ pub struct CpuScheduler {
 `schedule()` is called on timer interrupt:
 
 1. Save current thread state (PC, registers)
-2. Set current thread to Runnable (if Running)
-3. Get next runnable from process table
+2. Set current thread to Runnable (if Running), push to run queue
+3. Pop next runnable from run queue (stale entries discarded)
 4. If thread has pending syscall task:
    - Poll the async task
    - If ready: write result to a0, skip ecall, return to userspace
@@ -152,13 +152,16 @@ impl CpuScheduler {
 
 **File:** `kernel/src/processes/process_table.rs`
 
-Global registry of all threads:
+Global registry of all threads, with a children index and a separate run queue:
 
 ```rust
 pub static THE: RuntimeInitializedData<Spinlock<ProcessTable>>;
+pub static RUN_QUEUE: Spinlock<VecDeque<ThreadRef>>;  // Separate from ProcessTable
+static LIVE_THREAD_COUNT: AtomicUsize;                // Tracks non-zombie threads
 
 struct ProcessTable {
     threads: BTreeMap<Tid, ThreadRef>,       // All threads including zombies
+    children: BTreeMap<Tid, Vec<Tid>>,       // parent_tid -> [child_tids] index
     wait_wakers: Vec<Waker>,                 // Wakers for blocked wait4 callers
 }
 ```
@@ -168,19 +171,31 @@ struct ProcessTable {
 ```rust
 impl ProcessTable {
     fn init()                                    // Create init process
-    fn add_thread(&mut self, thread: ThreadRef)
-    fn next_runnable(&mut self) -> Option<ThreadRef>  // Get next runnable thread
-    fn kill(&mut self, tid: Tid)                 // Set thread to Zombie state, wake waiters
-    fn is_empty(&self) -> bool                   // True when no non-zombie threads remain
-    fn take_zombie(parent_tid, pid) -> Option<(Tid, i32)>  // Reap a zombie child (removes from table)
-    fn has_any_child_of(parent_tid) -> bool      // Check for children (alive or zombie)
+    fn add_thread(&mut self, thread: ThreadRef)  // Also updates children index + run queue
+    fn kill(&mut self, tid: Tid)                 // Set thread to Zombie, reparent orphans, wake waiters
+    fn take_zombie(parent_tid, pid) -> Option<(Tid, i32)>  // Reap a zombie child (uses children index)
+    fn has_any_child_of(parent_tid) -> bool      // O(1) children index lookup
     fn register_wait_waker(waker)                // Register waker for wait4
 }
+
+// Free function (uses LIVE_THREAD_COUNT atomic, no lock needed)
+pub fn is_empty() -> bool
 ```
+
+### Run Queue Design
+
+The run queue (`RUN_QUEUE`) is separate from `ProcessTable` to avoid holding the process table lock during scheduling. Lock ordering: `ProcessTable -> Thread -> RUN_QUEUE`.
+
+Threads are pushed to the run queue when:
+- Created via `add_thread`
+- Woken from Waiting via `ThreadWaker::wake()`
+- Preempted by timer (set back to Runnable in `queue_current_process_back`)
+
+Stale entries (killed/waiting threads) are filtered on pop — the scheduler discards any thread not in Runnable state.
 
 ## Parent-Child Relationships
 
-Every process tracks its parent via `parent_tid: Tid`:
+Every thread tracks its parent via `parent_tid: Tid` (stored on Thread, not Process):
 
 - **Init** (first process): `parent_tid = Tid::new(0)` (no real parent)
 - **Powersave** (idle): `parent_tid = POWERSAVE_TID`
@@ -192,11 +207,11 @@ Every process tracks its parent via `parent_tid: Tid`:
 
 ### Orphan reparenting
 
-When a process dies in `ProcessTable::kill()`, orphans (children of the dying process) are reparented to init (`Tid::new(1)`).
+When a process dies in `ProcessTable::kill()`, orphans (children of the dying process) are reparented to init (`Tid::new(1)`). The `children` index is updated in bulk.
 
 ### getppid syscall
 
-Linux syscall 173 (`getppid`) returns `process.parent_tid().0`.
+Linux syscall 173 (`getppid`) returns `thread.parent_tid()` (read from Thread, not Process).
 
 ## ELF Loader
 
@@ -265,8 +280,8 @@ impl ThreadWaker {
 
 When woken:
 1. Upgrade weak reference to thread
-2. Set thread state to Runnable
-3. Thread will be scheduled on next `schedule()` call
+2. Call `wake_up()` — if it returns true (Waiting → Runnable), push to `RUN_QUEUE`
+3. Thread will be scheduled when popped from run queue
 
 ## Brk (Heap Management)
 
