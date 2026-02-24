@@ -58,9 +58,13 @@ fn handle_syscall() {
 
 ### LinuxSyscallHandler
 
+The main syscall handler that implements all Linux-compatible system calls.
+
 ```rust
 pub struct LinuxSyscallHandler {
-    handler: SyscallHandler,
+    current_process: ProcessRef,
+    current_thread: ThreadRef,
+    current_tid: Tid,
 }
 
 impl LinuxSyscalls for LinuxSyscallHandler {
@@ -71,23 +75,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 }
 ```
 
-### SyscallHandler
-
-```rust
-pub struct SyscallHandler {
-    current_process: ProcessRef,
-    current_thread: ThreadRef,
-    current_tid: Tid,
-}
-
-impl SyscallHandler {
-    pub fn new() -> Self;
-    pub fn current_tid(&self) -> Tid;
-    pub fn current_process(&self) -> &ProcessRef;
-    pub fn current_thread(&self) -> &ThreadRef;
-    pub fn sys_exit(&mut self, status: isize);
-}
-```
+When a syscall is invoked, `LinuxSyscallHandler::new()` captures the current thread, process, and TID from the scheduler at syscall entry. These fields are then directly accessible to all syscall implementations without additional indirection.
 
 ### SentientOS ioctl Extensions
 
@@ -165,7 +153,6 @@ trap_frame[Register::a0] = ret as usize;
 |------|---------|
 | kernel/src/syscalls/mod.rs | Module exports |
 | kernel/src/syscalls/linux.rs | Linux syscall implementations |
-| kernel/src/syscalls/handler.rs | SyscallHandler |
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
 | common/src/ioctl.rs | SentientOS ioctl constants + userspace wrappers |
