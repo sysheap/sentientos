@@ -119,6 +119,10 @@ fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> boo
 fn handle_syscall() {
     let mut trap_frame = Cpu::read_trap_frame();
 
+    // Create an async task for the syscall and poll it once. If it completes
+    // synchronously (Poll::Ready), handle the result inline. If it yields
+    // (Poll::Pending), save state and reschedule — it will be resumed later
+    // by run_syscall_task when the waker fires.
     let task_trap_frame = trap_frame.clone();
     let mut task = Task::new(async move {
         let mut handler = LinuxSyscallHandler::new();
@@ -127,6 +131,10 @@ fn handle_syscall() {
     let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
     let mut cx = Context::from_waker(&waker);
     if let Poll::Ready(result) = task.poll(&mut cx) {
+        // execve replaces the thread's entire register state (PC, SP, a0, etc.)
+        // with the new program's entry point. The normal return path — writing
+        // the result to a0 and advancing PC past ecall — must be skipped because
+        // the registers already contain the new program's state.
         let replaced = Cpu::with_scheduler(|s| {
             s.get_current_thread().with_lock(|mut t| {
                 let r = t.registers_replaced();
@@ -137,12 +145,16 @@ fn handle_syscall() {
             })
         });
         if replaced {
+            // Load the pre-set registers (from execve) into the CPU.
+            // If the thread was killed between execve and now, reschedule.
             Cpu::with_scheduler(|mut s| {
                 if !s.set_cpu_reg_for_current_thread() {
                     s.schedule();
                 }
             });
         } else {
+            // Normal syscall return: write result to a0 and advance PC by 4
+            // to skip the ecall instruction.
             let ret = match result {
                 Ok(ret) => ret,
                 Err(errno) => -(errno as isize),
@@ -155,7 +167,7 @@ fn handle_syscall() {
             }
         }
     } else {
-        // Syscall pending - suspend and reschedule atomically.
+        // Syscall yielded (Pending) — suspend and reschedule atomically.
         // We must hold the scheduler lock across suspend+schedule to prevent
         // another CPU from waking and stealing this thread before we reschedule.
         Cpu::with_scheduler(|mut s| {

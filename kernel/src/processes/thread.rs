@@ -144,6 +144,11 @@ pub struct Thread {
     signal_state: SignalState,
     syscall_task: Option<SyscallTask>,
     vfork_state: Option<Arc<Spinlock<VforkState>>>,
+    // Set by execve when it replaces the thread's register state with a new
+    // program's entry state. Signals the syscall return path to skip writing a
+    // return value to a0 and skip advancing PC past ecall. Cannot merge with
+    // vfork_state — they are orthogonal: registers_replaced is set by execve
+    // regardless of whether the thread was vforked.
     registers_replaced: bool,
 }
 

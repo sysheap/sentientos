@@ -17,6 +17,7 @@ use crate::{
         process_table,
         thread::{Thread, VforkState, VforkWait, get_next_tid},
         timer,
+        userspace_ptr::UserspacePtr,
         wait_child::WaitChild,
     },
     syscalls::{handler::SyscallHandler, macros::linux_syscalls},
@@ -710,7 +711,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _tls: c_ulong,
         _ctid: LinuxUserspaceArg<Option<*mut c_int>>,
     ) -> Result<isize, Errno> {
-        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK) | c_ulong::from(SIGCHLD);
+        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK | SIGCHLD);
         assert!(
             flags == expected,
             "clone: unsupported flags {flags:#x}, only CLONE_VM|CLONE_VFORK|SIGCHLD ({expected:#x}) supported"
@@ -720,13 +721,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let parent_pc = Cpu::read_sepc();
 
         let parent_process = self.handler.current_process().clone();
-        let (parent_main_tid, parent_satp, child_name) = parent_process.with_lock(|p| {
-            (
-                p.main_tid(),
-                p.get_page_table().get_satp_value_from_page_tables(),
-                Arc::new(String::from(p.get_name())),
-            )
-        });
+        let (parent_main_tid, child_name) =
+            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
 
         let vfork_state = VforkState::new();
 
@@ -744,7 +740,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         )));
         child_process
             .lock()
-            .set_vfork_parent(parent_process.clone(), parent_satp);
+            .set_vfork_parent(parent_process.clone());
 
         let mut child_regs = parent_regs;
         child_regs[Register::a0] = 0; // child gets 0 from clone
@@ -776,7 +772,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     async fn execve(&mut self, filename: usize, argv: usize, _envp: usize) -> Result<isize, Errno> {
         let process = self.get_process();
         let filename_bytes = process.with_lock(|p| {
-            let ptr = crate::processes::userspace_ptr::UserspacePtr::new(filename as *const u8);
+            let ptr = UserspacePtr::new(filename as *const u8);
             p.read_userspace_slice(&ptr, 256)
         })?;
         let mut buf = ConsumableBuffer::new(&filename_bytes);
@@ -786,7 +782,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         // Read argv
         let mut args: Vec<&str> = Vec::new();
         let argv_ptrs = process.with_lock(|p| {
-            let ptr = crate::processes::userspace_ptr::UserspacePtr::new(argv as *const usize);
+            let ptr = UserspacePtr::new(argv as *const usize);
             p.read_userspace_slice(&ptr, 32)
         })?;
 
@@ -802,7 +798,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 continue;
             }
             let arg_bytes = process.with_lock(|p| {
-                let ptr = crate::processes::userspace_ptr::UserspacePtr::new(arg_ptr as *const u8);
+                let ptr = UserspacePtr::new(arg_ptr as *const u8);
                 p.read_userspace_slice(&ptr, 256)
             })?;
             arg_buffers.push(arg_bytes);

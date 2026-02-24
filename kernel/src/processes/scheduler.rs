@@ -68,10 +68,15 @@ impl CpuScheduler {
         }
     }
 
+    // Resumes a previously-suspended async syscall task. Returns true if the
+    // syscall completed and the thread is ready to return to userspace, false
+    // if it yielded again (Pending) or the thread was killed.
     pub fn run_syscall_task(&mut self, mut task: SyscallTask) -> bool {
         let waker = ThreadWaker::new_waker(Arc::downgrade(&self.current_thread));
         let mut cx = Context::from_waker(&waker);
         if let Poll::Ready(result) = task.poll(&mut cx) {
+            // Same dual return path as handle_syscall: if execve replaced the
+            // registers, skip the normal a0/PC return logic.
             let replaced = self.current_thread.with_lock(|mut t| {
                 let r = t.registers_replaced();
                 if r {
@@ -102,8 +107,7 @@ impl CpuScheduler {
             }
             true
         } else {
-            // Use self.current_thread directly instead of Cpu::with_current_thread
-            // to avoid trying to acquire scheduler lock while already holding it
+            // Still pending — store the task back and keep the thread waiting.
             self.current_thread
                 .lock()
                 .set_syscall_task_and_suspend(task);
@@ -191,14 +195,33 @@ impl CpuScheduler {
                 }
             });
 
-            let syscall_task = self.current_thread.with_lock(|mut t| t.take_syscall_task());
-
-            if let Some(task) = syscall_task {
-                return ProcessMode::KernelSyscallTask(task);
-            } else if self.set_cpu_reg_for_current_thread() {
-                return ProcessMode::Userspace;
+            // Acquire the thread lock once for both task check and register load,
+            // eliminating the gap where a thread could be killed between the two.
+            let result = self.current_thread.with_lock(|mut t| {
+                if let Some(task) = t.take_syscall_task() {
+                    return Some(ProcessMode::KernelSyscallTask(task));
+                }
+                if matches!(t.get_state(), ThreadState::Zombie(_)) {
+                    return None;
+                }
+                let cpu_id = Cpu::cpu_id();
+                assert!(
+                    t.get_state() == ThreadState::Running { cpu_id },
+                    "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
+                    t.get_tid(),
+                    t.get_state(),
+                    cpu_id
+                );
+                let pc = t.get_program_counter();
+                Cpu::write_trap_frame(t.get_register_state().clone());
+                Cpu::write_sepc(pc.as_usize());
+                Cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
+                Some(ProcessMode::Userspace)
+            });
+            if let Some(mode) = result {
+                return mode;
             }
-            // Thread was killed between scheduling and register load — retry
+            // Thread was killed — retry
         }
     }
 

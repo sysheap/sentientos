@@ -39,7 +39,6 @@ pub struct Process {
     parent_tid: Tid,
     brk: Brk,
     vfork_parent: Option<ProcessRef>,
-    vfork_parent_satp: Option<usize>,
 }
 
 impl Debug for Process {
@@ -80,7 +79,6 @@ impl Process {
             main_tid: main_thread,
             parent_tid,
             vfork_parent: None,
-            vfork_parent_satp: None,
         }
     }
 
@@ -261,17 +259,16 @@ impl Process {
     }
 
     pub fn get_satp_value(&self) -> usize {
-        // For vfork children, we use the cached parent SATP to avoid locking
-        // the parent process (which would risk ABBA deadlock). The parent's
-        // page table doesn't change while the child is alive (parent is
-        // blocked on VforkWait).
-        self.vfork_parent_satp
-            .unwrap_or_else(|| self.page_table.get_satp_value_from_page_tables())
+        if let Some(parent) = &self.vfork_parent {
+            // Vfork child uses the parent's page tables. No ABBA deadlock risk:
+            // the parent is blocked on VforkWait and cannot acquire any locks.
+            return parent.lock().page_table.get_satp_value_from_page_tables();
+        }
+        self.page_table.get_satp_value_from_page_tables()
     }
 
-    pub fn set_vfork_parent(&mut self, parent: ProcessRef, parent_satp: usize) {
+    pub fn set_vfork_parent(&mut self, parent: ProcessRef) {
         self.vfork_parent = Some(parent);
-        self.vfork_parent_satp = Some(parent_satp);
     }
 
     pub fn vfork_parent(&self) -> Option<&ProcessRef> {
