@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, task::Wake};
 use core::task::Waker;
 
-use crate::processes::thread::ThreadWeakRef;
+use crate::processes::{process_table, thread::ThreadWeakRef};
 
 pub struct ThreadWaker {
     thread: ThreadWeakRef,
@@ -17,7 +17,10 @@ impl ThreadWaker {
 impl Wake for ThreadWaker {
     fn wake(self: Arc<Self>) {
         if let Some(thread) = self.thread.upgrade() {
-            thread.lock().wake_up();
+            let woke = thread.lock().wake_up();
+            if woke {
+                process_table::RUN_QUEUE.lock().push_back(thread);
+            }
         }
     }
 }

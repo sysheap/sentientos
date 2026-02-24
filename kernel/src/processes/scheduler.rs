@@ -149,51 +149,66 @@ impl CpuScheduler {
             return;
         }
         let cpu_id = Cpu::cpu_id();
-        self.swap_current_with_powersave().with_lock(|mut t| {
-            // Only save state when preempting a Running thread on THIS CPU.
-            // - Running on other CPU: another CPU stole this thread, don't touch it
-            // - Waiting: state was already saved before thread suspended
-            // - Runnable: state was saved, thread was woken by another CPU
+        let old = self.swap_current_with_powersave();
+        let should_requeue = old.with_lock(|mut t| {
             if t.get_state() == (ThreadState::Running { cpu_id }) {
                 t.set_state(ThreadState::Runnable);
                 t.set_program_counter(VirtAddr::new(Cpu::read_sepc()));
                 t.set_register_state(Cpu::read_trap_frame());
+                debug!("Saved thread {} back", *t);
+                true
+            } else {
+                false
             }
-            debug!("Saved thread {} back", *t);
         });
+        if should_requeue {
+            process_table::RUN_QUEUE.lock().push_back(old);
+        }
     }
 
     fn prepare_next_process(&mut self) -> ProcessMode {
         loop {
             self.queue_current_process_back();
 
-            process_table::THE.with_lock(|mut pt| {
-                if pt.is_empty() {
-                    info!("No more processes to schedule, shutting down system");
-                    qemu_exit::exit_success();
-                }
+            if process_table::is_empty() {
+                info!("No more processes to schedule, shutting down system");
+                qemu_exit::exit_success();
+            }
 
-                debug!("Getting next runnable process");
+            debug!("Getting next runnable process");
 
-                assert!(
-                    self.is_current_process_energy_saver(),
-                    "Current thread must be powersave thread to not have any dangling references"
-                );
+            assert!(
+                self.is_current_process_energy_saver(),
+                "Current thread must be powersave thread to not have any dangling references"
+            );
 
-                // next_runnable already sets the state to ThreadState::Running { cpu_id }
-                if let Some(next) = pt.next_runnable() {
-                    debug!("Next runnable is {}", *next.lock());
-                    self.current_thread = next;
-                } else {
-                    // No runnable threads, use powersave and mark it as running on this CPU
-                    self.powersave_thread.with_lock(|mut t| {
+            let next = process_table::RUN_QUEUE.lock().pop_front();
+            if let Some(candidate) = next {
+                let accepted = candidate.with_lock(|mut t| {
+                    if t.get_state() == ThreadState::Runnable {
                         t.set_state(ThreadState::Running {
                             cpu_id: Cpu::cpu_id(),
                         });
-                    });
-                    debug!("Next runnable is powersave");
+                        true
+                    } else {
+                        false
+                    }
+                });
+                if accepted {
+                    debug!("Next runnable is {}", *candidate.lock());
+                    self.current_thread = candidate;
+                } else {
+                    // Stale entry (killed/waiting since enqueued), discard and retry
+                    continue;
                 }
-            });
+            } else {
+                self.powersave_thread.with_lock(|mut t| {
+                    t.set_state(ThreadState::Running {
+                        cpu_id: Cpu::cpu_id(),
+                    });
+                });
+                debug!("Next runnable is powersave");
+            }
 
             // Acquire the thread lock once for both task check and register load,
             // eliminating the gap where a thread could be killed between the two.
