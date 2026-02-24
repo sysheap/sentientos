@@ -45,10 +45,8 @@ pub fn spawn(program: &str, args: &[&str]) -> Result<i32, i32> {
         argv_cstrings.push(CString::new(*arg).expect("arg must not contain NUL"));
     }
 
-    let mut argv_ptrs: Vec<*const libc::c_char> = argv_cstrings
-        .iter()
-        .map(|s| s.as_ptr())
-        .collect();
+    let mut argv_ptrs: Vec<*const libc::c_char> =
+        argv_cstrings.iter().map(|s| s.as_ptr()).collect();
     argv_ptrs.push(core::ptr::null());
 
     let envp: [*const libc::c_char; 1] = [core::ptr::null()];
