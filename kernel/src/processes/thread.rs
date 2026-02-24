@@ -133,6 +133,7 @@ impl SignalState {
 #[derive(Debug)]
 pub struct Thread {
     tid: Tid,
+    parent_tid: Tid,
     process_name: Arc<String>,
     register_state: TrapFrame,
     program_counter: VirtAddr,
@@ -245,7 +246,6 @@ impl Thread {
             allocated_pages,
             brk,
             tid,
-            parent_tid,
         )));
 
         let main_thread = Thread::new(
@@ -255,6 +255,7 @@ impl Thread {
             program_counter,
             in_kernel_mode,
             process.clone(),
+            parent_tid,
         );
 
         process
@@ -271,9 +272,11 @@ impl Thread {
         program_counter: VirtAddr,
         in_kernel_mode: bool,
         process: ProcessRef,
+        parent_tid: Tid,
     ) -> ThreadRef {
         Arc::new(Spinlock::new(Self {
             tid,
+            parent_tid,
             process_name,
             register_state,
             program_counter,
@@ -333,6 +336,14 @@ impl Thread {
 
     pub fn get_tid(&self) -> Tid {
         self.tid
+    }
+
+    pub fn parent_tid(&self) -> Tid {
+        self.parent_tid
+    }
+
+    pub fn set_parent_tid(&mut self, parent_tid: Tid) {
+        self.parent_tid = parent_tid;
     }
     pub fn set_sigaction(&mut self, sig: c_uint, sigaction: sigaction) -> Result<sigaction, Errno> {
         if sig >= _NSIG {

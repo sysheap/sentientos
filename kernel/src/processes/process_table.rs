@@ -80,8 +80,7 @@ impl ProcessTable {
     pub fn take_zombie(&mut self, parent_tid: Tid, pid: i32) -> Option<(Tid, i32)> {
         let is_zombie_of = |t: &ThreadRef| {
             t.with_lock(|t| {
-                matches!(t.get_state(), ThreadState::Zombie(_))
-                    && t.process().lock().parent_tid() == parent_tid
+                matches!(t.get_state(), ThreadState::Zombie(_)) && t.parent_tid() == parent_tid
             })
         };
 
@@ -109,12 +108,9 @@ impl ProcessTable {
     }
 
     pub fn has_any_child_of(&self, parent_tid: Tid) -> bool {
-        self.threads.values().any(|t| {
-            t.with_lock(|t| {
-                let process = t.process();
-                process.lock().parent_tid() == parent_tid
-            })
-        })
+        self.threads
+            .values()
+            .any(|t| t.with_lock(|t| t.parent_tid() == parent_tid))
     }
 
     pub fn register_wait_waker(&mut self, waker: Waker) {
@@ -157,11 +153,9 @@ impl ProcessTable {
             // Reparent orphans to init
             let init_tid = Tid::new(1);
             for child_thread in self.threads.values() {
-                child_thread.with_lock(|t| {
-                    let process = t.process();
-                    let mut process = process.lock();
-                    if process.parent_tid() == main_tid {
-                        process.set_parent_tid(init_tid);
+                child_thread.with_lock(|mut t| {
+                    if t.parent_tid() == main_tid {
+                        t.set_parent_tid(init_tid);
                     }
                 });
             }

@@ -36,7 +36,6 @@ pub struct Process {
     fd_table: FdTable,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
-    parent_tid: Tid,
     brk: Brk,
     vfork_parent: Option<ProcessRef>,
 }
@@ -58,14 +57,12 @@ impl Debug for Process {
 }
 
 impl Process {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: Arc<String>,
         page_table: RootPageTableHolder,
         allocated_pages: Vec<PinnedHeapPages>,
         brk: Brk,
         main_thread: Tid,
-        parent_tid: Tid,
     ) -> Self {
         Self {
             name,
@@ -77,7 +74,6 @@ impl Process {
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
-            parent_tid,
             vfork_parent: None,
         }
     }
@@ -240,14 +236,6 @@ impl Process {
 
     pub fn main_tid(&self) -> Tid {
         self.main_tid
-    }
-
-    pub fn parent_tid(&self) -> Tid {
-        self.parent_tid
-    }
-
-    pub fn set_parent_tid(&mut self, parent_tid: Tid) {
-        self.parent_tid = parent_tid;
     }
 
     pub fn fd_table(&self) -> &FdTable {
