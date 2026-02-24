@@ -514,7 +514,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn getppid(&mut self) -> Result<isize, headers::errno::Errno> {
-        let parent_tid = self.handler.current_process().lock().parent_tid();
+        let parent_tid = self.handler.current_thread().lock().parent_tid();
         Ok(parent_tid.as_isize())
     }
 
@@ -695,7 +695,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             "wait4: unsupported options {options:#x}"
         );
 
-        let parent_main_tid = self.handler.current_process().lock().main_tid();
+        let parent_main_tid = self.handler.current_thread().lock().get_tid();
         let (child_tid, wait_status) = WaitChild::new(parent_main_tid, pid, wnohang).await?;
 
         status.write_if_not_none(wait_status)?;
@@ -736,7 +736,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             Vec::new(),
             Brk::empty(),
             child_tid,
-            parent_main_tid,
         )));
         child_process
             .lock()
@@ -755,6 +754,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             VirtAddr::new(parent_pc + 4), // skip ecall
             false,
             child_process.clone(),
+            parent_main_tid,
         );
 
         child_thread.lock().set_vfork_state(vfork_state.clone());
@@ -826,7 +826,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             loaded.allocated_pages,
             loaded.brk,
             self.handler.current_thread().lock().get_tid(),
-            self.handler.current_process().lock().parent_tid(),
         )));
 
         let current_thread = self.handler.current_thread().clone();
