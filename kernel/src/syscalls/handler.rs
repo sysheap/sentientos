@@ -15,9 +15,8 @@ pub(super) struct SyscallHandler {
 impl SyscallHandler {
     pub(super) fn new() -> Self {
         let current_thread = Cpu::with_scheduler(|s| s.get_current_thread().clone());
-        let current_tid = current_thread.lock().get_tid();
-
-        let current_process = current_thread.lock().process();
+        let (current_tid, current_process) =
+            current_thread.with_lock(|t| (t.get_tid(), t.process()));
         Self {
             current_process,
             current_thread,
