@@ -128,13 +128,13 @@ impl QemuInstance {
 
         stdout
             .assert_read_until("Hello World from SentientOS!")
-            .await;
-        stdout.assert_read_until("kernel_init done!").await;
-        stdout.assert_read_until("init process started").await;
+            .await?;
+        stdout.assert_read_until("kernel_init done!").await?;
+        stdout.assert_read_until("init process started").await?;
         stdout
             .assert_read_until("### SeSH - Sentient Shell ###")
-            .await;
-        stdout.assert_read_until(PROMPT).await;
+            .await?;
+        stdout.assert_read_until(PROMPT).await?;
 
         Ok(Self {
             instance,
@@ -159,7 +159,7 @@ impl QemuInstance {
     pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String> {
         self.stdin().write_all(&[0x03]).await?;
         self.stdin().flush().await?;
-        self.stdout().assert_read_until(PROMPT).await;
+        self.stdout().assert_read_until(PROMPT).await?;
         Ok(String::new())
     }
 
@@ -186,7 +186,7 @@ impl QemuInstance {
         self.stdin.write_all(command.as_bytes()).await?;
         self.stdin.flush().await?;
 
-        let result = self.stdout.assert_read_until(wait_for).await;
+        let result = self.stdout.assert_read_until(wait_for).await?;
         let trimmed_result = &result[command.len()..result.len() - wait_for.len()];
 
         Ok(String::from_utf8_lossy(trimmed_result).into_owned())
@@ -195,7 +195,7 @@ impl QemuInstance {
     pub async fn write_and_wait_for(&mut self, text: &str, wait: &str) -> anyhow::Result<()> {
         self.stdin().write_all(text.as_bytes()).await?;
         self.stdin().flush().await?;
-        self.stdout().assert_read_until(wait).await;
+        self.stdout().assert_read_until(wait).await?;
         Ok(())
     }
 }
