@@ -1,6 +1,9 @@
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 use core::fmt;
-use headers::{errno::Errno, syscall_types::O_NONBLOCK};
+use headers::{
+    errno::Errno,
+    syscall_types::{O_CLOEXEC, O_NONBLOCK},
+};
 
 use crate::{
     io::{
@@ -26,7 +29,12 @@ impl FdFlags {
     }
 
     pub fn from_raw(raw: i32) -> Self {
-        Self(raw & (O_NONBLOCK as i32))
+        Self(raw & ((O_NONBLOCK | O_CLOEXEC) as i32))
+    }
+
+    #[allow(dead_code)]
+    pub fn is_cloexec(self) -> bool {
+        (self.0 & O_CLOEXEC as i32) != 0
     }
 }
 
@@ -107,6 +115,7 @@ pub struct FdEntry {
     pub flags: FdFlags,
 }
 
+#[derive(Clone)]
 pub struct FdTable {
     table: BTreeMap<RawFd, FdEntry>,
 }
@@ -200,5 +209,20 @@ impl FdTable {
             .get_mut(&fd)
             .map(|e| e.flags = flags)
             .ok_or(Errno::EBADF)
+    }
+
+    #[allow(dead_code)]
+    pub fn close_cloexec_fds(&mut self) {
+        let cloexec_fds: Vec<RawFd> = self
+            .table
+            .iter()
+            .filter(|(_, entry)| entry.flags.is_cloexec())
+            .map(|(&fd, _)| fd)
+            .collect();
+        for fd in cloexec_fds {
+            if let Some(entry) = self.table.remove(&fd) {
+                entry.descriptor.on_close();
+            }
+        }
     }
 }
