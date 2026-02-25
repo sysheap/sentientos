@@ -238,6 +238,10 @@ impl Process {
         self.main_tid
     }
 
+    pub fn set_fd_table(&mut self, fd_table: FdTable) {
+        self.fd_table = fd_table;
+    }
+
     pub fn fd_table(&self) -> &FdTable {
         &self.fd_table
     }
