@@ -176,9 +176,12 @@ def gdb_interrupt() -> str:
     session.interrupt()
     try:
         responses = session._require_gdb().get_gdb_response(timeout_sec=5)
-        return _format_responses(responses)
+        output = _format_responses(responses)
+        if output and output != "OK":
+            return f"Interrupted. {output}"
+        return "Interrupted."
     except Exception:
-        return "Interrupt sent."
+        return "Interrupt sent (no stop response received)."
 
 
 @mcp.tool()
@@ -207,3 +210,54 @@ def gdb_frame(frame_number: int) -> str:
     if err:
         return f"Error: {err}"
     return _run_mi("-stack-info-frame")
+
+
+@mcp.tool()
+def gdb_diagnose() -> str:
+    """One-shot diagnostic: interrupt kernel, list all threads, get backtrace for each.
+    Returns a combined report useful for diagnosing deadlocks and hangs."""
+    parts = []
+
+    # Interrupt the kernel
+    session.interrupt()
+    try:
+        responses = session._require_gdb().get_gdb_response(timeout_sec=5)
+        stop_info = _format_responses(responses)
+        if stop_info and stop_info != "OK":
+            parts.append(f"Stop reason: {stop_info}")
+    except Exception:
+        parts.append("Interrupt sent (no stop response received)")
+
+    # Get thread list
+    thread_responses = session.execute_mi("-thread-info", timeout_sec=10)
+    err = _format_error(thread_responses)
+    if err:
+        parts.append(f"Thread list error: {err}")
+        return "\n\n".join(parts)
+
+    # Parse thread IDs from response
+    thread_ids = []
+    for r in thread_responses:
+        if r.get("type") == "result":
+            payload = r.get("payload", {})
+            threads = payload.get("threads", [])
+            for t in threads:
+                tid = t.get("id")
+                if tid:
+                    thread_ids.append(tid)
+
+    parts.append(f"Threads: {len(thread_ids)}")
+
+    # Get backtrace for each thread
+    for tid in thread_ids:
+        select_responses = session.execute_mi(f"-thread-select {tid}", timeout_sec=5)
+        select_err = _format_error(select_responses)
+        if select_err:
+            parts.append(f"--- Thread {tid} ---\nError selecting thread: {select_err}")
+            continue
+        bt_responses = session.execute_cli("bt", timeout_sec=10)
+        bt_err = _format_error(bt_responses)
+        bt_text = f"Error: {bt_err}" if bt_err else _format_responses(bt_responses)
+        parts.append(f"--- Thread {tid} ---\n{bt_text}")
+
+    return "\n\n".join(parts)
