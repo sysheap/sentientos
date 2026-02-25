@@ -17,7 +17,7 @@ async fn udp() -> anyhow::Result<()> {
     socket.connect(format!("127.0.0.1:{}", port)).await?;
 
     socket.send("42\n".as_bytes()).await?;
-    sentientos.stdout().assert_read_until("42\n").await;
+    sentientos.stdout().assert_read_until("42\n").await?;
 
     sentientos
         .stdin()
@@ -35,7 +35,7 @@ async fn udp() -> anyhow::Result<()> {
     sentientos
         .stdout()
         .assert_read_until("Finalize test\n")
-        .await;
+        .await?;
 
     Ok(())
 }
