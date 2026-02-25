@@ -12,7 +12,15 @@ class GDBSession:
 
     @property
     def connected(self) -> bool:
-        return self._gdb is not None
+        if self._gdb is None:
+            return False
+        if self._gdb.gdb_process is None:
+            self._gdb = None
+            return False
+        if self._gdb.gdb_process.poll() is not None:
+            self._gdb = None
+            return False
+        return True
 
     def _require_gdb(self) -> GdbController:
         if self._gdb is None:
