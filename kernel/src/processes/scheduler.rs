@@ -116,20 +116,11 @@ impl CpuScheduler {
     }
 
     pub fn kill_current_process(&mut self, exit_status: i32) {
-        let tid = self.current_thread.lock().process().with_lock(|p| {
-            // TODO: Kill other threads first
-            assert_eq!(
-                p.threads_len(),
-                1,
-                "We currently don't support to kill other threads"
-            );
-
-            assert!(Arc::ptr_eq(&self.current_thread, &p.main_thread()));
-
-            p.main_tid()
-        });
-
-        process_table::THE.lock().kill(tid, exit_status);
+        let all_tids = self.current_thread.lock().process().lock().thread_tids();
+        let mut pt = process_table::THE.lock();
+        for tid in all_tids {
+            pt.kill(tid, exit_status);
+        }
     }
 
     pub fn send_ctrl_c(&mut self) {
