@@ -2,7 +2,14 @@ use alloc::collections::BTreeMap;
 use core::fmt;
 use headers::{errno::Errno, syscall_types::O_NONBLOCK};
 
-use crate::{io::stdin_buf::ReadStdin, net::sockets::SharedAssignedSocket, print};
+use crate::{
+    io::{
+        pipe::{ReadPipe, SharedPipeBuffer},
+        stdin_buf::ReadStdin,
+    },
+    net::sockets::SharedAssignedSocket,
+    print,
+};
 
 pub type RawFd = i32;
 
@@ -30,6 +37,8 @@ pub enum FileDescriptor {
     Stderr,
     UnboundUdpSocket,
     UdpSocket(SharedAssignedSocket),
+    PipeRead(SharedPipeBuffer),
+    PipeWrite(SharedPipeBuffer),
 }
 
 impl fmt::Debug for FileDescriptor {
@@ -40,6 +49,8 @@ impl fmt::Debug for FileDescriptor {
             FileDescriptor::Stderr => write!(f, "Stderr"),
             FileDescriptor::UnboundUdpSocket => write!(f, "UnboundUdpSocket"),
             FileDescriptor::UdpSocket(_) => write!(f, "UdpSocket(..)"),
+            FileDescriptor::PipeRead(_) => write!(f, "PipeRead(..)"),
+            FileDescriptor::PipeWrite(_) => write!(f, "PipeWrite(..)"),
         }
     }
 }
@@ -48,6 +59,7 @@ impl FileDescriptor {
     pub async fn read(&self, count: usize) -> Result<alloc::vec::Vec<u8>, Errno> {
         match self {
             FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
+            FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.clone(), count).await),
             _ => Err(Errno::EBADF),
         }
     }
@@ -63,6 +75,7 @@ impl FileDescriptor {
                     Ok(data)
                 }
             }
+            FileDescriptor::PipeRead(buf) => buf.lock().try_read(count),
             _ => Err(Errno::EBADF),
         }
     }
@@ -74,7 +87,16 @@ impl FileDescriptor {
                 print!("{}", s);
                 Ok(data.len())
             }
+            FileDescriptor::PipeWrite(buf) => buf.lock().write(data),
             _ => Err(Errno::EBADF),
+        }
+    }
+
+    pub fn on_close(&self) {
+        match self {
+            FileDescriptor::PipeRead(buf) => buf.lock().close_read(),
+            FileDescriptor::PipeWrite(buf) => buf.lock().close_write(),
+            _ => {}
         }
     }
 }
@@ -146,7 +168,9 @@ impl FdTable {
     }
 
     pub fn close(&mut self, fd: RawFd) -> Result<FdEntry, Errno> {
-        self.table.remove(&fd).ok_or(Errno::EBADF)
+        let entry = self.table.remove(&fd).ok_or(Errno::EBADF)?;
+        entry.descriptor.on_close();
+        Ok(entry)
     }
 
     pub fn get_flags(&self, fd: RawFd) -> Result<FdFlags, Errno> {
