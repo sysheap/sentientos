@@ -53,6 +53,7 @@ linux_syscalls! {
     SYSCALL_NR_EXECVE => execve(filename: usize, argv: usize, envp: usize);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
+    SYSCALL_NR_GETPID => getpid();
     SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint, arg: usize);
@@ -529,6 +530,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             }
             _ => Err(Errno::EINVAL),
         }
+    }
+
+    async fn getpid(&mut self) -> Result<isize, headers::errno::Errno> {
+        let main_tid = self.current_process.with_lock(|p| p.main_tid());
+        Ok(main_tid.as_isize())
     }
 
     async fn getppid(&mut self) -> Result<isize, headers::errno::Errno> {
