@@ -38,11 +38,7 @@ fn require_running(guard: &mut Option<QemuInstance>) -> Result<&mut QemuInstance
         .ok_or_else(|| mcp_err("QEMU is not running. Call boot_qemu first."))
 }
 
-fn format_command_output(
-    label: &str,
-    success_word: &str,
-    output: &std::process::Output,
-) -> String {
+fn format_command_output(label: &str, success_word: &str, output: &std::process::Output) -> String {
     format!(
         "{} {}\n\n--- stdout ---\n{}\n--- stderr ---\n{}",
         label,
@@ -122,11 +118,11 @@ impl QemuMcpServer {
             .add_network_card(params.network.unwrap_or(false))
             .use_smp(params.smp.unwrap_or(true));
 
-        let instance = tokio::time::timeout(Duration::from_secs(30), async {
+        let instance = tokio::time::timeout(Duration::from_secs(180), async {
             QemuInstance::start_with(options).await
         })
         .await
-        .map_err(|_| mcp_err("Timed out waiting for QEMU to boot (30s)"))?
+        .map_err(|_| mcp_err("Timed out waiting for QEMU to boot (180s)"))?
         .map_err(|e| mcp_err(format!("Failed to boot QEMU: {e}")))?;
 
         let port_info = instance
@@ -191,10 +187,11 @@ impl QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let mut guard = self.qemu.lock().await;
         let instance = require_running(&mut guard)?;
-        let output = tokio::time::timeout(Duration::from_secs(10), instance.run_prog(&params.command))
-            .await
-            .map_err(|_| mcp_err("Timed out waiting for output (10s)"))?
-            .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
+        let output =
+            tokio::time::timeout(Duration::from_secs(30), instance.run_prog(&params.command))
+                .await
+                .map_err(|_| mcp_err("Timed out waiting for output (30s)"))?
+                .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
         text_result(output)
     }
 
