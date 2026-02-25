@@ -87,11 +87,11 @@ QemuInstance::start_with(
 
 ### ReadAsserter
 
-**File:** `system-tests/src/infra/read_asserter.rs`
+**File:** `qemu-infra/src/read_asserter.rs`
 
 ```rust
 impl ReadAsserter<R> {
-    pub async fn assert_read_until(&mut self, needle: &str) -> Vec<u8>
+    pub async fn assert_read_until(&mut self, needle: &str) -> Result<Vec<u8>, ReadError>
 }
 ```
 
@@ -146,7 +146,7 @@ async fn udp() -> anyhow::Result<()> {
     socket.connect("127.0.0.1:1234").await?;
     socket.send(b"test").await?;
 
-    sentientos.stdout().assert_read_until("test").await;
+    sentientos.stdout().assert_read_until("test").await?;
     Ok(())
 }
 ```
