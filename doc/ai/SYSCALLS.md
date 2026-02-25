@@ -31,17 +31,22 @@ fn handle_syscall() {
 | bind | fd, addr, addrlen | Bind socket to address/port |
 | brk | brk | Adjust heap break |
 | clock_nanosleep | clockid, flags, request, remain | Sleep with clock selection |
-| clone | flags, stack, ptid, tls, ctid | Create child process (CLONE_VM\|CLONE_VFORK) |
+| clone | flags, stack, ptid, tls, ctid | Create child process (vfork) or thread (CLONE_THREAD) |
 | close | fd | Close file descriptor |
+| dup3 | oldfd, newfd, flags | Duplicate file descriptor |
 | execve | filename, argv, envp | Replace process image |
 | exit_group | status | Exit process (stores exit status, then kills process) |
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
+| getpid | | Get process ID (main thread TID) |
 | getppid | | Get parent process ID |
 | gettid | | Get thread ID |
 | ioctl | fd, op, arg | Device control (+ Solaya extensions, FIONBIO for sockets) |
+| madvise | addr, length, advice | Memory advice (stub, returns 0) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
+| mprotect | addr, len, prot | Memory protection (stub, returns 0) |
 | munmap | addr, len | Unmap memory |
 | nanosleep | duration, rem | Sleep |
+| pipe2 | fds, flags | Create pipe |
 | ppoll | fds, n, timeout, mask | Poll file descriptors |
 | prctl | | Process control |
 | read | fd, buf, count | Read from fd |
@@ -49,6 +54,7 @@ fn handle_syscall() {
 | rt_sigaction | sig, act, oact, size | Signal action |
 | rt_sigprocmask | how, set, oldset, size | Signal mask |
 | sendto | fd, buf, len, flags, dest_addr, addrlen | Send UDP datagram to destination |
+| set_robust_list | head, len | Set robust futex list (stub, returns 0) |
 | set_tid_address | tidptr | Set clear_child_tid |
 | sigaltstack | uss, uoss | Signal stack |
 | socket | domain, type, protocol | Create socket (AF_INET + SOCK_DGRAM only) |

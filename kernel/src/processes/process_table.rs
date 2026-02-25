@@ -151,6 +151,11 @@ impl ProcessTable {
         debug!("Killing tid={tid}");
         let exit_code = u8::try_from(exit_status & 0xff).expect("masked to 8 bits");
         if let Some(thread) = self.threads.get(&tid).cloned() {
+            let already_dead =
+                thread.with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)));
+            if already_dead {
+                return;
+            }
             LIVE_THREAD_COUNT.fetch_sub(1, Ordering::Relaxed);
             let main_tid = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Zombie(exit_code));
@@ -166,22 +171,26 @@ impl ProcessTable {
                 }
 
                 let process = t.process();
-                process.lock().main_tid()
+                let mut p = process.lock();
+                p.remove_thread(tid);
+                p.main_tid()
             });
 
             self.wake_wait_wakers();
 
-            // Reparent orphans to init
-            let init_tid = Tid::new(1);
-            if let Some(orphans) = self.children.remove(&main_tid) {
-                for &child_tid in &orphans {
-                    if let Some(child_thread) = self.threads.get(&child_tid) {
-                        child_thread.with_lock(|mut t| {
-                            t.set_parent_tid(init_tid);
-                        });
+            if tid == main_tid {
+                // Reparent orphans to init only when the main thread dies
+                let init_tid = Tid::new(1);
+                if let Some(orphans) = self.children.remove(&main_tid) {
+                    for &child_tid in &orphans {
+                        if let Some(child_thread) = self.threads.get(&child_tid) {
+                            child_thread.with_lock(|mut t| {
+                                t.set_parent_tid(init_tid);
+                            });
+                        }
                     }
+                    self.children.entry(init_tid).or_default().extend(orphans);
                 }
-                self.children.entry(init_tid).or_default().extend(orphans);
             }
         }
     }

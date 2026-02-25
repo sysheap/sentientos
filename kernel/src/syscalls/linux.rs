@@ -35,7 +35,8 @@ use headers::{
     errno::Errno,
     socket::{AF_INET, SOCK_CLOEXEC, SOCK_DGRAM, sockaddr_in},
     syscall_types::{
-        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
+        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID,
+        CLONE_SETTLS, CLONE_THREAD, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
         MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
         SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
         sigaction, sigset_t, stack_t, timespec,
@@ -57,7 +58,9 @@ linux_syscalls! {
     SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint, arg: usize);
+    SYSCALL_NR_MADVISE => madvise(addr: usize, length: usize, advice: c_int);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
+    SYSCALL_NR_MPROTECT => mprotect(addr: usize, len: usize, prot: c_int);
     SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
     SYSCALL_NR_CLOCK_NANOSLEEP => clock_nanosleep(clockid: c_int, flags: c_int, request: *const timespec, remain: Option<*mut timespec>);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
@@ -69,6 +72,7 @@ linux_syscalls! {
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SENDTO => sendto(fd: c_int, buf: *const u8, len: usize, flags: c_int, dest_addr: *const u8, addrlen: c_uint);
+    SYSCALL_NR_SET_ROBUST_LIST => set_robust_list(head: usize, len: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_SOCKET => socket(domain: c_int, typ: c_int, protocol: c_int);
@@ -133,6 +137,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         });
 
         debug!("Exit process with status: {status}\n");
+        Ok(0)
+    }
+
+    async fn set_robust_list(&mut self, _head: usize, _len: usize) -> Result<isize, Errno> {
         Ok(0)
     }
 
@@ -392,6 +400,19 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         })
     }
 
+    async fn madvise(
+        &mut self,
+        _addr: usize,
+        _length: usize,
+        _advice: c_int,
+    ) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn mprotect(&mut self, _addr: usize, _len: usize, _prot: c_int) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
     async fn munmap(&mut self, addr: usize, length: usize) -> Result<isize, headers::errno::Errno> {
         if !addr.is_multiple_of(PAGE_SIZE) || length == 0 {
             return Err(Errno::EINVAL);
@@ -440,7 +461,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                     FdFlags::default()
                 };
                 self.current_process
-                    .with_lock(|mut p| p.fd_table_mut().set_flags(fd, flags))?;
+                    .with_lock(|p| p.fd_table().set_flags(fd, flags))?;
                 Ok(0)
             }
             _ => Err(Errno::EINVAL),
@@ -477,15 +498,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         &mut self,
         fd: <c_int as crate::syscalls::macros::NeedsUserSpaceWrapper>::Wrapped,
     ) -> Result<isize, headers::errno::Errno> {
-        self.current_process
-            .with_lock(|mut p| p.fd_table_mut().close(fd))?;
+        self.current_process.with_lock(|p| p.fd_table().close(fd))?;
         Ok(0)
     }
 
     async fn dup3(&mut self, oldfd: c_int, newfd: c_int, flags: c_int) -> Result<isize, Errno> {
         let result = self
             .current_process
-            .with_lock(|mut p| p.fd_table_mut().dup_to(oldfd, newfd, flags))?;
+            .with_lock(|p| p.fd_table().dup_to(oldfd, newfd, flags))?;
         Ok(result as isize)
     }
 
@@ -495,13 +515,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _flags: c_int,
     ) -> Result<isize, Errno> {
         let buffer = pipe::new_pipe();
-        let (read_fd, write_fd) = self.current_process.with_lock(|mut p| {
+        let (read_fd, write_fd) = self.current_process.with_lock(|p| {
             let r = p
-                .fd_table_mut()
+                .fd_table()
                 .allocate(FileDescriptor::PipeRead(buffer.clone()))?;
-            let w = p
-                .fd_table_mut()
-                .allocate(FileDescriptor::PipeWrite(buffer))?;
+            let w = p.fd_table().allocate(FileDescriptor::PipeWrite(buffer))?;
             Ok::<_, Errno>((r, w))
         })?;
         fds.write_slice(&[read_fd, write_fd])?;
@@ -525,7 +543,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
                 let flags = FdFlags::from_raw(raw);
                 self.current_process
-                    .with_lock(|mut p| p.fd_table_mut().set_flags(fd, flags))?;
+                    .with_lock(|p| p.fd_table().set_flags(fd, flags))?;
                 Ok(0)
             }
             _ => Err(Errno::EINVAL),
@@ -560,7 +578,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         let fd = self
             .current_process
-            .with_lock(|mut p| p.fd_table_mut().allocate(FileDescriptor::UnboundUdpSocket))?;
+            .with_lock(|p| p.fd_table().allocate(FileDescriptor::UnboundUdpSocket))?;
         Ok(fd as isize)
     }
 
@@ -595,8 +613,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .try_get_socket(port)
             .ok_or(Errno::EADDRINUSE)?;
 
-        self.current_process.with_lock(|mut p| {
-            p.fd_table_mut()
+        self.current_process.with_lock(|p| {
+            p.fd_table()
                 .replace_descriptor(fd, FileDescriptor::UdpSocket(socket))
         })?;
 
@@ -727,69 +745,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         &mut self,
         flags: c_ulong,
         stack: usize,
-        _ptid: LinuxUserspaceArg<Option<*mut c_int>>,
-        _tls: c_ulong,
-        _ctid: LinuxUserspaceArg<Option<*mut c_int>>,
+        ptid: LinuxUserspaceArg<Option<*mut c_int>>,
+        tls: c_ulong,
+        ctid: LinuxUserspaceArg<Option<*mut c_int>>,
     ) -> Result<isize, Errno> {
-        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK | SIGCHLD);
-        assert!(
-            flags == expected,
-            "clone: unsupported flags {flags:#x}, only CLONE_VM|CLONE_VFORK|SIGCHLD ({expected:#x}) supported"
-        );
-
-        let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = Cpu::read_sepc();
-
-        let parent_process = self.current_process.clone();
-        let (parent_main_tid, child_name) =
-            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
-
-        let vfork_state = VforkState::new();
-
-        let child_tid = get_next_tid();
-
-        let child_page_table =
-            crate::memory::page_tables::RootPageTableHolder::new_with_kernel_mapping(false);
-        let child_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
-            child_name.clone(),
-            child_page_table,
-            Vec::new(),
-            Brk::empty(),
-            child_tid,
-        )));
-        child_process
-            .lock()
-            .set_vfork_parent(parent_process.clone());
-
-        let parent_fd_table = parent_process.with_lock(|p| p.fd_table().clone());
-        child_process.lock().set_fd_table(parent_fd_table);
-
-        let mut child_regs = parent_regs;
-        child_regs[Register::a0] = 0; // child gets 0 from clone
-        if stack != 0 {
-            child_regs[Register::sp] = stack;
+        if (flags & c_ulong::from(CLONE_THREAD)) != 0 {
+            self.clone_thread(flags, stack, ptid, tls, ctid)
+        } else {
+            self.clone_vfork(flags, stack).await
         }
-
-        let child_thread = Thread::new(
-            child_tid,
-            child_name,
-            child_regs,
-            VirtAddr::new(parent_pc + 4), // skip ecall
-            false,
-            child_process.clone(),
-            parent_main_tid,
-        );
-
-        child_thread.lock().set_vfork_state(vfork_state.clone());
-
-        child_process
-            .lock()
-            .add_thread(child_tid, Arc::downgrade(&child_thread));
-        process_table::THE.lock().add_thread(child_thread);
-
-        VforkWait::new(vfork_state).await;
-
-        Ok(child_tid.as_isize())
     }
 
     async fn execve(&mut self, filename: usize, argv: usize, _envp: usize) -> Result<isize, Errno> {
@@ -893,6 +857,122 @@ impl LinuxSyscallHandler {
             current_thread,
             current_tid,
         }
+    }
+
+    async fn clone_vfork(&mut self, flags: c_ulong, stack: usize) -> Result<isize, Errno> {
+        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK | SIGCHLD);
+        assert!(
+            flags == expected,
+            "clone_vfork: unsupported flags {flags:#x}, expected {expected:#x}"
+        );
+
+        let parent_regs = Cpu::read_trap_frame();
+        let parent_pc = Cpu::read_sepc();
+
+        let parent_process = self.current_process.clone();
+        let (parent_main_tid, child_name) =
+            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
+
+        let vfork_state = VforkState::new();
+        let child_tid = get_next_tid();
+
+        let child_page_table =
+            crate::memory::page_tables::RootPageTableHolder::new_with_kernel_mapping(false);
+        let child_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
+            child_name.clone(),
+            child_page_table,
+            Vec::new(),
+            Brk::empty(),
+            child_tid,
+        )));
+        child_process
+            .lock()
+            .set_vfork_parent(parent_process.clone());
+
+        let parent_fd_table = parent_process.with_lock(|p| p.fd_table().clone());
+        child_process.lock().set_fd_table(parent_fd_table);
+
+        let mut child_regs = parent_regs;
+        child_regs[Register::a0] = 0;
+        if stack != 0 {
+            child_regs[Register::sp] = stack;
+        }
+
+        let child_thread = Thread::new(
+            child_tid,
+            child_name,
+            child_regs,
+            VirtAddr::new(parent_pc + 4),
+            false,
+            child_process.clone(),
+            parent_main_tid,
+        );
+
+        child_thread.lock().set_vfork_state(vfork_state.clone());
+
+        child_process
+            .lock()
+            .add_thread(child_tid, Arc::downgrade(&child_thread));
+        process_table::THE.lock().add_thread(child_thread);
+
+        VforkWait::new(vfork_state).await;
+
+        Ok(child_tid.as_isize())
+    }
+
+    fn clone_thread(
+        &mut self,
+        flags: c_ulong,
+        stack: usize,
+        ptid: LinuxUserspaceArg<Option<*mut c_int>>,
+        tls: c_ulong,
+        ctid: LinuxUserspaceArg<Option<*mut c_int>>,
+    ) -> Result<isize, Errno> {
+        let parent_regs = Cpu::read_trap_frame();
+        let parent_pc = Cpu::read_sepc();
+
+        let parent_process = self.current_process.clone();
+        let (parent_main_tid, child_name) =
+            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
+
+        let child_tid = get_next_tid();
+
+        let mut child_regs = parent_regs;
+        child_regs[Register::a0] = 0;
+        if stack != 0 {
+            child_regs[Register::sp] = stack;
+        }
+        if (flags & c_ulong::from(CLONE_SETTLS)) != 0 {
+            child_regs[Register::tp] = usize::try_from(tls).expect("tls fits in usize");
+        }
+
+        let child_thread = Thread::new(
+            child_tid,
+            child_name,
+            child_regs,
+            VirtAddr::new(parent_pc + 4),
+            false,
+            parent_process.clone(),
+            parent_main_tid,
+        );
+
+        if (flags & c_ulong::from(CLONE_CHILD_CLEARTID)) != 0 {
+            child_thread.lock().set_clear_child_tid((&ctid).into());
+        }
+
+        parent_process.with_lock(|mut p| {
+            p.add_thread(child_tid, Arc::downgrade(&child_thread));
+        });
+
+        if (flags & c_ulong::from(CLONE_PARENT_SETTID)) != 0 {
+            ptid.write_if_not_none(
+                c_int::try_from(child_tid.as_isize()).expect("tid fits in c_int"),
+            )?;
+        }
+
+        process_table::THE.lock().add_thread(child_thread);
+
+        Ok(child_tid.as_isize())
     }
 
     fn validate_poll_timeout(to: Option<timespec>) {
