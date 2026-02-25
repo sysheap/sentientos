@@ -49,6 +49,7 @@ linux_syscalls! {
     SYSCALL_NR_BRK => brk(brk: c_ulong);
     SYSCALL_NR_CLONE => clone(flags: c_ulong, stack: usize, ptid: Option<*mut c_int>, tls: c_ulong, ctid: Option<*mut c_int>);
     SYSCALL_NR_CLOSE => close(fd: c_int);
+    SYSCALL_NR_DUP3 => dup3(oldfd: c_int, newfd: c_int, flags: c_int);
     SYSCALL_NR_EXECVE => execve(filename: usize, argv: usize, envp: usize);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
@@ -478,6 +479,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         self.current_process
             .with_lock(|mut p| p.fd_table_mut().close(fd))?;
         Ok(0)
+    }
+
+    async fn dup3(&mut self, oldfd: c_int, newfd: c_int, flags: c_int) -> Result<isize, Errno> {
+        let result = self
+            .current_process
+            .with_lock(|mut p| p.fd_table_mut().dup_to(oldfd, newfd, flags))?;
+        Ok(result as isize)
     }
 
     async fn pipe2(

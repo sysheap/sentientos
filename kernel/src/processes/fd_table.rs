@@ -167,6 +167,24 @@ impl FdTable {
         Ok(())
     }
 
+    pub fn dup_to(&mut self, oldfd: RawFd, newfd: RawFd, flags: i32) -> Result<RawFd, Errno> {
+        if oldfd == newfd {
+            return Err(Errno::EINVAL);
+        }
+        let entry = self.table.get(&oldfd).ok_or(Errno::EBADF)?.clone();
+        if let Some(old_entry) = self.table.remove(&newfd) {
+            old_entry.descriptor.on_close();
+        }
+        self.table.insert(
+            newfd,
+            FdEntry {
+                descriptor: entry.descriptor,
+                flags: FdFlags::from_raw(flags),
+            },
+        );
+        Ok(newfd)
+    }
+
     pub fn close(&mut self, fd: RawFd) -> Result<FdEntry, Errno> {
         let entry = self.table.remove(&fd).ok_or(Errno::EBADF)?;
         entry.descriptor.on_close();
