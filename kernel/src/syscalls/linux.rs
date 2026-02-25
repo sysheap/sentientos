@@ -755,6 +755,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             .lock()
             .set_vfork_parent(parent_process.clone());
 
+        let parent_fd_table = parent_process.with_lock(|p| p.fd_table().clone());
+        child_process.lock().set_fd_table(parent_fd_table);
+
         let mut child_regs = parent_regs;
         child_regs[Register::a0] = 0; // child gets 0 from clone
         if stack != 0 {
@@ -841,6 +844,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             loaded.brk,
             self.current_thread.lock().get_tid(),
         )));
+
+        let mut inherited_fd_table = self.get_process().with_lock(|p| p.fd_table().clone());
+        inherited_fd_table.close_cloexec_fds();
+        new_process.lock().set_fd_table(inherited_fd_table);
 
         let current_thread = self.current_thread.clone();
         let old_process = current_thread.lock().process();

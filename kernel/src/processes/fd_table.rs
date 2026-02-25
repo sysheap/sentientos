@@ -32,7 +32,6 @@ impl FdFlags {
         Self(raw & ((O_NONBLOCK | O_CLOEXEC) as i32))
     }
 
-    #[allow(dead_code)]
     pub fn is_cloexec(self) -> bool {
         (self.0 & O_CLOEXEC as i32) != 0
     }
@@ -211,7 +210,6 @@ impl FdTable {
             .ok_or(Errno::EBADF)
     }
 
-    #[allow(dead_code)]
     pub fn close_cloexec_fds(&mut self) {
         let cloexec_fds: Vec<RawFd> = self
             .table
