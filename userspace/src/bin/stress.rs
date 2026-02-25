@@ -1,8 +1,5 @@
-use std::{env, process::exit, vec::Vec};
+use std::{env, process::exit};
 use userspace::spawn::spawn;
-
-extern crate alloc;
-extern crate userspace;
 
 const DEFAULT_INSTANCES: usize = 32;
 
@@ -26,16 +23,14 @@ fn main() {
     };
 
     println!("Starting loop {} times", instances);
-    let mut pids = Vec::with_capacity(instances);
+    let mut children = Vec::with_capacity(instances);
     for _ in 0..instances {
-        let pid = spawn("loop", &[]).expect("Process must be successfully startable");
-        pids.push(pid);
+        let child = spawn("loop", &[]).expect("Process must be successfully startable");
+        children.push(child);
     }
 
-    for pid in pids {
-        unsafe {
-            libc::waitpid(pid, core::ptr::null_mut(), 0);
-        }
+    for mut child in children {
+        let _ = child.wait();
     }
 
     println!("Done!");
