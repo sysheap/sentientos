@@ -12,4 +12,3 @@ forced-target = "riscv64gc-unknown-linux-musl"
 
 [dependencies]
 common = { path = "../common" }
-libc = "0.2"
