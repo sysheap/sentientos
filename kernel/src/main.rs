@@ -73,7 +73,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     QEMU_UART.lock().init();
 
-    info!("Hello World from SentientOS!\n");
+    info!("Hello World from Solaya!\n");
     info!("Device Tree Pointer: {:p}", device_tree_pointer);
 
     let version = sbi::extensions::base_extension::sbi_get_spec_version();

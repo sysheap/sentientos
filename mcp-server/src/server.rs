@@ -95,7 +95,7 @@ pub struct RunSystemTestsParams {
 #[tool_router]
 impl QemuMcpServer {
     #[tool(
-        description = "Boot QEMU with the SentientOS kernel. Returns boot log. Errors if already running unless force=true."
+        description = "Boot QEMU with the Solaya kernel. Returns boot log. Errors if already running unless force=true."
     )]
     async fn boot_qemu(
         &self,
@@ -179,7 +179,7 @@ impl QemuMcpServer {
     }
 
     #[tool(
-        description = "Send a shell command to SentientOS. Waits for shell prompt and returns output."
+        description = "Send a shell command to Solaya. Waits for shell prompt and returns output."
     )]
     async fn send_command(
         &self,
@@ -337,7 +337,7 @@ impl ServerHandler for QemuMcpServer {
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation::from_build_env(),
             instructions: Some(
-                "MCP server for interacting with SentientOS kernel running in QEMU. \
+                "MCP server for interacting with Solaya kernel running in QEMU. \
                  Use boot_qemu to start, then send_command to interact, \
                  and shutdown_qemu when done. build_kernel and run_system_tests \
                  handle the build/test cycle."

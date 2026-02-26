@@ -166,7 +166,7 @@ The `./qemu_wrapper.sh` script provides flags for debugging:
 |------|-------------|
 | `--gdb [PORT]` | Enable GDB server (default: dynamic port, written to `.gdb-port`) |
 | `--wait` | Pause CPU until GDB attaches |
-| `--log` | Log QEMU events to `/tmp/sentientos.log` |
+| `--log` | Log QEMU events to `/tmp/solaya.log` |
 | `--net [PORT]` | Enable VirtIO network (default: dynamic port) |
 | `--smp` | Enable all CPU cores |
 | `--capture` | Capture network traffic to `network.pcap` |

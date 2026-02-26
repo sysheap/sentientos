@@ -40,7 +40,7 @@ pub struct QemuOptions {
 
 impl Default for QemuOptions {
     fn default() -> Self {
-        let enable_gdb = std::env::var("SENTIENTOS_ENABLE_GDB").is_ok();
+        let enable_gdb = std::env::var("SOLAYA_ENABLE_GDB").is_ok();
         Self {
             add_network_card: false,
             use_smp: true,
@@ -126,13 +126,11 @@ impl QemuInstance {
             stdout = stdout.with_timeout(Duration::from_secs(3600));
         }
 
-        stdout
-            .assert_read_until("Hello World from SentientOS!")
-            .await?;
+        stdout.assert_read_until("Hello World from Solaya!").await?;
         stdout.assert_read_until("kernel_init done!").await?;
         stdout.assert_read_until("init process started").await?;
         stdout
-            .assert_read_until("### SeSH - Sentient Shell ###")
+            .assert_read_until("### SoSH - Solaya Shell ###")
             .await?;
         stdout.assert_read_until(PROMPT).await?;
 

@@ -73,7 +73,7 @@ impl QemuInstance {
 pub struct QemuOptions {
     add_network_card: bool,  // Enable VirtIO network
     use_smp: bool,           // Enable multi-core (default: true)
-    enable_gdb: bool,        // Enable GDB server (auto-set by SENTIENTOS_ENABLE_GDB env var)
+    enable_gdb: bool,        // Enable GDB server (auto-set by SOLAYA_ENABLE_GDB env var)
 }
 
 // Usage
@@ -100,10 +100,10 @@ Reads from stdout until finding the needle string.
 ### Boot Sequence
 
 QemuInstance::start() automatically waits for:
-1. "Hello World from SentientOS!"
+1. "Hello World from Solaya!"
 2. "kernel_init done!"
 3. "init process started"
-4. "### SeSH - Sentient Shell ###"
+4. "### SoSH - Solaya Shell ###"
 5. Shell prompt ("$ ")
 
 ### Example Tests
@@ -112,8 +112,8 @@ QemuInstance::start() automatically waits for:
 ```rust
 #[tokio::test]
 async fn execute_program() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
-    let output = sentientos.run_prog("prog1").await?;
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
     Ok(())
 }
@@ -123,9 +123,9 @@ async fn execute_program() -> anyhow::Result<()> {
 ```rust
 #[tokio::test]
 async fn sleep() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
+    let mut solaya = QemuInstance::start().await?;
     let start = Instant::now();
-    sentientos.run_prog("sleep 1").await?;
+    solaya.run_prog("sleep 1").await?;
     assert!(start.elapsed() >= Duration::from_secs(1));
     Ok(())
 }
@@ -136,17 +136,17 @@ async fn sleep() -> anyhow::Result<()> {
 #[file_serial]  // Prevent concurrent network tests
 #[tokio::test]
 async fn udp() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start_with(
+    let mut solaya = QemuInstance::start_with(
         QemuOptions::default().add_network_card(true)
     ).await?;
 
-    sentientos.run_prog_waiting_for("udp", "Listening").await?;
+    solaya.run_prog_waiting_for("udp", "Listening").await?;
 
     let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
     socket.connect("127.0.0.1:1234").await?;
     socket.send(b"test").await?;
 
-    sentientos.stdout().assert_read_until("test").await?;
+    solaya.stdout().assert_read_until("test").await?;
     Ok(())
 }
 ```
@@ -155,9 +155,9 @@ async fn udp() -> anyhow::Result<()> {
 ```rust
 #[tokio::test]
 async fn ctrl_c() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
-    sentientos.run_prog_waiting_for("loop", "looping").await?;
-    sentientos.ctrl_c_and_assert_prompt().await?;
+    let mut solaya = QemuInstance::start().await?;
+    solaya.run_prog_waiting_for("loop", "looping").await?;
+    solaya.ctrl_c_and_assert_prompt().await?;
     Ok(())
 }
 ```
@@ -169,9 +169,9 @@ Add to `system-tests/src/tests/basics.rs`:
 ```rust
 #[tokio::test]
 async fn my_quick_test() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
+    let mut solaya = QemuInstance::start().await?;
     // Your test code here
-    let output = sentientos.run_prog("myprogram").await?;
+    let output = solaya.run_prog("myprogram").await?;
     println!("Output: {}", output);
     Ok(())
 }
@@ -289,7 +289,7 @@ just stress-system-test  # Run all tests 5x
 
 ### How It Works
 
-- **Env var `SENTIENTOS_ENABLE_GDB=1`** makes all `QemuInstance::start()` calls pass `--gdb` to QEMU and use a 1-hour `ReadAsserter` timeout (instead of 30s)
+- **Env var `SOLAYA_ENABLE_GDB=1`** makes all `QemuInstance::start()` calls pass `--gdb` to QEMU and use a 1-hour `ReadAsserter` timeout (instead of 30s)
 - **Nextest profile `deadlock-hunt`** (`system-tests/.config/nextest.toml`) sets 1-hour slow-timeout and `test-threads = 1` (sequential execution required — `.gdb-port` file is shared)
 - **`.gdb-port`** is written by `qemu_wrapper.sh` when `--gdb` is passed. The GDB MCP server reads this file automatically.
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-SentientOS uses Linux-compatible syscalls exclusively. All syscall handlers are async, enabling blocking operations (e.g. nanosleep, read) without blocking the kernel.
+Solaya uses Linux-compatible syscalls exclusively. All syscall handlers are async, enabling blocking operations (e.g. nanosleep, read) without blocking the kernel.
 
 ## Syscall Dispatch
 
@@ -38,7 +38,7 @@ fn handle_syscall() {
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
 | getppid | | Get parent process ID |
 | gettid | | Get thread ID |
-| ioctl | fd, op, arg | Device control (+ SentientOS extensions, FIONBIO for sockets) |
+| ioctl | fd, op, arg | Device control (+ Solaya extensions, FIONBIO for sockets) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
 | munmap | addr, len | Unmap memory |
 | nanosleep | duration, rem | Sleep |
@@ -77,7 +77,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
 When a syscall is invoked, `LinuxSyscallHandler::new()` captures the current thread, process, and TID from the scheduler at syscall entry. These fields are then directly accessible to all syscall implementations without additional indirection.
 
-### SentientOS ioctl Extensions
+### Solaya ioctl Extensions
 
 Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspace wrappers defined in `common/src/ioctl.rs`.
 
@@ -155,6 +155,6 @@ trap_frame[Register::a0] = ret as usize;
 | kernel/src/syscalls/linux.rs | Linux syscall implementations |
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
-| common/src/ioctl.rs | SentientOS ioctl constants + userspace wrappers |
+| common/src/ioctl.rs | Solaya ioctl constants + userspace wrappers |
 | headers/src/syscall_types.rs | Syscall type definitions |
 | headers/src/errno.rs | Error codes |

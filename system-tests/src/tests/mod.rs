@@ -4,7 +4,7 @@ mod coreutils;
 mod net;
 mod panic;
 mod process_relation;
-mod sesh;
 mod signals;
 mod sleep;
+mod sosh;
 mod stress;
