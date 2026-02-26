@@ -85,6 +85,7 @@ pub struct QemuInstance {
     stdin: ChildStdin,
     stdout: ReadAsserter<ChildStdout>,
     network_port: Option<u16>,
+    gdb_port: Option<u16>,
 }
 
 impl QemuInstance {
@@ -134,11 +135,20 @@ impl QemuInstance {
             .await?;
         stdout.assert_read_until(PROMPT).await?;
 
+        let gdb_port = if gdb_enabled {
+            std::fs::read_to_string(root.join(".gdb-port"))
+                .ok()
+                .and_then(|s| s.trim().parse().ok())
+        } else {
+            None
+        };
+
         Ok(Self {
             instance,
             stdin,
             stdout,
             network_port,
+            gdb_port,
         })
     }
 
@@ -152,6 +162,10 @@ impl QemuInstance {
 
     pub fn network_port(&self) -> Option<u16> {
         self.network_port
+    }
+
+    pub fn gdb_port(&self) -> Option<u16> {
+        self.gdb_port
     }
 
     pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String> {

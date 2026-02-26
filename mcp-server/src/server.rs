@@ -76,6 +76,8 @@ pub struct BootParams {
     pub smp: Option<bool>,
     #[schemars(description = "Force restart if already running")]
     pub force: Option<bool>,
+    #[schemars(description = "Enable GDB debugging. Defaults to true")]
+    pub gdb: Option<bool>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -135,7 +137,8 @@ impl QemuMcpServer {
 
         let options = QemuOptions::default()
             .add_network_card(params.network.unwrap_or(false))
-            .use_smp(params.smp.unwrap_or(true));
+            .use_smp(params.smp.unwrap_or(true))
+            .enable_gdb(params.gdb.unwrap_or(true));
 
         // Release the lock during the long boot so other tools can check status
         drop(guard);
@@ -147,15 +150,19 @@ impl QemuMcpServer {
         .map_err(|_| mcp_err("Timed out waiting for QEMU to boot (15s)"))?
         .map_err(|e| mcp_err(format!("Failed to boot QEMU: {e}")))?;
 
-        let port_info = instance
+        let net_info = instance
             .network_port()
             .map(|p| format!(" Network port: {p}."))
+            .unwrap_or_default();
+        let gdb_info = instance
+            .gdb_port()
+            .map(|p| format!(" GDB port: {p}."))
             .unwrap_or_default();
 
         let mut guard = lock_qemu(&self.qemu).await?;
         *guard = Some(instance);
 
-        text_result(format!("QEMU booted successfully.{port_info}"))
+        text_result(format!("QEMU booted successfully.{net_info}{gdb_info}"))
     }
 
     #[tool(
@@ -191,11 +198,15 @@ impl QemuMcpServer {
         let guard = lock_qemu(&self.qemu).await?;
         match guard.as_ref() {
             Some(instance) => {
-                let port_info = instance
+                let net_info = instance
                     .network_port()
                     .map(|p| format!(", network port: {p}"))
                     .unwrap_or_default();
-                text_result(format!("QEMU is running{port_info}"))
+                let gdb_info = instance
+                    .gdb_port()
+                    .map(|p| format!(", GDB port: {p}"))
+                    .unwrap_or_default();
+                text_result(format!("QEMU is running{net_info}{gdb_info}"))
             }
             None => text_result("QEMU is not running"),
         }
