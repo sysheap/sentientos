@@ -83,8 +83,8 @@ Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspa
 
 | Command | Value | Description |
 |---------|-------|-------------|
-| SENTIENT_PANIC | 0x5301 | Trigger kernel panic from userspace |
-| SENTIENT_LIST_PROGRAMS | 0x5302 | Print list of available programs |
+| SOLAYA_PANIC | 0x5301 | Trigger kernel panic from userspace |
+| SOLAYA_LIST_PROGRAMS | 0x5302 | Print list of available programs |
 
 ## Userspace Pointer Validation
 

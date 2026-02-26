@@ -25,7 +25,7 @@ use crate::{
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 use common::{
-    ioctl::{SENTIENT_LIST_PROGRAMS, SENTIENT_PANIC},
+    ioctl::{SOLAYA_LIST_PROGRAMS, SOLAYA_PANIC},
     pid::Tid,
     syscalls::trap_frame::{Register, TrapFrame},
 };
@@ -417,14 +417,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             FileDescriptor::Stdout | FileDescriptor::Stderr if op == TIOCGWINSZ => {
                 Err(Errno::ENOTTY)
             }
-            FileDescriptor::Stdout if op == SENTIENT_LIST_PROGRAMS => {
+            FileDescriptor::Stdout if op == SOLAYA_LIST_PROGRAMS => {
                 for (name, _) in PROGRAMS {
                     print!("{name} ");
                 }
                 println!();
                 Ok(0)
             }
-            FileDescriptor::Stdout if op == SENTIENT_PANIC => {
+            FileDescriptor::Stdout if op == SOLAYA_PANIC => {
                 panic!("Userspace triggered kernel panic");
             }
             FileDescriptor::UdpSocket(_) | FileDescriptor::UnboundUdpSocket if op == FIONBIO => {
