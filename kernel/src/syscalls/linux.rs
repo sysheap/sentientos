@@ -8,7 +8,7 @@ use crate::{
         elf::ElfFile,
         util::{ByteInterpretable, UsizeExt},
     },
-    memory::{PAGE_SIZE, PhysAddr, VirtAddr, page::Pages, page_tables::XWRMode},
+    memory::{PAGE_SIZE, VirtAddr, page::Pages, page_tables::XWRMode},
     net::{self, arp, sockets::Port, udp::UdpHeader},
     print, println,
     processes::{
@@ -348,25 +348,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         if length == 0 {
             return Err(Errno::EINVAL);
         }
-        // Handle special PROT_NONE case and map it to the null pointer
-        if prot == PROT_NONE {
-            return self.current_process.with_lock(|mut p| {
-                if p.get_page_table()
-                    .is_mapped(VirtAddr::new(addr)..VirtAddr::new(addr + length))
-                {
-                    return Err(Errno::EEXIST);
-                }
-                p.get_page_table_mut().map_userspace(
-                    VirtAddr::new(addr),
-                    PhysAddr::new(0),
-                    length / PAGE_SIZE,
-                    XWRMode::ReadOnly,
-                    "PROT_NONE".into(),
-                );
-                Ok(addr as isize)
-            });
-        }
         let permission = match prot {
+            PROT_NONE => XWRMode::ReadOnly,
             PROT_EXEC => XWRMode::ExecuteOnly,
             PROT_READ => XWRMode::ReadOnly,
             x if x == (PROT_READ | PROT_WRITE) => XWRMode::ReadWrite,
