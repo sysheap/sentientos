@@ -1,7 +1,7 @@
 cargo-features = ["per-package-target"]
 
 [package]
-name = "sentient_os"
+name = "solaya"
 edition = "2024"
 version.workspace = true
 authors.workspace = true
