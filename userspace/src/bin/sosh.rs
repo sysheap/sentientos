@@ -11,7 +11,7 @@ extern crate userspace;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
-    println!("### SeSH - Sentient Shell ###");
+    println!("### SoSH - Solaya Shell ###");
     println!("Type 'help' for a list of available commands.");
     loop {
         print!("$ ");

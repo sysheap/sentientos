@@ -1,6 +1,6 @@
-# SentientOS
+# Solaya
 
-[![ci](https://github.com/sysheap/sentientos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sysheap/sentientos/actions/workflows/ci.yml)
+[![ci](https://github.com/sysheap/solaya/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sysheap/solaya/actions/workflows/ci.yml)
 
 A RISC-V 64-bit hobby operating system kernel written in Rust. No third-party runtime dependencies — if third-party crates are used, they are build-time only.
 
@@ -22,7 +22,7 @@ Inspired by [SerenityOS](https://github.com/SerenityOS/serenity), this project e
 
 ### Userspace
 
-- **Shell (SeSH)** — Command parsing, program execution with arguments, background processes (`&`), built-in help
+- **Shell (SoSH)** — Command parsing, program execution with arguments, background processes (`&`), built-in help
 - **12 programs** — init, shell, UDP networking, sleep, stress testing, game board, and various test utilities
 - Programs are compiled against musl libc and embedded directly into the kernel binary
 
@@ -61,7 +61,7 @@ sudo apt install direnv
 # Add direnv hook to your shell (see https://direnv.net/docs/hook.html for non-bash shells)
 echo -e 'eval "$(direnv hook bash)"\n' >> ~/.bashrc
 
-# In the SentientOS repository
+# In the Solaya repository
 direnv allow
 # Re-enter the directory — nix will pull all dependencies automatically
 ```

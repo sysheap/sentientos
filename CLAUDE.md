@@ -1,4 +1,4 @@
-# SentientOS - AI Agent Reference
+# Solaya - AI Agent Reference
 
 RISC-V 64-bit hobby OS kernel written in Rust. No third-party runtime dependencies.
 
@@ -95,8 +95,8 @@ Add to `system-tests/src/tests/basics.rs` or create new test file:
 ```rust
 #[tokio::test]
 async fn my_test() -> anyhow::Result<()> {
-    let mut sentientos = QemuInstance::start().await?;
-    let output = sentientos.run_prog("prog1").await?;
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("prog1").await?;
     assert_eq!(output, "expected");
     Ok(())
 }
@@ -135,7 +135,7 @@ See `doc/ai/OVERVIEW.md` for comprehensive subsystem documentation including:
 
 ## MCP Server
 
-The MCP server (`mcp-server/`) lets AI agents interact with SentientOS running in QEMU over the Model Context Protocol.
+The MCP server (`mcp-server/`) lets AI agents interact with Solaya running in QEMU over the Model Context Protocol.
 
 ### Build & Run
 ```bash
@@ -147,7 +147,7 @@ just mcp-server                    # Build
 
 | Tool | Description |
 |------|-------------|
-| `boot_qemu` | Start QEMU with SentientOS. Options: network, smp, force. |
+| `boot_qemu` | Start QEMU with Solaya. Options: network, smp, force. |
 | `shutdown_qemu` | Send exit to shell and wait for QEMU to exit. |
 | `get_status` | Check if QEMU is running. |
 | `send_command` | Send shell command, return output. |

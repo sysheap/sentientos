@@ -37,7 +37,7 @@ Merging it into the root workspace (with a `default-members` exclude so
 simplify CI.
 
 **R-08 — Add a minimal userspace syscall wrapper crate.**
-Userspace programs call libc directly. A thin `sentientos-sys` crate with
+Userspace programs call libc directly. A thin `solaya-sys` crate with
 type-safe wrappers (e.g. `fn send_udp(fd: Fd, buf: &[u8]) -> Result<usize>`)
 would reduce boilerplate and catch misuse at compile time.
 

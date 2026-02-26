@@ -2,7 +2,7 @@
 
 ## Overview
 
-SentientOS is a RISC-V 64-bit hobby OS kernel written in Rust. Key characteristics:
+Solaya is a RISC-V 64-bit hobby OS kernel written in Rust. Key characteristics:
 - Target: riscv64gc-unknown-none-elf (no_std)
 - Virtual memory: Sv39 (3-level page tables)
 - Multi-core (SMP) support via RISC-V SBI
@@ -30,7 +30,7 @@ kernel/src/
   logging/             # Log macros
 
 userspace/src/
-  bin/                 # User programs (init, sesh, etc.)
+  bin/                 # User programs (init, sosh, etc.)
   lib.rs               # Syscall wrappers
 ```
 

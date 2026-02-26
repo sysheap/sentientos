@@ -2,7 +2,7 @@
 
 ## Overview
 
-Interrupt handling in SentientOS:
+Interrupt handling in Solaya:
 1. **Trap Entry** - Assembly saves registers, dispatches to handler
 2. **PLIC** - Platform Level Interrupt Controller for external interrupts
 3. **Timer** - Scheduling timer via SBI

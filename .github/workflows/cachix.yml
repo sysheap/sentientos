@@ -23,6 +23,6 @@ jobs:
         env:
           CACHE_NAME: ${{ vars.CACHIX_CACHE_NAME }}
         run: |
-          nix develop --profile /tmp/sentientos-dev-profile -c true
-          cachix push "$CACHE_NAME" /tmp/sentientos-dev-profile
-          rm -f /tmp/sentientos-dev-profile
+          nix develop --profile /tmp/solaya-dev-profile -c true
+          cachix push "$CACHE_NAME" /tmp/solaya-dev-profile
+          rm -f /tmp/solaya-dev-profile

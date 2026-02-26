@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --gdb [PORT]   Enable GDB server (default: dynamic port)"
-            echo "  --log          Log qemu events to /tmp/sentientos.log"
+            echo "  --log          Log qemu events to /tmp/solaya.log"
             echo "  --capture      Capture network traffic into network.pcap"
             echo "  --net [PORT]   Enable network card with host port PORT (default: dynamic)"
             echo "  -h, --help     Show this help message"
@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --log)
-            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/sentientos.log"
+            QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/solaya.log"
             shift
             ;;
         --net)

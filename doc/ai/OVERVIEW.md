@@ -1,4 +1,4 @@
-# SentientOS AI Documentation Index
+# Solaya AI Documentation Index
 
 Quick reference to find detailed documentation. Each file covers a specific subsystem.
 
