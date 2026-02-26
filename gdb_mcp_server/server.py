@@ -1,7 +1,8 @@
+import os
 import signal
 
 from mcp.server.fastmcp import FastMCP
-from .gdb_session import GDBSession, DEFAULT_KERNEL_PATH
+from .gdb_session import GDBSession, DEFAULT_KERNEL_PATH, find_project_root
 
 mcp = FastMCP("gdb")
 session = GDBSession()
@@ -85,6 +86,10 @@ def gdb_connect(
         port = session.read_gdb_port()
         if port is None:
             return "Error: No port specified and .gdb-port not found. Is QEMU running?"
+
+    root = find_project_root()
+    if root and not os.path.isabs(kernel_path):
+        kernel_path = str(root / kernel_path)
 
     def inner():
         try:
