@@ -409,7 +409,25 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
-    async fn mprotect(&mut self, _addr: usize, _len: usize, _prot: c_int) -> Result<isize, Errno> {
+    async fn mprotect(&mut self, addr: usize, len: usize, prot: c_int) -> Result<isize, Errno> {
+        if !addr.is_multiple_of(PAGE_SIZE) || len == 0 {
+            return Err(Errno::EINVAL);
+        }
+        let prot = c_uint::try_from(prot).map_err(|_| Errno::EINVAL)?;
+        let size = len.next_multiple_of(PAGE_SIZE);
+        let mode = match prot {
+            PROT_NONE => XWRMode::ReadOnly,
+            PROT_READ => XWRMode::ReadOnly,
+            PROT_EXEC => XWRMode::ExecuteOnly,
+            x if x == (PROT_READ | PROT_WRITE) => XWRMode::ReadWrite,
+            x if x == (PROT_READ | PROT_EXEC) => XWRMode::ReadExecute,
+            x if x == (PROT_READ | PROT_WRITE | PROT_EXEC) => XWRMode::ReadWriteExecute,
+            _ => return Err(Errno::EINVAL),
+        };
+        self.current_process.with_lock(|mut p| {
+            p.get_page_table_mut()
+                .mprotect(VirtAddr::new(addr), size, mode);
+        });
         Ok(0)
     }
 

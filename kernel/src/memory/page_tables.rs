@@ -276,6 +276,57 @@ impl RootPageTableHolder {
         Some(third_level_entry)
     }
 
+    fn get_page_table_entry_for_address_mut(
+        &mut self,
+        address: VirtAddr,
+    ) -> Option<&mut PageTableEntry> {
+        let root_page_table = self.table_mut();
+
+        let first_level_entry =
+            root_page_table.get_entry_for_virtual_address_mut(address.as_usize(), 2);
+        if !first_level_entry.get_validity() {
+            return None;
+        }
+
+        // SAFETY: Entry is valid and non-leaf; &mut self guarantees exclusive access.
+        let second_level_entry = unsafe { &mut *first_level_entry.get_target_page_table() }
+            .get_entry_for_virtual_address_mut(address.as_usize(), 1);
+        if !second_level_entry.get_validity() {
+            return None;
+        }
+
+        // SAFETY: Same as above.
+        let third_level_entry = unsafe { &mut *second_level_entry.get_target_page_table() }
+            .get_entry_for_virtual_address_mut(address.as_usize(), 0);
+        if !third_level_entry.get_validity() {
+            return None;
+        }
+
+        Some(third_level_entry)
+    }
+
+    pub fn mprotect(&mut self, addr: VirtAddr, size: usize, mode: XWRMode) {
+        assert!(addr.is_page_aligned());
+        assert!(size > 0 && size.is_multiple_of(PAGE_SIZE));
+
+        let mut offset = 0;
+        while offset < size {
+            let page_addr = addr + offset;
+            let pte = self
+                .get_page_table_entry_for_address_mut(page_addr)
+                .expect("mprotect: page not mapped");
+            pte.set_xwr_mode(mode);
+            offset += PAGE_SIZE;
+        }
+
+        for entry in &mut self.already_mapped {
+            if entry.virtual_range.start <= addr && addr < entry.virtual_range.end {
+                entry.privileges = mode;
+                break;
+            }
+        }
+    }
+
     pub fn map(
         &mut self,
         virtual_address_start: VirtAddr,
