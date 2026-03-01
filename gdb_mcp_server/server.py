@@ -1,8 +1,26 @@
+import signal
+
 from mcp.server.fastmcp import FastMCP
 from .gdb_session import GDBSession, DEFAULT_KERNEL_PATH
 
 mcp = FastMCP("gdb")
 session = GDBSession()
+
+
+class ToolTimeout(Exception):
+    pass
+
+
+def _with_timeout(func, timeout_sec):
+    def handler(signum, frame):
+        raise ToolTimeout(f"Timed out after {timeout_sec}s")
+    old = signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout_sec)
+    try:
+        return func()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 
 def _format_responses(responses: list[dict]) -> str:
@@ -34,19 +52,23 @@ def _format_error(responses: list[dict]) -> str | None:
 
 
 def _run_mi(command: str, timeout_sec: int = 30) -> str:
-    responses = session.execute_mi(command, timeout_sec=timeout_sec)
-    err = _format_error(responses)
-    if err:
-        return f"Error: {err}"
-    return _format_responses(responses)
+    def inner():
+        responses = session.execute_mi(command, timeout_sec=timeout_sec)
+        err = _format_error(responses)
+        if err:
+            return f"Error: {err}"
+        return _format_responses(responses)
+    return _with_timeout(inner, timeout_sec + 5)
 
 
 def _run_cli(command: str, timeout_sec: int = 30) -> str:
-    responses = session.execute_cli(command, timeout_sec=timeout_sec)
-    err = _format_error(responses)
-    if err:
-        return f"Error: {err}"
-    return _format_responses(responses)
+    def inner():
+        responses = session.execute_cli(command, timeout_sec=timeout_sec)
+        err = _format_error(responses)
+        if err:
+            return f"Error: {err}"
+        return _format_responses(responses)
+    return _with_timeout(inner, timeout_sec + 5)
 
 
 @mcp.tool()
@@ -64,20 +86,27 @@ def gdb_connect(
         if port is None:
             return "Error: No port specified and .gdb-port not found. Is QEMU running?"
 
+    def inner():
+        try:
+            startup = session.start(gdb_path)
+            responses = session.connect_remote(port, kernel_path)
+            all_responses = startup + responses
+        except Exception as e:
+            session.stop()
+            return f"Error starting GDB: {e}"
+
+        err = _format_error(all_responses)
+        if err:
+            session.stop()
+            return f"Error connecting: {err}"
+
+        return f"Connected to QEMU on port {port} with kernel {kernel_path}"
+
     try:
-        startup = session.start(gdb_path)
-        responses = session.connect_remote(port, kernel_path)
-        all_responses = startup + responses
-    except Exception as e:
+        return _with_timeout(inner, 30)
+    except ToolTimeout:
         session.stop()
-        return f"Error starting GDB: {e}"
-
-    err = _format_error(all_responses)
-    if err:
-        session.stop()
-        return f"Error connecting: {err}"
-
-    return f"Connected to QEMU on port {port} with kernel {kernel_path}"
+        return "Error: gdb_connect timed out after 30s"
 
 
 @mcp.tool()
@@ -216,48 +245,50 @@ def gdb_frame(frame_number: int) -> str:
 def gdb_diagnose() -> str:
     """One-shot diagnostic: interrupt kernel, list all threads, get backtrace for each.
     Returns a combined report useful for diagnosing deadlocks and hangs."""
-    parts = []
+    def inner():
+        parts = []
 
-    # Interrupt the kernel
-    session.interrupt()
-    try:
-        responses = session._require_gdb().get_gdb_response(timeout_sec=5)
-        stop_info = _format_responses(responses)
-        if stop_info and stop_info != "OK":
-            parts.append(f"Stop reason: {stop_info}")
-    except Exception:
-        parts.append("Interrupt sent (no stop response received)")
+        session.interrupt()
+        try:
+            responses = session._require_gdb().get_gdb_response(timeout_sec=5)
+            stop_info = _format_responses(responses)
+            if stop_info and stop_info != "OK":
+                parts.append(f"Stop reason: {stop_info}")
+        except Exception:
+            parts.append("Interrupt sent (no stop response received)")
 
-    # Get thread list
-    thread_responses = session.execute_mi("-thread-info", timeout_sec=10)
-    err = _format_error(thread_responses)
-    if err:
-        parts.append(f"Thread list error: {err}")
+        thread_responses = session.execute_mi("-thread-info", timeout_sec=10)
+        err = _format_error(thread_responses)
+        if err:
+            parts.append(f"Thread list error: {err}")
+            return "\n\n".join(parts)
+
+        thread_ids = []
+        for r in thread_responses:
+            if r.get("type") == "result":
+                payload = r.get("payload", {})
+                threads = payload.get("threads", [])
+                for t in threads:
+                    tid = t.get("id")
+                    if tid:
+                        thread_ids.append(tid)
+
+        parts.append(f"Threads: {len(thread_ids)}")
+
+        for tid in thread_ids:
+            select_responses = session.execute_mi(f"-thread-select {tid}", timeout_sec=5)
+            select_err = _format_error(select_responses)
+            if select_err:
+                parts.append(f"--- Thread {tid} ---\nError selecting thread: {select_err}")
+                continue
+            bt_responses = session.execute_cli("bt", timeout_sec=10)
+            bt_err = _format_error(bt_responses)
+            bt_text = f"Error: {bt_err}" if bt_err else _format_responses(bt_responses)
+            parts.append(f"--- Thread {tid} ---\n{bt_text}")
+
         return "\n\n".join(parts)
 
-    # Parse thread IDs from response
-    thread_ids = []
-    for r in thread_responses:
-        if r.get("type") == "result":
-            payload = r.get("payload", {})
-            threads = payload.get("threads", [])
-            for t in threads:
-                tid = t.get("id")
-                if tid:
-                    thread_ids.append(tid)
-
-    parts.append(f"Threads: {len(thread_ids)}")
-
-    # Get backtrace for each thread
-    for tid in thread_ids:
-        select_responses = session.execute_mi(f"-thread-select {tid}", timeout_sec=5)
-        select_err = _format_error(select_responses)
-        if select_err:
-            parts.append(f"--- Thread {tid} ---\nError selecting thread: {select_err}")
-            continue
-        bt_responses = session.execute_cli("bt", timeout_sec=10)
-        bt_err = _format_error(bt_responses)
-        bt_text = f"Error: {bt_err}" if bt_err else _format_responses(bt_responses)
-        parts.append(f"--- Thread {tid} ---\n{bt_text}")
-
-    return "\n\n".join(parts)
+    try:
+        return _with_timeout(inner, 60)
+    except ToolTimeout:
+        return "Error: gdb_diagnose timed out after 60s"

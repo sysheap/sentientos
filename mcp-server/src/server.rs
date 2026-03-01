@@ -2,10 +2,12 @@ use std::{sync::Arc, time::Duration};
 
 use qemu_infra::qemu::{QemuInstance, QemuOptions, project_root};
 use rmcp::{
-    ErrorData as McpError, ServerHandler,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    ErrorData as McpError, RoleServer, ServerHandler,
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
     model::*,
-    schemars, tool, tool_handler, tool_router,
+    schemars,
+    service::RequestContext,
+    tool, tool_router,
 };
 use tokio::{io::AsyncWriteExt, process::Command, sync::Mutex};
 
@@ -50,6 +52,18 @@ fn format_command_output(label: &str, success_word: &str, output: &std::process:
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     )
+}
+
+async fn lock_qemu(
+    qemu: &Mutex<Option<QemuInstance>>,
+) -> Result<tokio::sync::MutexGuard<'_, Option<QemuInstance>>, McpError> {
+    tokio::time::timeout(Duration::from_secs(10), qemu.lock())
+        .await
+        .map_err(|_| mcp_err("Another QEMU operation is in progress, try again later."))
+}
+
+async fn run_command(mut cmd: Command) -> Result<std::process::Output, std::io::Error> {
+    cmd.kill_on_drop(true).spawn()?.wait_with_output().await
 }
 
 // --- Parameter types ---
@@ -101,12 +115,17 @@ impl QemuMcpServer {
         &self,
         Parameters(params): Parameters<BootParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
 
         if guard.is_some() {
             if params.force.unwrap_or(false) {
                 let old = guard.take().unwrap();
-                let _ = old.wait_for_qemu_to_exit().await;
+                if tokio::time::timeout(Duration::from_secs(5), old.wait_for_qemu_to_exit())
+                    .await
+                    .is_err()
+                {
+                    // Timeout: old instance dropped, kill_on_drop cleans up
+                }
             } else {
                 return Err(mcp_err(
                     "QEMU is already running. Use force=true to restart.",
@@ -117,6 +136,9 @@ impl QemuMcpServer {
         let options = QemuOptions::default()
             .add_network_card(params.network.unwrap_or(false))
             .use_smp(params.smp.unwrap_or(true));
+
+        // Release the lock during the long boot so other tools can check status
+        drop(guard);
 
         let instance = tokio::time::timeout(Duration::from_secs(180), async {
             QemuInstance::start_with(options).await
@@ -130,6 +152,7 @@ impl QemuMcpServer {
             .map(|p| format!(" Network port: {p}."))
             .unwrap_or_default();
 
+        let mut guard = lock_qemu(&self.qemu).await?;
         *guard = Some(instance);
 
         text_result(format!("QEMU booted successfully.{port_info}"))
@@ -139,7 +162,7 @@ impl QemuMcpServer {
         description = "Shutdown the running QEMU instance. Sends 'exit' to the shell and waits for QEMU to exit."
     )]
     async fn shutdown_qemu(&self) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
         let mut instance = guard
             .take()
             .ok_or_else(|| mcp_err("QEMU is not running."))?;
@@ -165,7 +188,7 @@ impl QemuMcpServer {
 
     #[tool(description = "Check if QEMU is running and return status info.")]
     async fn get_status(&self) -> Result<CallToolResult, McpError> {
-        let guard = self.qemu.lock().await;
+        let guard = lock_qemu(&self.qemu).await?;
         match guard.as_ref() {
             Some(instance) => {
                 let port_info = instance
@@ -185,7 +208,7 @@ impl QemuMcpServer {
         &self,
         Parameters(params): Parameters<SendCommandParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
         let instance = require_running(&mut guard)?;
         let output =
             tokio::time::timeout(Duration::from_secs(30), instance.run_prog(&params.command))
@@ -202,7 +225,7 @@ impl QemuMcpServer {
         &self,
         Parameters(params): Parameters<SendInputParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
         let instance = require_running(&mut guard)?;
 
         tokio::time::timeout(Duration::from_secs(10), async {
@@ -219,7 +242,7 @@ impl QemuMcpServer {
 
     #[tool(description = "Send Ctrl+C to the running program and wait for shell prompt.")]
     async fn send_ctrl_c(&self) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
         let instance = require_running(&mut guard)?;
 
         tokio::time::timeout(Duration::from_secs(5), instance.ctrl_c_and_assert_prompt())
@@ -232,7 +255,7 @@ impl QemuMcpServer {
 
     #[tool(description = "Non-blocking read of any available console output from QEMU.")]
     async fn read_output(&self) -> Result<CallToolResult, McpError> {
-        let mut guard = self.qemu.lock().await;
+        let mut guard = lock_qemu(&self.qemu).await?;
         let instance = require_running(&mut guard)?;
 
         let data = instance.stdout().read_available().await;
@@ -251,12 +274,10 @@ impl QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let root = project_root().map_err(|e| mcp_err(format!("{e}")))?;
 
-        let output = tokio::time::timeout(Duration::from_secs(90), async {
-            Command::new("just")
-                .arg("build")
-                .current_dir(&root)
-                .output()
-                .await
+        let output = tokio::time::timeout(Duration::from_secs(90), {
+            let mut cmd = Command::new("just");
+            cmd.arg("build").current_dir(&root);
+            run_command(cmd)
         })
         .await
         .map_err(|_| mcp_err("Build timed out (90s)"))?
@@ -265,12 +286,10 @@ impl QemuMcpServer {
         let mut result = format_command_output("Build", "succeeded", &output);
 
         if params.clippy.unwrap_or(false) {
-            let clippy_output = tokio::time::timeout(Duration::from_secs(90), async {
-                Command::new("just")
-                    .arg("clippy")
-                    .current_dir(&root)
-                    .output()
-                    .await
+            let clippy_output = tokio::time::timeout(Duration::from_secs(90), {
+                let mut cmd = Command::new("just");
+                cmd.arg("clippy").current_dir(&root);
+                run_command(cmd)
             })
             .await
             .map_err(|_| mcp_err("Clippy timed out (90s)"))?
@@ -294,32 +313,30 @@ impl QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let root = project_root().map_err(|e| mcp_err(format!("{e}")))?;
 
-        let output = tokio::time::timeout(Duration::from_secs(120), async {
-            match &params.test_name {
+        let output = tokio::time::timeout(Duration::from_secs(120), {
+            let cmd = match &params.test_name {
                 Some(name) => {
-                    Command::new("cargo")
-                        .args([
-                            "nextest",
-                            "run",
-                            "--release",
-                            "--manifest-path",
-                            "system-tests/Cargo.toml",
-                            "--target",
-                            "x86_64-unknown-linux-gnu",
-                            name,
-                        ])
-                        .current_dir(&root)
-                        .output()
-                        .await
+                    let mut c = Command::new("cargo");
+                    c.args([
+                        "nextest",
+                        "run",
+                        "--release",
+                        "--manifest-path",
+                        "system-tests/Cargo.toml",
+                        "--target",
+                        "x86_64-unknown-linux-gnu",
+                        name,
+                    ])
+                    .current_dir(&root);
+                    c
                 }
                 None => {
-                    Command::new("just")
-                        .arg("system-test")
-                        .current_dir(&root)
-                        .output()
-                        .await
+                    let mut c = Command::new("just");
+                    c.arg("system-test").current_dir(&root);
+                    c
                 }
-            }
+            };
+            run_command(cmd)
         })
         .await
         .map_err(|_| mcp_err("System tests timed out (120s)"))?
@@ -329,7 +346,6 @@ impl QemuMcpServer {
     }
 }
 
-#[tool_handler]
 impl ServerHandler for QemuMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
@@ -344,5 +360,38 @@ impl ServerHandler for QemuMcpServer {
                     .into(),
             ),
         }
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        let tool_name = request.name.clone();
+        let tcc = ToolCallContext::new(self, request, context);
+        tokio::time::timeout(Duration::from_secs(300), self.tool_router.call(tcc))
+            .await
+            .map_err(|_| {
+                mcp_err(format!(
+                    "Tool '{}' timed out (300s safety limit)",
+                    tool_name
+                ))
+            })?
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult {
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    fn get_tool(&self, name: &str) -> Option<Tool> {
+        self.tool_router.get(name).cloned()
     }
 }
