@@ -140,11 +140,11 @@ impl QemuMcpServer {
         // Release the lock during the long boot so other tools can check status
         drop(guard);
 
-        let instance = tokio::time::timeout(Duration::from_secs(180), async {
+        let instance = tokio::time::timeout(Duration::from_secs(15), async {
             QemuInstance::start_with(options).await
         })
         .await
-        .map_err(|_| mcp_err("Timed out waiting for QEMU to boot (180s)"))?
+        .map_err(|_| mcp_err("Timed out waiting for QEMU to boot (15s)"))?
         .map_err(|e| mcp_err(format!("Failed to boot QEMU: {e}")))?;
 
         let port_info = instance
@@ -211,9 +211,9 @@ impl QemuMcpServer {
         let mut guard = lock_qemu(&self.qemu).await?;
         let instance = require_running(&mut guard)?;
         let output =
-            tokio::time::timeout(Duration::from_secs(30), instance.run_prog(&params.command))
+            tokio::time::timeout(Duration::from_secs(20), instance.run_prog(&params.command))
                 .await
-                .map_err(|_| mcp_err("Timed out waiting for output (30s)"))?
+                .map_err(|_| mcp_err("Timed out waiting for output (20s)"))?
                 .map_err(|e| mcp_err(format!("Failed to run command: {e}")))?;
         text_result(output)
     }
@@ -274,25 +274,25 @@ impl QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let root = project_root().map_err(|e| mcp_err(format!("{e}")))?;
 
-        let output = tokio::time::timeout(Duration::from_secs(90), {
+        let output = tokio::time::timeout(Duration::from_secs(30), {
             let mut cmd = Command::new("just");
             cmd.arg("build").current_dir(&root);
             run_command(cmd)
         })
         .await
-        .map_err(|_| mcp_err("Build timed out (90s)"))?
+        .map_err(|_| mcp_err("Build timed out (30s)"))?
         .map_err(|e| mcp_err(format!("Failed to run build: {e}")))?;
 
         let mut result = format_command_output("Build", "succeeded", &output);
 
         if params.clippy.unwrap_or(false) {
-            let clippy_output = tokio::time::timeout(Duration::from_secs(90), {
+            let clippy_output = tokio::time::timeout(Duration::from_secs(30), {
                 let mut cmd = Command::new("just");
                 cmd.arg("clippy").current_dir(&root);
                 run_command(cmd)
             })
             .await
-            .map_err(|_| mcp_err("Clippy timed out (90s)"))?
+            .map_err(|_| mcp_err("Clippy timed out (30s)"))?
             .map_err(|e| mcp_err(format!("Failed to run clippy: {e}")))?;
 
             result.push_str(&format!(
@@ -313,7 +313,7 @@ impl QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let root = project_root().map_err(|e| mcp_err(format!("{e}")))?;
 
-        let output = tokio::time::timeout(Duration::from_secs(120), {
+        let output = tokio::time::timeout(Duration::from_secs(60), {
             let cmd = match &params.test_name {
                 Some(name) => {
                     let mut c = Command::new("cargo");
@@ -339,7 +339,7 @@ impl QemuMcpServer {
             run_command(cmd)
         })
         .await
-        .map_err(|_| mcp_err("System tests timed out (120s)"))?
+        .map_err(|_| mcp_err("System tests timed out (60s)"))?
         .map_err(|e| mcp_err(format!("Failed to run system tests: {e}")))?;
 
         text_result(format_command_output("Tests", "PASSED", &output))
@@ -369,14 +369,9 @@ impl ServerHandler for QemuMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let tool_name = request.name.clone();
         let tcc = ToolCallContext::new(self, request, context);
-        tokio::time::timeout(Duration::from_secs(300), self.tool_router.call(tcc))
+        tokio::time::timeout(Duration::from_secs(90), self.tool_router.call(tcc))
             .await
-            .map_err(|_| {
-                mcp_err(format!(
-                    "Tool '{}' timed out (300s safety limit)",
-                    tool_name
-                ))
-            })?
+            .map_err(|_| mcp_err(format!("Tool '{}' timed out (90s safety limit)", tool_name)))?
     }
 
     async fn list_tools(
