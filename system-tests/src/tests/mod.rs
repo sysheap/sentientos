@@ -8,3 +8,4 @@ mod signals;
 mod sleep;
 mod sosh;
 mod stress;
+mod syscall_tracer;

@@ -58,6 +58,13 @@ const LOG_FOLLOWING_MODULES: &[&str] = &["kernel::processes::scheduler"];
 // Or remove from DONT_LOG_FOLLOWING_MODULES if blocked there
 ```
 
+### Syscall Tracer
+Edit `kernel/src/syscalls/trace_config.rs` to add process names:
+```rust
+pub const TRACED_PROCESSES: &[&str] = &["prog2"];
+```
+All syscalls by those processes are logged with `[SYSCALL ENTER]` / `[SYSCALL EXIT]` lines showing syscall name, tid, formatted args, and return value or errno. Metadata is auto-generated from the `linux_syscalls!` macro — no manual table needed. `prog2` is always traced (tested in `system-tests/src/tests/syscall_tracer.rs`).
+
 ### GDB Debugging
 ```bash
 just debug        # Start QEMU + GDB in tmux
@@ -125,6 +132,7 @@ Kernel unit tests use `#[test_case]` macro (custom test framework).
 | QEMU infra | qemu-infra/src/qemu.rs |
 | MCP server | mcp-server/src/server.rs |
 | Log config | kernel/src/logging/configuration.rs |
+| Syscall tracer config | kernel/src/syscalls/trace_config.rs |
 
 ## Detailed Documentation
 

@@ -65,7 +65,7 @@ async fn execute_different_programs() -> anyhow::Result<()> {
     assert_eq!(output, "Hello from Prog1\n");
 
     let output = solaya.run_prog("prog2").await?;
-    assert_eq!(output, "Hello from Prog2\n");
+    assert!(output.contains("Hello from Prog2\n"));
 
     Ok(())
 }
