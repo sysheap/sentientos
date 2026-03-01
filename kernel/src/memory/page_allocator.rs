@@ -14,7 +14,6 @@ use core::{
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
 enum PageStatus {
-    FirstUse,
     Free,
     Used,
     Last,
@@ -22,7 +21,7 @@ enum PageStatus {
 
 impl PageStatus {
     fn is_free(&self) -> bool {
-        matches!(self, Self::FirstUse | Self::Free)
+        matches!(self, Self::Free)
     }
 }
 
@@ -78,7 +77,7 @@ impl<'a> MetadataPageAllocator<'a> {
         assert!(size_metadata + size_heap <= heap_size);
 
         metadata.iter_mut().for_each(|x| {
-            x.write(PageStatus::FirstUse);
+            x.write(PageStatus::Free);
         });
 
         // SAFETY: All elements were initialized via MaybeUninit::write above.
@@ -161,8 +160,7 @@ impl<'a> MetadataPageAllocator<'a> {
         // It is clearer to express this the current way it is
         #[allow(clippy::needless_range_loop)]
         for idx in start_idx..start_idx + number_of_pages {
-            // Initialize first used pages
-            if initialize_if_needed && self.metadata[idx] == PageStatus::FirstUse {
+            if initialize_if_needed {
                 let page = self.page_idx_to_pointer(idx);
                 // SAFETY: We know that this is a valid pointer inside the heap
                 unsafe {
@@ -275,7 +273,7 @@ mod tests {
                 .lock()
                 .metadata
                 .iter()
-                .all(|s| *s == PageStatus::FirstUse)
+                .all(|s| *s == PageStatus::Free)
         );
     }
 
@@ -324,7 +322,7 @@ mod tests {
         assert!(
             PAGE_ALLOC.lock().metadata[1..]
                 .iter()
-                .all(|s| *s == PageStatus::FirstUse)
+                .all(|s| *s == PageStatus::Free)
         );
         let page2 = alloc(2).expect("Two page allocation must succeed");
         assert_eq!(
@@ -334,7 +332,7 @@ mod tests {
         assert!(
             PAGE_ALLOC.lock().metadata[3..]
                 .iter()
-                .all(|s| *s == PageStatus::FirstUse)
+                .all(|s| *s == PageStatus::Free)
         );
         let page3 = alloc(3).expect("Three page allocation must succeed");
         assert_eq!(
@@ -351,7 +349,7 @@ mod tests {
         assert!(
             PAGE_ALLOC.lock().metadata[6..]
                 .iter()
-                .all(|s| *s == PageStatus::FirstUse),
+                .all(|s| *s == PageStatus::Free),
         );
         dealloc(page2);
         assert_eq!(
