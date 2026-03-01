@@ -40,9 +40,8 @@ bss_cleared:
 
 	la sp, __stop_kernel_stack
 
-	# Load trap vector machine mode
-	la t0, supervisor_trap_table
-	addi t0, t0, 1 # Use vectored mode -> we know the address is 4 byte aligned
+	# Load trap vector (direct mode)
+	la t0, asm_handle_trap
 	csrw stvec, t0
 
 	call kernel_init
@@ -62,9 +61,8 @@ start_hart:
 	# disable interrupts.
 	csrw sie, zero
 
-	# Load trap vector machine mode
-	la t0, supervisor_trap_table
-	addi t0, t0, 1 # Use vectored mode -> we know the address is 4 byte aligned
+	# Load trap vector (direct mode)
+	la t0, asm_handle_trap
 	csrw stvec, t0
 
 	# a1 contains the cpu struct
