@@ -1,4 +1,4 @@
-use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE};
+use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt};
 use crate::{
     cpu::Cpu,
     debug, info,
@@ -20,15 +20,43 @@ extern "C" fn get_process_satp_value() -> usize {
     Cpu::with_current_process(|p| p.get_satp_value())
 }
 
-// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
-#[unsafe(no_mangle)]
-extern "C" fn handle_timer_interrupt() {
-    timer::wakeup_wakers();
-    Cpu::with_scheduler(|mut s| s.schedule());
+fn assert_sepc_not_in_trap_handler() {
+    let sepc = Cpu::read_sepc();
+    // SAFETY: asm_handle_trap is defined in trap.S
+    unsafe extern "C" {
+        fn asm_handle_trap();
+    }
+    let trap_base = asm_handle_trap as *const () as usize;
+    assert!(
+        !(trap_base..trap_base + 64).contains(&sepc),
+        "BUG: sepc {sepc:#x} points into trap handler {trap_base:#x}"
+    );
 }
 
 // SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
+// Single entry point for all traps (direct mode stvec). Reads scause to
+// distinguish interrupts from exceptions and dispatches accordingly.
 #[unsafe(no_mangle)]
+extern "C" fn handle_trap() {
+    let cause = InterruptCause::from_scause();
+    if cause.is_interrupt() {
+        match cause.get_exception_code() {
+            interrupt::SUPERVISOR_TIMER_INTERRUPT => handle_timer_interrupt(),
+            interrupt::SUPERVISOR_SOFTWARE_INTERRUPT => handle_supervisor_software_interrupt(),
+            interrupt::SUPERVISOR_EXTERNAL_INTERRUPT => handle_external_interrupt(),
+            _ => handle_unimplemented(),
+        }
+    } else {
+        handle_exception();
+    }
+}
+
+fn handle_timer_interrupt() {
+    timer::wakeup_wakers();
+    Cpu::with_scheduler(|mut s| s.schedule());
+    assert_sepc_not_in_trap_handler();
+}
+
 fn handle_external_interrupt() {
     debug!("External interrupt occurred!");
     let mut plic = PLIC.lock();
@@ -189,6 +217,12 @@ fn handle_unhandled_exception() {
     let cause = InterruptCause::from_scause();
     let stval = Cpu::read_stval();
     let sepc = Cpu::read_sepc();
+    info!(
+        "handle_unhandled_exception: cause={} sepc={:#x} stval={:#x}",
+        cause.get_reason(),
+        sepc,
+        stval
+    );
     let cpu = Cpu::current();
     let mut scheduler = cpu.scheduler().lock();
     let (message, from_userspace) = scheduler.get_current_process().with_lock(|p| {
@@ -208,34 +242,33 @@ fn handle_unhandled_exception() {
     if from_userspace {
         info!("{}", message);
         scheduler.kill_current_process(0);
+        scheduler.schedule();
         return;
     }
     panic!("{}", message);
 }
 
-// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
-#[unsafe(no_mangle)]
-extern "C" fn handle_exception() {
+fn handle_exception() {
     let cause = InterruptCause::from_scause();
-    match cause.get_exception_code() {
+    let code = cause.get_exception_code();
+    match code {
         ENVIRONMENT_CALL_FROM_U_MODE => handle_syscall(),
         _ => handle_unhandled_exception(),
     }
+
+    assert_sepc_not_in_trap_handler();
 }
 
-// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
-#[unsafe(no_mangle)]
-extern "C" fn handle_supervisor_software_interrupt() {
+fn handle_supervisor_software_interrupt() {
     // This interrupt is fired when we kill a thread
     // It could be that our cpu is currently running this
     // thread, therefore, reschedule.
     Cpu::with_scheduler(|mut s| s.schedule());
     Cpu::clear_supervisor_software_interrupt();
+    assert_sepc_not_in_trap_handler();
 }
 
-// SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
-#[unsafe(no_mangle)]
-extern "C" fn handle_unimplemented() {
+fn handle_unimplemented() {
     let sepc = Cpu::read_sepc();
     let cause = InterruptCause::from_scause();
     panic!(

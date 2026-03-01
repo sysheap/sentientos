@@ -1,9 +1,21 @@
 import os
 import signal
+from pathlib import Path
 from pygdbmi.gdbcontroller import GdbController
 
 DEFAULT_KERNEL_PATH = "target/riscv64gc-unknown-none-elf/release/kernel"
 GDB_PORT_FILE = ".gdb-port"
+
+
+def find_project_root() -> Path | None:
+    d = Path.cwd().resolve()
+    while True:
+        if (d / "qemu_wrapper.sh").exists():
+            return d
+        parent = d.parent
+        if parent == d:
+            return None
+        d = parent
 
 
 class GDBSession:
@@ -76,8 +88,10 @@ class GDBSession:
 
     @staticmethod
     def read_gdb_port() -> int | None:
+        root = find_project_root()
+        if root is None:
+            return None
         try:
-            with open(GDB_PORT_FILE) as f:
-                return int(f.read().strip())
+            return int((root / GDB_PORT_FILE).read_text().strip())
         except (FileNotFoundError, ValueError):
             return None

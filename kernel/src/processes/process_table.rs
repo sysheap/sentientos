@@ -13,7 +13,7 @@ use crate::{
     cpu::Cpu,
     debug, info,
     klibc::{Spinlock, elf::ElfFile, runtime_initialized::RuntimeInitializedData},
-    processes::{process::POWERSAVE_TID, thread::Thread},
+    processes::{futex, process::POWERSAVE_TID, thread::Thread},
 };
 
 use super::thread::{ThreadRef, ThreadState};
@@ -77,14 +77,16 @@ impl ProcessTable {
     }
 
     pub fn dump(&self) {
-        for process in self.threads.values() {
-            if process
-                .try_with_lock(|p| {
-                    info!("{}", *p);
-                })
-                .is_none()
-            {
-                info!("Cannot dump process because it is locked.");
+        for (tid, thread) in &self.threads {
+            if let Some(()) = thread.try_with_lock(|t| {
+                info!(
+                    "  thread tid={tid} state={:?} name={}",
+                    t.get_state(),
+                    t.get_name()
+                );
+            }) {
+            } else {
+                info!("  thread tid={tid} (locked)");
             }
         }
     }
@@ -151,37 +153,56 @@ impl ProcessTable {
         debug!("Killing tid={tid}");
         let exit_code = u8::try_from(exit_status & 0xff).expect("masked to 8 bits");
         if let Some(thread) = self.threads.get(&tid).cloned() {
+            let already_dead =
+                thread.with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)));
+            if already_dead {
+                return;
+            }
             LIVE_THREAD_COUNT.fetch_sub(1, Ordering::Relaxed);
-            let main_tid = thread.with_lock(|mut t| {
+            let (main_tid, futex_addr) = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Zombie(exit_code));
                 Cpu::current().ipi_to_all_but_me();
 
-                if let Some(clear_child_tid) = t.get_clear_child_tid() {
+                let futex_addr = if let Some(clear_child_tid) = t.get_clear_child_tid() {
                     let process = t.process();
+                    // SAFETY: We only need the raw address value for the futex key,
+                    // not to dereference the pointer.
+                    let addr = unsafe { clear_child_tid.get() } as usize;
                     let _ = clear_child_tid.write_with_process_lock(&process.lock(), 0);
-                }
+                    Some(addr)
+                } else {
+                    None
+                };
 
                 if let Some(vfork_state) = t.take_vfork_state() {
                     vfork_state.lock().wake();
                 }
 
                 let process = t.process();
-                process.lock().main_tid()
+                let mut p = process.lock();
+                p.remove_thread(tid);
+                (p.main_tid(), futex_addr)
             });
+
+            if let Some(addr) = futex_addr {
+                futex::futex_wake(main_tid, addr, 1);
+            }
 
             self.wake_wait_wakers();
 
-            // Reparent orphans to init
-            let init_tid = Tid::new(1);
-            if let Some(orphans) = self.children.remove(&main_tid) {
-                for &child_tid in &orphans {
-                    if let Some(child_thread) = self.threads.get(&child_tid) {
-                        child_thread.with_lock(|mut t| {
-                            t.set_parent_tid(init_tid);
-                        });
+            if tid == main_tid {
+                // Reparent orphans to init only when the main thread dies
+                let init_tid = Tid::new(1);
+                if let Some(orphans) = self.children.remove(&main_tid) {
+                    for &child_tid in &orphans {
+                        if let Some(child_thread) = self.threads.get(&child_tid) {
+                            child_thread.with_lock(|mut t| {
+                                t.set_parent_tid(init_tid);
+                            });
+                        }
                     }
+                    self.children.entry(init_tid).or_default().extend(orphans);
                 }
-                self.children.entry(init_tid).or_default().extend(orphans);
             }
         }
     }

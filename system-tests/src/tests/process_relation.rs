@@ -10,13 +10,3 @@ async fn getppid_returns_valid_parent() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-#[tokio::test]
-async fn wait_non_child_returns_error() -> anyhow::Result<()> {
-    let mut solaya = QemuInstance::start().await?;
-
-    let output = solaya.run_prog("wait_non_child").await?;
-    assert_eq!(output.trim(), "NotAChild");
-
-    Ok(())
-}

@@ -1,5 +1,6 @@
 use crate::{
     debug,
+    klibc::Spinlock,
     memory::{
         PhysAddr, VirtAddr,
         page::{Pages, PinnedHeapPages},
@@ -17,10 +18,6 @@ use common::{pid::Tid, pointer::Pointer};
 use core::{self, fmt::Debug, ptr::null_mut};
 use headers::errno::Errno;
 
-use crate::klibc::Spinlock;
-
-use super::thread::ThreadRef;
-
 pub const POWERSAVE_TID: Tid = Tid::new(0);
 
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
@@ -33,7 +30,7 @@ pub struct Process {
     allocated_pages: Vec<PinnedHeapPages>,
     mmap_allocations: BTreeMap<VirtAddr, PinnedHeapPages>,
     free_mmap_address: VirtAddr,
-    fd_table: FdTable,
+    fd_table: Arc<Spinlock<FdTable>>,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     brk: Brk,
@@ -70,7 +67,7 @@ impl Process {
             allocated_pages,
             mmap_allocations: BTreeMap::new(),
             free_mmap_address: VirtAddr::new(FREE_MMAP_START_ADDRESS),
-            fd_table: FdTable::new(),
+            fd_table: Arc::new(Spinlock::new(FdTable::new())),
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
@@ -161,10 +158,6 @@ impl Process {
         Ok(())
     }
 
-    pub fn threads_len(&self) -> usize {
-        self.threads.len()
-    }
-
     pub fn mmap_pages_with_address(
         &mut self,
         num_pages: Pages,
@@ -225,25 +218,16 @@ impl Process {
         &self.name
     }
 
-    pub fn main_thread(&self) -> ThreadRef {
-        let main_thread = self
-            .threads
-            .get(&self.main_tid)
-            .cloned()
-            .expect("Main thread must always exist");
-        ThreadWeakRef::upgrade(&main_thread).expect("Main thread must always exist")
-    }
-
     pub fn main_tid(&self) -> Tid {
         self.main_tid
     }
 
-    pub fn fd_table(&self) -> &FdTable {
-        &self.fd_table
+    pub fn fd_table(&self) -> crate::klibc::SpinlockGuard<'_, FdTable> {
+        self.fd_table.lock()
     }
 
-    pub fn fd_table_mut(&mut self) -> &mut FdTable {
-        &mut self.fd_table
+    pub fn set_fd_table(&mut self, fd_table: FdTable) {
+        self.fd_table = Arc::new(Spinlock::new(fd_table));
     }
 
     pub fn get_satp_value(&self) -> usize {
@@ -265,6 +249,10 @@ impl Process {
 
     pub fn remove_thread(&mut self, tid: Tid) {
         self.threads.remove(&tid);
+    }
+
+    pub fn thread_tids(&self) -> Vec<Tid> {
+        self.threads.keys().copied().collect()
     }
 }
 

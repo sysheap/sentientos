@@ -1,5 +1,6 @@
 pub(crate) mod brk;
 pub mod fd_table;
+pub mod futex;
 pub(crate) mod loader;
 pub mod process;
 pub mod process_table;

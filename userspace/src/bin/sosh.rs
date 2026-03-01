@@ -1,13 +1,6 @@
 use common::ioctl::print_programs;
-use std::{
-    io::{Write, stdout},
-    string::{String, ToString},
-    vec::Vec,
-};
+use std::io::{Write, stdout};
 use userspace::{spawn::spawn, util::read_line};
-
-extern crate alloc;
-extern crate userspace;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
@@ -50,10 +43,13 @@ fn parse_command_and_execute(mut command: String) {
             let args: Vec<&str> = split.filter(|arg| !arg.trim().is_empty()).collect();
 
             match spawn(prog_name, &args) {
-                Ok(pid) => {
+                Ok(mut child) => {
                     if !background {
-                        unsafe {
-                            libc::waitpid(pid, core::ptr::null_mut(), 0);
+                        match child.wait() {
+                            Ok(status) if status.code() == Some(127) => {
+                                println!("Error executing program: {prog_name}: not found");
+                            }
+                            _ => {}
                         }
                     }
                 }

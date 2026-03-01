@@ -1,8 +1,4 @@
-use std::{env, process::exit, vec::Vec};
-use userspace::spawn::spawn;
-
-extern crate alloc;
-extern crate userspace;
+use std::{env, process::exit, thread, time::Duration};
 
 const DEFAULT_INSTANCES: usize = 32;
 
@@ -15,7 +11,7 @@ fn main() {
             _ => {
                 eprintln!("Usage: {} [count]", args[0]);
                 eprintln!(
-                    "  count: number of processes to spawn (default: {})",
+                    "  count: number of threads to spawn (default: {})",
                     DEFAULT_INSTANCES
                 );
                 exit(1);
@@ -26,16 +22,19 @@ fn main() {
     };
 
     println!("Starting loop {} times", instances);
-    let mut pids = Vec::with_capacity(instances);
+    let mut handles = Vec::with_capacity(instances);
     for _ in 0..instances {
-        let pid = spawn("loop", &[]).expect("Process must be successfully startable");
-        pids.push(pid);
+        let handle = thread::spawn(|| {
+            for i in 0..5 {
+                println!("Looping... {}", i);
+                thread::sleep(Duration::from_secs(1));
+            }
+        });
+        handles.push(handle);
     }
 
-    for pid in pids {
-        unsafe {
-            libc::waitpid(pid, core::ptr::null_mut(), 0);
-        }
+    for handle in handles {
+        handle.join().expect("Thread must join successfully");
     }
 
     println!("Done!");
