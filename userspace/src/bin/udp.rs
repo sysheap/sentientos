@@ -1,43 +1,12 @@
 use std::{
     io::{Read, Write, stdout},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    net::{SocketAddr, UdpSocket},
+    sync::{Arc, Mutex},
     thread,
 };
 
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
-
-/// Stores IPv4 addr + port in a single AtomicU64 (high 32 = ip, low 16 = port).
-/// Zero means no address stored yet.
-struct AtomicSocketAddr(AtomicU64);
-
-impl AtomicSocketAddr {
-    const fn new() -> Self {
-        Self(AtomicU64::new(0))
-    }
-
-    fn store(&self, addr: SocketAddr) {
-        let SocketAddr::V4(v4) = addr else {
-            panic!("IPv6 not supported");
-        };
-        let packed = ((u32::from(*v4.ip()) as u64) << 16) | v4.port() as u64;
-        self.0.store(packed, Ordering::Relaxed);
-    }
-
-    fn load(&self) -> Option<SocketAddr> {
-        let packed = self.0.load(Ordering::Relaxed);
-        if packed == 0 {
-            return None;
-        }
-        let ip = (packed >> 16) as u32;
-        let port = packed as u16;
-        Some(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(ip), port)))
-    }
-}
 
 fn main() {
     println!("Hello from the udp receiver");
@@ -48,7 +17,7 @@ fn main() {
     // so we must use non-blocking mode and poll.
     socket.set_nonblocking(true).expect("nonblocking must work");
 
-    let last_sender = Arc::new(AtomicSocketAddr::new());
+    let last_sender: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(None));
 
     let recv_socket = Arc::clone(&socket);
     let recv_sender = Arc::clone(&last_sender);
@@ -57,7 +26,7 @@ fn main() {
         loop {
             match recv_socket.recv_from(&mut buffer) {
                 Ok((count, src_addr)) => {
-                    recv_sender.store(src_addr);
+                    *recv_sender.lock().unwrap() = Some(src_addr);
                     let text = std::str::from_utf8(&buffer[..count]).expect("Must be valid utf8");
                     print!("{}", text);
                     let _ = stdout().flush();
@@ -79,7 +48,7 @@ fn main() {
             b'\r' | b'\n' => {
                 println!();
                 input.push('\n');
-                if let Some(addr) = last_sender.load() {
+                if let Some(addr) = *last_sender.lock().unwrap() {
                     socket
                         .send_to(input.as_bytes(), addr)
                         .expect("send must work");
