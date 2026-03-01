@@ -13,7 +13,7 @@ use crate::{
     cpu::Cpu,
     debug, info,
     klibc::{Spinlock, elf::ElfFile, runtime_initialized::RuntimeInitializedData},
-    processes::{process::POWERSAVE_TID, thread::Thread},
+    processes::{futex, process::POWERSAVE_TID, thread::Thread},
 };
 
 use super::thread::{ThreadRef, ThreadState};
@@ -77,14 +77,16 @@ impl ProcessTable {
     }
 
     pub fn dump(&self) {
-        for process in self.threads.values() {
-            if process
-                .try_with_lock(|p| {
-                    info!("{}", *p);
-                })
-                .is_none()
-            {
-                info!("Cannot dump process because it is locked.");
+        for (tid, thread) in &self.threads {
+            if let Some(()) = thread.try_with_lock(|t| {
+                info!(
+                    "  thread tid={tid} state={:?} name={}",
+                    t.get_state(),
+                    t.get_name()
+                );
+            }) {
+            } else {
+                info!("  thread tid={tid} (locked)");
             }
         }
     }
@@ -157,14 +159,20 @@ impl ProcessTable {
                 return;
             }
             LIVE_THREAD_COUNT.fetch_sub(1, Ordering::Relaxed);
-            let main_tid = thread.with_lock(|mut t| {
+            let (main_tid, futex_addr) = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Zombie(exit_code));
                 Cpu::current().ipi_to_all_but_me();
 
-                if let Some(clear_child_tid) = t.get_clear_child_tid() {
+                let futex_addr = if let Some(clear_child_tid) = t.get_clear_child_tid() {
                     let process = t.process();
+                    // SAFETY: We only need the raw address value for the futex key,
+                    // not to dereference the pointer.
+                    let addr = unsafe { clear_child_tid.get() } as usize;
                     let _ = clear_child_tid.write_with_process_lock(&process.lock(), 0);
-                }
+                    Some(addr)
+                } else {
+                    None
+                };
 
                 if let Some(vfork_state) = t.take_vfork_state() {
                     vfork_state.lock().wake();
@@ -173,8 +181,12 @@ impl ProcessTable {
                 let process = t.process();
                 let mut p = process.lock();
                 p.remove_thread(tid);
-                p.main_tid()
+                (p.main_tid(), futex_addr)
             });
+
+            if let Some(addr) = futex_addr {
+                futex::futex_wake(main_tid, addr, 1);
+            }
 
             self.wake_wait_wakers();
 
