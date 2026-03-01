@@ -1,6 +1,7 @@
 mod basics;
 mod connect4;
 mod coreutils;
+mod mutex;
 mod net;
 mod panic;
 mod process_relation;
