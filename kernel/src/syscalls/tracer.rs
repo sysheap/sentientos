@@ -77,7 +77,7 @@ fn format_arg(raw: usize, fmt: ArgFormat) -> alloc::string::String {
     }
 }
 
-fn log_enter(trap_frame: &TrapFrame) {
+fn log_enter(trap_frame: &TrapFrame, tid: common::pid::Tid) {
     let nr = trap_frame[Register::a7];
     let args = [
         trap_frame[Register::a0],
@@ -87,8 +87,6 @@ fn log_enter(trap_frame: &TrapFrame) {
         trap_frame[Register::a4],
         trap_frame[Register::a5],
     ];
-
-    let tid = Cpu::with_scheduler(|s| s.get_current_thread().lock().get_tid());
 
     let Some(meta) = find_metadata(nr) else {
         println!("[SYSCALL ENTER] tid={tid} syscall_{nr}(...)");
@@ -108,9 +106,8 @@ fn log_enter(trap_frame: &TrapFrame) {
     println!("[SYSCALL ENTER] tid={tid} {}({arg_strs})", meta.name);
 }
 
-fn log_exit(trap_frame: &TrapFrame, result: &Result<isize, Errno>) {
+fn log_exit(trap_frame: &TrapFrame, tid: common::pid::Tid, result: &Result<isize, Errno>) {
     let nr = trap_frame[Register::a7];
-    let tid = Cpu::with_scheduler(|s| s.get_current_thread().lock().get_tid());
     let name = find_metadata(nr).map(|m| m.name).unwrap_or("unknown");
 
     match result {
@@ -127,12 +124,16 @@ pub async fn trace_syscall(
     handler: &mut LinuxSyscallHandler,
 ) -> Result<isize, Errno> {
     let tracing = should_trace();
-    if tracing {
-        log_enter(trap_frame);
-    }
+    let tid = if tracing {
+        let tid = Cpu::with_scheduler(|s| s.get_current_thread().lock().get_tid());
+        log_enter(trap_frame, tid);
+        Some(tid)
+    } else {
+        None
+    };
     let result = handler.handle(trap_frame).await;
-    if tracing {
-        log_exit(trap_frame, &result);
+    if let Some(tid) = tid {
+        log_exit(trap_frame, tid, &result);
     }
     result
 }

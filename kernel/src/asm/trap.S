@@ -34,7 +34,7 @@
 		save_fp %i
 		.set	i, i+1
 	.endr
-	
+
 	save_fp 31
 
 	# Save last register
@@ -64,12 +64,13 @@
 	.endr
 .endm
 
-.macro handler func
+# Single trap entry point for direct mode stvec.
+# Saves all registers, switches to kernel page table, calls the Rust
+# dispatcher (handle_trap), restores process page table, and returns.
 .section .text
-.global asm_\func
+.global asm_handle_trap
 .align 4
-asm_\func:
-	
+asm_handle_trap:
 	save_regs
 
 	# Load kernel page tables such that we get the correct stack
@@ -82,43 +83,13 @@ asm_\func:
 	li sp, 0
 	addi sp, sp, -64
 
-	call \func
+	call handle_trap
 
 	# Restore the process page table
 	call get_process_satp_value
 	csrw satp, a0
 	sfence.vma
-	
+
 	restore_regs
 
 	sret
-
-.endm
-
-handler handle_exception
-handler handle_unimplemented
-handler handle_timer_interrupt
-handler handle_external_interrupt
-handler handle_supervisor_software_interrupt
-
-.section .text
-.global supervisor_trap_table
-.align 4
-supervisor_trap_table:
-	j asm_handle_exception
-	j asm_handle_supervisor_software_interrupt	# cause: 1
-	j asm_handle_unimplemented        		# cause: 2
-	j asm_handle_unimplemented        		# cause: 3
-	j asm_handle_unimplemented        		# cause: 4
-	j asm_handle_timer_interrupt      		# cause: 5
-	j asm_handle_unimplemented        		# cause: 6
-	j asm_handle_unimplemented        		# cause: 7
-	j asm_handle_unimplemented        		# cause: 8
-	j asm_handle_external_interrupt   		# cause: 9
-	j asm_handle_unimplemented        		# cause: 10
-	j asm_handle_unimplemented        		# cause: 11
-	j asm_handle_unimplemented        		# cause: 12
-	j asm_handle_unimplemented        		# cause: 13
-	j asm_handle_unimplemented        		# cause: 14
-	j asm_handle_unimplemented        		# cause: 15
-
