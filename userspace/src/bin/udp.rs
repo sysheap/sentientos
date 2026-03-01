@@ -1,87 +1,103 @@
 use std::{
-    io::{Write, stdout},
-    net::UdpSocket,
+    io::{Read, Write, stdout},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    thread,
 };
 
 const PORT: u16 = 1234;
 const DELETE: u8 = 127;
-const F_SETFL: usize = 4;
-const O_NONBLOCK: usize = 0o4000;
 
-fn raw_syscall3(nr: usize, a0: usize, a1: usize, a2: usize) -> isize {
-    let ret: isize;
-    unsafe {
-        core::arch::asm!("ecall",
-            in("a7") nr,
-            in("a0") a0,
-            in("a1") a1,
-            in("a2") a2,
-            lateout("a0") ret,
-        );
+/// Stores IPv4 addr + port in a single AtomicU64 (high 32 = ip, low 16 = port).
+/// Zero means no address stored yet.
+struct AtomicSocketAddr(AtomicU64);
+
+impl AtomicSocketAddr {
+    const fn new() -> Self {
+        Self(AtomicU64::new(0))
     }
-    ret
-}
 
-fn set_stdin_nonblocking() {
-    assert_eq!(raw_syscall3(25, 0, F_SETFL, O_NONBLOCK), 0); // __NR_fcntl = 25
-}
+    fn store(&self, addr: SocketAddr) {
+        let SocketAddr::V4(v4) = addr else {
+            panic!("IPv6 not supported");
+        };
+        let packed = ((u32::from(*v4.ip()) as u64) << 16) | v4.port() as u64;
+        self.0.store(packed, Ordering::Relaxed);
+    }
 
-fn try_read_byte() -> Option<u8> {
-    let mut c = 0u8;
-    let ret = raw_syscall3(63, 0, &mut c as *mut u8 as usize, 1); // __NR_read = 63
-    if ret == 1 { Some(c) } else { None }
+    fn load(&self) -> Option<SocketAddr> {
+        let packed = self.0.load(Ordering::Relaxed);
+        if packed == 0 {
+            return None;
+        }
+        let ip = (packed >> 16) as u32;
+        let port = packed as u16;
+        Some(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(ip), port)))
+    }
 }
 
 fn main() {
     println!("Hello from the udp receiver");
     println!("Listening on {PORT}");
 
-    set_stdin_nonblocking();
-
-    let socket = UdpSocket::bind(format!("0.0.0.0:{PORT}")).expect("bind must work");
+    let socket = Arc::new(UdpSocket::bind(format!("0.0.0.0:{PORT}")).expect("bind must work"));
+    // Kernel recvfrom always returns EAGAIN when no data (blocking not implemented),
+    // so we must use non-blocking mode and poll.
     socket.set_nonblocking(true).expect("nonblocking must work");
 
-    let mut input = String::new();
-    let mut last_sender = None;
+    let last_sender = Arc::new(AtomicSocketAddr::new());
 
-    loop {
+    let recv_socket = Arc::clone(&socket);
+    let recv_sender = Arc::clone(&last_sender);
+    thread::spawn(move || {
         let mut buffer = [0; 64];
-        match socket.recv_from(&mut buffer) {
-            Ok((count, src_addr)) => {
-                last_sender = Some(src_addr);
-                let text = std::str::from_utf8(&buffer[..count]).expect("Must be valid utf8");
-                print!("{}", text);
-                let _ = stdout().flush();
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => panic!("recv_from failed: {e}"),
-        }
-
-        if let Some(c) = try_read_byte() {
-            match c {
-                b'\r' | b'\n' => {
-                    println!();
-                    input.push(b'\n' as char);
-                    if let Some(addr) = last_sender {
-                        socket
-                            .send_to(input.as_bytes(), addr)
-                            .expect("send must work");
-                    }
-                    input.clear();
-                }
-                DELETE => {
-                    if input.pop().is_some() {
-                        print!("{} {}", 8 as char, 8 as char);
-                        let _ = stdout().flush();
-                    }
-                }
-                _ => {
-                    assert!(c.is_ascii());
-                    let result = c as char;
-                    input.push(result);
-                    print!("{}", result);
+        loop {
+            match recv_socket.recv_from(&mut buffer) {
+                Ok((count, src_addr)) => {
+                    recv_sender.store(src_addr);
+                    let text = std::str::from_utf8(&buffer[..count]).expect("Must be valid utf8");
+                    print!("{}", text);
                     let _ = stdout().flush();
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => panic!("recv_from failed: {e}"),
+            }
+        }
+    });
+
+    let mut input = String::new();
+    loop {
+        let mut buf = [0];
+        let count = std::io::stdin().read(&mut buf).unwrap();
+        if count == 0 {
+            break;
+        }
+        match buf[0] {
+            b'\r' | b'\n' => {
+                println!();
+                input.push('\n');
+                if let Some(addr) = last_sender.load() {
+                    socket
+                        .send_to(input.as_bytes(), addr)
+                        .expect("send must work");
+                }
+                input.clear();
+            }
+            DELETE => {
+                if input.pop().is_some() {
+                    print!("{} {}", 8 as char, 8 as char);
+                    let _ = stdout().flush();
+                }
+            }
+            _ => {
+                assert!(buf[0].is_ascii());
+                let result = buf[0] as char;
+                input.push(result);
+                print!("{}", result);
+                let _ = stdout().flush();
             }
         }
     }
