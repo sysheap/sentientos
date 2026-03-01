@@ -6,7 +6,7 @@ use crate::{
     io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
     memory::VirtAddr,
     processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
-    syscalls::linux::{LinuxSyscallHandler, LinuxSyscalls},
+    syscalls::linux::LinuxSyscallHandler,
 };
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::{
@@ -126,7 +126,7 @@ fn handle_syscall() {
     let task_trap_frame = trap_frame.clone();
     let mut task = Task::new(async move {
         let mut handler = LinuxSyscallHandler::new();
-        handler.handle(&task_trap_frame).await
+        crate::syscalls::tracer::trace_syscall(&task_trap_frame, &mut handler).await
     });
     let waker = ThreadWaker::new_waker(Cpu::current_thread_weak());
     let mut cx = Context::from_waker(&waker);
