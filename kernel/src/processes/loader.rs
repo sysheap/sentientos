@@ -1,6 +1,6 @@
 use alloc::{string::ToString, vec::Vec};
 use common::errors::LoaderError;
-use headers::syscall_types::{AT_NULL, AT_PAGESZ};
+use headers::syscall_types::{AT_NULL, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM};
 
 use crate::klibc::{util::align_up, writable_buffer::WritableBuffer};
 
@@ -34,13 +34,35 @@ pub struct LoadedElf {
     pub brk: Brk,
 }
 
-fn set_up_arguments(stack: &mut [u8], name: &str, args: &[&str]) -> Result<VirtAddr, LoaderError> {
+struct AuxvInfo {
+    phdr_vaddr: usize,
+    phent: usize,
+    phnum: usize,
+}
+
+fn set_up_arguments(
+    stack: &mut [u8],
+    name: &str,
+    args: &[&str],
+    auxv_info: &AuxvInfo,
+) -> Result<VirtAddr, LoaderError> {
     // layout:
     // [argc, argv[0], argv[n], NULL, envp[0], envp[1], NULL, AUXV AT_NULL, NULL, name, args[0], args[1]...]
     let argc = 1 + args.len(); // name + amount of args
     let mut argv = vec![0usize; args.len() + 2]; // number of args plus name and null terminator
     let envp = [0usize];
-    let auxv = [AT_PAGESZ as usize, PAGE_SIZE, AT_NULL as usize, 0];
+    let auxv = [
+        AT_PAGESZ as usize,
+        PAGE_SIZE,
+        AT_PHDR as usize,
+        auxv_info.phdr_vaddr,
+        AT_PHENT as usize,
+        auxv_info.phent,
+        AT_PHNUM as usize,
+        auxv_info.phnum,
+        AT_NULL as usize,
+        0,
+    ];
     let strings = [name]
         .iter()
         .chain(args)
@@ -111,10 +133,29 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let elf_header = elf_file.get_header();
     let mut allocated_pages = Vec::new();
 
+    // Compute AT_PHDR: the virtual address where program headers are mapped.
+    // The first LOAD segment maps from file offset 0 (containing the ELF header
+    // and program headers), so AT_PHDR = first_load_vaddr + e_phoff.
+    let first_load = elf_file
+        .get_program_headers()
+        .iter()
+        .find(|h| h.header_type == ProgramHeaderType::PT_LOAD)
+        .expect("ELF must have at least one LOAD segment");
+    assert_eq!(
+        first_load.offset_in_file, 0,
+        "First LOAD segment must start at file offset 0 for AT_PHDR to be valid"
+    );
+    let auxv_info = AuxvInfo {
+        phdr_vaddr: first_load.virtual_address.as_usize()
+            + elf_header.start_program_header.as_usize(),
+        phent: elf_header.size_program_header_entry as usize,
+        phnum: elf_header.number_of_entries_in_program_header as usize,
+    };
+
     // Map 4KB stack
     let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
 
-    let args_start = set_up_arguments(stack.as_u8_slice(), name, args)?;
+    let args_start = set_up_arguments(stack.as_u8_slice(), name, args, &auxv_info)?;
 
     let stack_addr = stack.addr();
     allocated_pages.push(stack);
