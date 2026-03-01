@@ -103,6 +103,20 @@ macro_rules! linux_syscalls {
                 }
             }
         }
+
+        pub const SYSCALL_METADATA: &[(usize, $crate::syscalls::tracer::SyscallMetadata)] = &[
+            $(
+                (headers::syscalls::$number, $crate::syscalls::tracer::SyscallMetadata {
+                    name: stringify!($name),
+                    args: &[
+                        $((
+                            stringify!($arg_name),
+                            <$arg_ty as $crate::syscalls::tracer::SyscallArgFormat>::FORMAT,
+                        )),*
+                    ],
+                }),
+            )*
+        ];
     };
 }
 
