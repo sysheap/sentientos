@@ -14,6 +14,7 @@ use crate::{
     processes::{
         brk::Brk,
         fd_table::{FdFlags, FileDescriptor},
+        futex::{self, FutexWait},
         loader,
         process::{Process, ProcessRef},
         process_table,
@@ -37,9 +38,9 @@ use headers::{
     syscall_types::{
         _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID,
         CLONE_SETTLS, CLONE_THREAD, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
-        MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
-        sigaction, sigset_t, stack_t, timespec,
+        FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
+        PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD,
+        SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
     },
 };
 
@@ -52,8 +53,10 @@ linux_syscalls! {
     SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_DUP3 => dup3(oldfd: c_int, newfd: c_int, flags: c_int);
     SYSCALL_NR_EXECVE => execve(filename: usize, argv: usize, envp: usize);
+    SYSCALL_NR_EXIT => exit(status: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
+    SYSCALL_NR_FUTEX => futex(uaddr: usize, op: c_int, val: c_uint, timeout: usize, uaddr2: usize, val3: c_uint);
     SYSCALL_NR_GETPID => getpid();
     SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETTID => gettid();
@@ -129,6 +132,14 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         descriptor.write(&data)?;
 
         Ok(count as isize)
+    }
+
+    async fn exit(&mut self, status: c_int) -> Result<isize, Errno> {
+        Cpu::with_scheduler(|mut s| {
+            s.kill_current_thread(status);
+        });
+        debug!("Exit thread with status: {status}\n");
+        Ok(0)
     }
 
     async fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
@@ -548,6 +559,31 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 Ok(0)
             }
             _ => Err(Errno::EINVAL),
+        }
+    }
+
+    async fn futex(
+        &mut self,
+        uaddr: usize,
+        op: c_int,
+        val: c_uint,
+        _timeout: usize,
+        _uaddr2: usize,
+        _val3: c_uint,
+    ) -> Result<isize, Errno> {
+        let cmd = op & !(FUTEX_PRIVATE_FLAG as c_int);
+        let main_tid = self.current_process.with_lock(|p| p.main_tid());
+        match cmd.cast_unsigned() {
+            FUTEX_WAIT => {
+                let result =
+                    FutexWait::new(self.current_process.clone(), uaddr, val, main_tid).await;
+                Ok(result as isize)
+            }
+            FUTEX_WAKE => {
+                let result = futex::futex_wake(main_tid, uaddr, val);
+                Ok(result as isize)
+            }
+            _ => Err(Errno::ENOSYS),
         }
     }
 

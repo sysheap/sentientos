@@ -3,12 +3,14 @@ use std::time::{Duration, Instant};
 use crate::infra::qemu::QemuInstance;
 
 #[tokio::test]
-async fn stress() -> anyhow::Result<()> {
+async fn stress_process() -> anyhow::Result<()> {
     let mut solaya = QemuInstance::start().await?;
 
     // Spawn 8 concurrent processes to stress test the scheduler
     let start = Instant::now();
-    solaya.run_prog_waiting_for("stress 8", "Done!").await?;
+    solaya
+        .run_prog_waiting_for("stress-process 8", "Done!")
+        .await?;
     let elapsed = start.elapsed();
 
     // Each loop instance runs 5 iterations with 1-second sleeps.
@@ -21,6 +23,28 @@ async fn stress() -> anyhow::Result<()> {
     assert!(
         elapsed < Duration::from_secs(15),
         "Should complete within 15 seconds if processes run concurrently"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn stress_thread() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+
+    let start = Instant::now();
+    solaya
+        .run_prog_waiting_for("stress-thread 8", "Done!")
+        .await?;
+    let elapsed = start.elapsed();
+
+    assert!(
+        elapsed >= Duration::from_secs(4),
+        "Should take at least 4 seconds (5 iterations × 1 second sleep)"
+    );
+    assert!(
+        elapsed < Duration::from_secs(15),
+        "Should complete within 15 seconds if threads run concurrently"
     );
 
     Ok(())

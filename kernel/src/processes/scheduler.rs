@@ -115,6 +115,11 @@ impl CpuScheduler {
         }
     }
 
+    pub fn kill_current_thread(&mut self, exit_status: i32) {
+        let tid = self.current_thread.lock().get_tid();
+        process_table::THE.lock().kill(tid, exit_status);
+    }
+
     pub fn kill_current_process(&mut self, exit_status: i32) {
         let all_tids = self.current_thread.lock().process().lock().thread_tids();
         let mut pt = process_table::THE.lock();

@@ -41,7 +41,7 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
         let path = entry.path();
         let absolute_path = std::fs::canonicalize(&path)?;
         let original_file_name = path.file_name().unwrap().to_str().unwrap();
-        let file_name = original_file_name.to_uppercase();
+        let file_name = original_file_name.to_uppercase().replace('-', "_");
 
         programs.insert(original_file_name.to_owned(), file_name.clone());
 
