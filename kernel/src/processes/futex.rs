@@ -6,6 +6,8 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use headers::errno::Errno;
+
 use crate::{klibc::Spinlock, processes::process::ProcessRef};
 
 use super::userspace_ptr::UserspacePtr;
@@ -45,7 +47,7 @@ impl Future for FutexWait {
             .unwrap_or(u32::MAX);
 
         if current_val != self.expected {
-            return Poll::Ready(0);
+            return Poll::Ready(-(Errno::EAGAIN as i32));
         }
 
         if !self.registered {

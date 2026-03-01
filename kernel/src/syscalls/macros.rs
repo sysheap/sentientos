@@ -34,11 +34,15 @@ impl NeedsUserSpaceWrapper for c_int {
 
 impl NeedsUserSpaceWrapper for c_uint {
     type Wrapped = c_uint;
+    #[allow(clippy::cast_possible_truncation)]
     fn wrap_arg(
         value: usize,
         _process: ProcessRef,
     ) -> Result<Self::Wrapped, headers::errno::Errno> {
-        c_uint::try_from(value).map_err(|_| headers::errno::Errno::EINVAL)
+        // Truncate to low 32 bits. On RISC-V 64, the ABI sign-extends 32-bit
+        // values in 64-bit registers, so e.g. 0x80000002 becomes
+        // 0xFFFFFFFF80000002. Truncation recovers the original value.
+        Ok(value as c_uint)
     }
 }
 
