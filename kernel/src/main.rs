@@ -15,7 +15,6 @@
 #![deny(clippy::cast_sign_loss)]
 #![feature(nonzero_ops)]
 #![feature(custom_test_frameworks)]
-#![feature(assert_matches)]
 #![feature(map_try_insert)]
 #![feature(new_range_api)]
 #![feature(ptr_metadata)]
