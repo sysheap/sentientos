@@ -162,7 +162,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         self.current_thread.with_lock(|mut t| {
             t.set_clear_child_tid((&tidptr).into());
         });
-        Ok(0)
+        Ok(self.current_tid.as_isize())
     }
 
     async fn ppoll(
