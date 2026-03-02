@@ -21,7 +21,6 @@ pub struct FutexWait {
     addr: usize,
     expected: u32,
     main_tid: Tid,
-    registered: bool,
 }
 
 impl FutexWait {
@@ -31,7 +30,6 @@ impl FutexWait {
             addr,
             expected,
             main_tid,
-            registered: false,
         }
     }
 }
@@ -39,8 +37,16 @@ impl FutexWait {
 impl Future for FutexWait {
     type Output = i32;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let ptr = UserspacePtr::new(self.addr as *const u32);
+        let key = (self.main_tid, self.addr);
+
+        // Hold the WAITERS lock across both the value read and waker
+        // registration to prevent lost wakeups. Without this, a concurrent
+        // futex_wake can fire between the read and registration, finding
+        // no waiters — the thread would then sleep forever.
+        let mut waiters = WAITERS.lock();
+
         let current_val = self
             .process
             .with_lock(|p| p.read_userspace_ptr(&ptr))
@@ -50,15 +56,7 @@ impl Future for FutexWait {
             return Poll::Ready(-(Errno::EAGAIN as i32));
         }
 
-        if !self.registered {
-            let key = (self.main_tid, self.addr);
-            WAITERS
-                .lock()
-                .entry(key)
-                .or_default()
-                .push(cx.waker().clone());
-            self.registered = true;
-        }
+        waiters.entry(key).or_default().push(cx.waker().clone());
 
         Poll::Pending
     }
