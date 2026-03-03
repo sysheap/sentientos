@@ -12,6 +12,8 @@ just build        # Build kernel with userspace
 just system-test  # Run only system tests
 just unit-test    # Run only unit tests
 just clippy       # Run linter
+just verify-test  # Run verification model tests
+just verify       # Run Kani proofs (requires Kani)
 just mcp-server   # Build MCP server
 just disassm      # Disassemble kernel
 just addr2line 0x1234  # Get source line for kernel address
@@ -27,6 +29,7 @@ system-tests/     # Integration tests (run on x86, test via QEMU)
 qemu-infra/       # Shared QEMU communication library (used by system-tests + mcp-server)
 mcp-server/       # MCP server for AI agent interaction with QEMU
 headers/          # Linux C header bindings via bindgen
+verification/     # Kani formal verification proofs
 doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 ```
 

@@ -3,6 +3,7 @@ members = [
     "common", "headers",
     "kernel",
     "userspace",
+    "verification",
 ]
 default-members = ["kernel"]
 resolver = "2"

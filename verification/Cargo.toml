@@ -1,0 +1,9 @@
+[package]
+name = "verification"
+edition = "2021"
+version.workspace = true
+authors.workspace = true
+description = "Formal verification proofs for Solaya kernel subsystems"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

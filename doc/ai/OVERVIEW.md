@@ -16,6 +16,7 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 | DRIVERS.md | VirtIO, PCI enumeration, device tree | Device driver work |
 | TESTING.md | Unit tests, system tests, QEMU infrastructure | Writing/debugging tests |
 | DEBUGGING.md | Logging, backtrace, GDB, dump functions | Debugging kernel issues |
+| VERIFICATION.md | Kani proofs, formal verification setup | Adding verification proofs |
 
 ## Quick Navigation by Task
 

@@ -64,6 +64,15 @@ deadlock-hunt: build
 miri: build-cargo
     MIRIFLAGS="-Zmiri-env-forward=RUST_BACKTRACE -Zmiri-strict-provenance" RUST_BACKTRACE=1 cargo miri test --target riscv64gc-unknown-linux-gnu
 
+verify:
+    cd verification && cargo kani
+
+verify-harness HARNESS:
+    cd verification && cargo kani --harness {{HARNESS}}
+
+verify-test:
+    cargo test -p verification --target x86_64-unknown-linux-gnu
+
 mcp-server:
     cargo build --release --manifest-path mcp-server/Cargo.toml --target x86_64-unknown-linux-gnu
 
