@@ -1,27 +1,9 @@
 //! Model and formal proofs for RISC-V Sv39 page table entry bit manipulation.
 //!
-//! Mirrors `kernel/src/memory/page_table_entry.rs`. The real PTE stores bits
-//! in a `*mut PageTable` (repr(transparent)); all operations use `.addr()` /
-//! `.map_addr()`, so the bit layout is identical to plain `usize`.
-//!
-//! Also verifies the bit utility functions from `kernel/src/klibc/util.rs`
-//! that underpin all PTE field access.
-//!
-//! # Verified properties
-//!
-//! ## Bit utilities
-//! - **bit_set_get_roundtrip**: set then get returns the set value
-//! - **bit_set_preserves_other_bits**: setting one bit doesn't affect others
-//! - **multiple_bits_roundtrip**: set_multiple_bits / get_multiple_bits roundtrip
-//!
-//! ## PTE fields
-//! - **validity_roundtrip**: set/get validity bit
-//! - **xwr_mode_roundtrip**: set/get XWR mode for all valid RISC-V modes
-//! - **user_mode_roundtrip**: set/get user-mode-accessible bit
-//! - **address_roundtrip**: set/get physical address for all 44-bit PPNs
-//! - **fields_are_independent**: changing one field preserves all others
-//! - **is_leaf_iff_not_pointer**: is_leaf() matches XWR != PointerToNextLevel
-//! - **address_preserves_flags**: changing address preserves flag bits
+//! Mirrors `kernel/src/memory/page_table_entry.rs` and the bit utilities from
+//! `kernel/src/klibc/util.rs`. The real PTE stores bits in a `*mut PageTable`
+//! (repr(transparent)); all operations use `.addr()` / `.map_addr()`, so the
+//! bit layout is identical to plain `usize`.
 
 // ── Bit manipulation utilities ──
 // Mirrors kernel/src/klibc/util.rs
@@ -40,22 +22,24 @@ fn set_or_clear_bit(data: &mut usize, should_set: bool, bit_position: usize) {
 
 /// Mirrors `set_multiple_bits` from `klibc/util.rs:192`.
 fn set_multiple_bits(data: &mut usize, value: u8, number_of_bits: usize, bit_position: usize) {
-    // Clear target bits
+    let mut mask: usize = !0;
     for idx in 0..number_of_bits {
-        *data &= !(1usize << (bit_position + idx));
+        mask &= !(1usize << (bit_position + idx));
     }
-    // Set bits from value
+    *data &= mask;
+
+    mask = 0;
     for idx in 0..number_of_bits {
         if (value & (1u8 << idx)) > 0 {
-            *data |= 1usize << (bit_position + idx);
+            mask |= 1usize << (bit_position + idx);
         }
     }
+    *data |= mask;
 }
 
 /// Mirrors `get_multiple_bits` from `klibc/util.rs:228`.
 fn get_multiple_bits(data: usize, number_of_bits: usize, bit_position: usize) -> u8 {
-    let mask = (1u64 << number_of_bits) - 1;
-    ((data >> bit_position) as u64 & mask) as u8
+    ((data >> bit_position) as u64 & (2u64.pow(number_of_bits as u32) - 1)) as u8
 }
 
 // ── XWR Mode enum ──

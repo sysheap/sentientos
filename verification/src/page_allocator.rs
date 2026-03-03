@@ -1,22 +1,7 @@
 //! Model and formal proofs for the page allocator.
 //!
-//! Mirrors the allocation algorithm from `kernel/src/memory/page_allocator.rs`,
-//! abstracting physical memory pointers to array indices. The pointer math in
-//! the real allocator is `base + index * PAGE_SIZE` — a bijection — so properties
-//! proved on indices hold for the real implementation.
-//!
-//! # Verified properties
-//!
-//! - **alloc_marks_correctly**: alloc(n) sets exactly (n-1) Used + 1 Last
-//! - **alloc_dealloc_roundtrip**: alloc then dealloc restores all pages to Free
-//! - **no_overlapping_allocations**: two allocs never return overlapping ranges
-//! - **exhaustion_detected**: can't allocate beyond capacity
-//! - **dealloc_count_matches_alloc**: dealloc returns the allocated count
-//! - **dealloc_order_independent**: two allocs freed in either order both work
-//! - **reallocation_after_free**: freed pages can be reallocated
-//! - **alloc_preserves_well_formed**: metadata structural invariant maintained
-//! - **two_allocs_preserve_well_formed**: invariant holds after two allocs
-//! - **alloc_dealloc_preserves_well_formed**: invariant holds after mixed ops
+//! Mirrors `kernel/src/memory/page_allocator.rs`, abstracting physical memory
+//! pointers to array indices (the pointer math is a bijection).
 
 /// Page metadata state. Mirrors `kernel/src/memory/page_allocator.rs:14`.
 #[repr(u8)]
