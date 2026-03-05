@@ -130,10 +130,9 @@ impl CpuScheduler {
 
     pub fn send_ctrl_c(&mut self) {
         process_table::THE.with_lock(|mut pt| {
-            let highest_pid = pt.get_highest_tid_without(&["sosh"]);
-
-            if let Some(pid) = highest_pid {
-                pt.kill(pid, 0);
+            let highest_tid = pt.get_highest_tid_without(&["sosh"]);
+            if let Some(tid) = highest_tid {
+                pt.kill_process_of(tid, 0);
             }
         });
         self.schedule();

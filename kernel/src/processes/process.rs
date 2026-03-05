@@ -251,6 +251,14 @@ impl Process {
         self.threads.remove(&tid);
     }
 
+    pub fn has_no_threads(&self) -> bool {
+        self.threads.is_empty()
+    }
+
+    pub fn close_all_fds(&self) {
+        self.fd_table.lock().close_all();
+    }
+
     pub fn thread_tids(&self) -> Vec<Tid> {
         self.threads.keys().copied().collect()
     }

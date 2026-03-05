@@ -79,6 +79,7 @@ linux_syscalls! {
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_SOCKET => socket(domain: c_int, typ: c_int, protocol: c_int);
+    SYSCALL_NR_TKILL => tkill(tid: c_int, sig: c_int);
     SYSCALL_NR_WAIT4 => wait4(pid: c_int, status: Option<*mut c_int>, options: c_int, rusage: usize);
     SYSCALL_NR_WRITEV => writev(fd: c_int, iov: *const iovec, iovcnt: c_int);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
@@ -599,6 +600,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     async fn gettid(&mut self) -> Result<isize, headers::errno::Errno> {
         Ok(self.current_tid.as_isize())
+    }
+
+    async fn tkill(&mut self, tid: c_int, sig: c_int) -> Result<isize, Errno> {
+        if sig == 0 {
+            return Ok(0);
+        }
+        let target_tid = Tid::try_from_i32(tid).ok_or(Errno::ESRCH)?;
+        process_table::THE.lock().kill(target_tid, sig);
+        Ok(0)
     }
 
     async fn socket(
