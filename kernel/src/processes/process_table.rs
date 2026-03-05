@@ -145,6 +145,16 @@ impl ProcessTable {
         }
     }
 
+    pub fn kill_process_of(&mut self, tid: Tid, exit_status: i32) {
+        let Some(thread) = self.threads.get(&tid).cloned() else {
+            return;
+        };
+        let all_tids = thread.lock().process().lock().thread_tids();
+        for t in all_tids {
+            self.kill(t, exit_status);
+        }
+    }
+
     pub fn kill(&mut self, tid: Tid, exit_status: i32) {
         assert!(
             tid != POWERSAVE_TID,
@@ -181,6 +191,9 @@ impl ProcessTable {
                 let process = t.process();
                 let mut p = process.lock();
                 p.remove_thread(tid);
+                if p.has_no_threads() {
+                    p.close_all_fds();
+                }
                 (p.main_tid(), futex_addr)
             });
 

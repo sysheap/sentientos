@@ -210,6 +210,13 @@ impl FdTable {
             .ok_or(Errno::EBADF)
     }
 
+    pub fn close_all(&mut self) {
+        let table = core::mem::take(&mut self.table);
+        for (_, entry) in table {
+            entry.descriptor.on_close();
+        }
+    }
+
     pub fn close_cloexec_fds(&mut self) {
         let cloexec_fds: Vec<RawFd> = self
             .table

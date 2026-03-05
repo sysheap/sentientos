@@ -20,6 +20,27 @@ async fn should_exit_program() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn should_rerun_udp_after_ctrl_c() -> anyhow::Result<()> {
+    let mut solaya =
+        QemuInstance::start_with(QemuOptions::default().add_network_card(true)).await?;
+
+    solaya
+        .run_prog_waiting_for("udp", "Listening on 1234")
+        .await?;
+    solaya.ctrl_c_and_assert_prompt().await?;
+
+    solaya
+        .run_prog_waiting_for("udp", "Listening on 1234")
+        .await?;
+    solaya.ctrl_c_and_assert_prompt().await?;
+
+    let output = solaya.run_prog("prog1").await?;
+    assert_eq!(output, "Hello from Prog1\n");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn should_not_exit_sosh() -> anyhow::Result<()> {
     let mut solaya = QemuInstance::start().await?;
 
