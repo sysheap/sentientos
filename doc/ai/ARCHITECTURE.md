@@ -12,11 +12,20 @@ Solaya is a RISC-V 64-bit hobby OS kernel written in Rust. Key characteristics:
 ## Project Structure
 
 ```
+arch/src/              # Hardware abstraction layer (no_std crate)
+  lib.rs               # cfg(target_arch) dispatch + CpuId type
+  riscv64/
+    cpu.rs             # CSR read/write, barriers, sfence
+    sbi/               # SBI ecall + extensions (timer, IPI, hart state)
+    timer.rs           # rdtime, CLINT constants
+    trap_cause.rs      # Interrupt/exception cause constants
+  stub/                # No-op stubs for non-riscv64 (Kani, miri)
+
 kernel/src/
   main.rs              # Entry point, kernel_init
-  cpu.rs               # Per-CPU state, CSR operations
-  asm/                 # RISC-V assembly (context switch)
-  memory/              # Page allocator, page tables
+  cpu.rs               # Per-CPU state (Cpu struct, scheduler, trap frame)
+  asm/                 # RISC-V assembly (context switch, traps)
+  memory/              # Page allocator, page tables, heap
   processes/           # Process, thread, scheduler
   syscalls/            # Linux syscall handlers
   interrupts/          # Trap handling, PLIC
@@ -24,7 +33,6 @@ kernel/src/
   drivers/virtio/      # VirtIO drivers
   io/                  # UART, stdin buffer
   pci/                 # PCI enumeration
-  sbi/                 # RISC-V SBI interface
   klibc/               # Kernel utilities
   debugging/           # Backtrace, symbols
   logging/             # Log macros
@@ -36,14 +44,14 @@ userspace/src/
 
 ## Boot Sequence
 
-Entry: `kernel_init(hart_id, device_tree_pointer)` in `kernel/src/main.rs:59`
+Entry: `kernel_init(hart_id, device_tree_pointer)` in `kernel/src/main.rs`
 
 ```
 kernel_init()
   |
   +-> QEMU_UART.init()              # Initialize serial output
-  +-> sbi::get_spec_version()       # Check SBI version >= 0.2
-  +-> sbi::get_number_of_harts()    # Count CPUs
+  +-> sbi::base_extension::sbi_get_spec_version() # Check SBI version >= 0.2
+  +-> sbi::hart_state_extension::get_number_of_harts() # Count CPUs
   +-> symbols::init()               # Load debug symbols
   +-> device_tree::init()           # Parse device tree
   +-> memory::init_page_allocator() # Set up physical page allocator
@@ -63,19 +71,19 @@ kernel_init()
   +-> prepare_for_scheduling()      # Enter scheduler loop
 ```
 
-`prepare_for_scheduling()` in `kernel/src/main.rs:144`:
+`prepare_for_scheduling()` in `kernel/src/main.rs`:
 ```
 prepare_for_scheduling()
   |
-  +-> Cpu::write_sie(usize::MAX)    # Enable all interrupt sources
-  +-> Cpu::csrs_sstatus(0b10)       # Enable global interrupts
-  +-> timer::set_timer(0)           # Trigger immediate timer
-  +-> wfi_loop()                    # Wait for interrupt loop
+  +-> arch::cpu::write_sie(usize::MAX) # Enable all interrupt sources
+  +-> arch::cpu::csrs_sstatus(0b10)    # Enable global interrupts
+  +-> timer::set_timer(0)              # Trigger immediate timer
+  +-> wfi_loop()                       # Wait for interrupt loop
 ```
 
 ## CPU Structure
 
-Per-CPU state in `kernel/src/cpu.rs:29`:
+Per-CPU state in `kernel/src/cpu.rs`:
 
 ```rust
 pub struct Cpu {
@@ -88,7 +96,7 @@ pub struct Cpu {
 }
 ```
 
-Access current CPU: `Cpu::current()` (via sscratch CSR)
+Access current CPU: `Cpu::current()` (via sscratch CSR, read through `arch::cpu::read_sscratch()`)
 
 ## Key Data Structures
 
@@ -162,6 +170,8 @@ All 32 general-purpose registers saved on trap/syscall.
 ## RISC-V Specifics
 
 ### CSRs Used
+All CSR access is through `arch::cpu` functions (e.g., `arch::cpu::read_sepc()`, `arch::cpu::write_satp()`).
+
 | CSR | Purpose |
 |-----|---------|
 | satp | Page table base register |
@@ -174,9 +184,11 @@ All 32 general-purpose registers saved on trap/syscall.
 | sip | Interrupt pending bits |
 
 ### SBI Interface
-- `sbi::timer::set_timer()` - Schedule timer interrupt
-- `sbi::hart_state::start_hart()` - Boot other CPUs
-- `sbi::ipi::sbi_send_ipi()` - Inter-processor interrupt
+All SBI calls are through `arch::sbi` (implemented via ecall in `arch/src/riscv64/sbi/`).
+
+- `arch::sbi::extensions::timer_extension::sbi_set_timer()` - Schedule timer interrupt
+- `arch::sbi::extensions::hart_state_extension::start_hart()` - Boot other CPUs
+- `arch::sbi::extensions::ipi_extension::sbi_send_ipi()` - Inter-processor interrupt
 
 ### Page Table Format
 Sv39: 39-bit virtual addresses, 3-level page tables
@@ -207,8 +219,10 @@ Key files:
 
 | Purpose | File:Line |
 |---------|-----------|
-| Kernel entry | kernel/src/main.rs:59 |
-| CPU struct | kernel/src/cpu.rs:29 |
+| Kernel entry | kernel/src/main.rs |
+| CPU struct | kernel/src/cpu.rs |
+| CSR access | arch/src/riscv64/cpu.rs |
+| SBI calls | arch/src/riscv64/sbi/ |
 | Trap entry | kernel/src/asm/trap.s |
 | Trap handler | kernel/src/interrupts/trap.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |

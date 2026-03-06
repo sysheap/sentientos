@@ -44,6 +44,10 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 ## Key Directories
 
 ```
+arch/src/          - Hardware abstraction layer (CSR, SBI, timer, trap causes)
+  riscv64/         - Real RISC-V implementations
+  stub/            - No-op stubs for non-riscv64 targets (Kani, miri)
+
 kernel/src/
   asm/           - RISC-V assembly (context switch, traps)
   memory/        - Page allocator, page tables, heap
@@ -54,7 +58,6 @@ kernel/src/
   drivers/       - VirtIO drivers
   io/            - UART, stdin buffer
   pci/           - PCI enumeration
-  sbi/           - RISC-V SBI interface
   klibc/         - Kernel utilities (spinlock, elf, etc.)
   debugging/     - Backtrace, symbols, unwinder
   logging/       - Log macros and configuration
