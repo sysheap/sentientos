@@ -3,7 +3,12 @@ use crate::klibc::{
     util::{get_bit, get_multiple_bits, set_multiple_bits, set_or_clear_bit},
 };
 
-use super::{address::PhysAddr, page_tables::PageTable};
+use super::address::PhysAddr;
+#[cfg(not(kani))]
+use super::page_tables::PageTable;
+
+#[cfg(kani)]
+type PageTable = u8;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

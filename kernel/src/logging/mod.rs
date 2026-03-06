@@ -1,21 +1,35 @@
 use core::fmt;
 
+#[cfg(not(kani))]
 pub mod configuration;
 
+#[cfg(not(kani))]
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
         $crate::println!("[CPU {}][info][{}] {}", $crate::Cpu::cpu_id(), module_path!(), format_args!($($arg)*));
     };
 }
+#[cfg(kani)]
+#[macro_export]
+macro_rules! info {
+    ($($arg:tt)*) => {};
+}
 
+#[cfg(not(kani))]
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)*) => {
         $crate::println!("[CPU {}][warn][{}] {}", $crate::Cpu::cpu_id(), module_path!(), format_args!($($arg)*));
     };
 }
+#[cfg(kani)]
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {};
+}
 
+#[cfg(not(kani))]
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {
@@ -24,18 +38,37 @@ macro_rules! debug {
         }
     };
 }
+#[cfg(kani)]
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {};
+}
 
+#[cfg(not(kani))]
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::logging::_print(format_args!($($arg)*)));
 }
+#[cfg(kani)]
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {};
+}
 
+#[cfg(not(kani))]
 #[macro_export]
 macro_rules! println {
     () => ($crate::print!("\n"));
     ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
+#[cfg(kani)]
+#[macro_export]
+macro_rules! println {
+    () => {};
+    ($($arg:tt)*) => {};
+}
 
+#[cfg(not(kani))]
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     #[cfg(miri)]

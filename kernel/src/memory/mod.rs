@@ -1,31 +1,44 @@
+#[cfg(not(kani))]
 use crate::{device_tree, info, klibc::Spinlock};
 
+#[cfg(not(kani))]
 use self::{
     page::Page,
     page_allocator::{MetadataPageAllocator, PageAllocator},
 };
+#[cfg(not(kani))]
 use core::{mem::MaybeUninit, ops::Range, ptr::NonNull, slice::from_raw_parts_mut};
+#[cfg(not(kani))]
 use linker_information::LinkerInformation;
 
 pub mod address;
+#[cfg(not(kani))]
 pub mod heap;
+#[cfg(not(kani))]
 pub mod linker_information;
 pub mod page;
+#[cfg(not(kani))]
 mod page_allocator;
 pub mod page_table_entry;
+#[cfg(not(kani))]
 pub mod page_tables;
+#[cfg(not(kani))]
 mod runtime_mappings;
 
 pub use address::{PhysAddr, VirtAddr};
 pub use page::PAGE_SIZE;
 
+#[cfg(not(kani))]
 pub use runtime_mappings::initialize_runtime_mappings;
 
+#[cfg(not(kani))]
 static PAGE_ALLOCATOR: Spinlock<MetadataPageAllocator> =
     Spinlock::new(MetadataPageAllocator::new());
 
+#[cfg(not(kani))]
 pub struct StaticPageAllocator;
 
+#[cfg(not(kani))]
 impl PageAllocator for StaticPageAllocator {
     fn alloc(number_of_pages_requested: usize) -> Option<Range<NonNull<Page>>> {
         PAGE_ALLOCATOR.lock().alloc(number_of_pages_requested)
@@ -41,7 +54,7 @@ pub fn heap_size() -> usize {
     crate::memory::PAGE_SIZE
 }
 
-#[cfg(not(miri))]
+#[cfg(not(any(miri, kani)))]
 pub fn heap_size() -> usize {
     let memory_node = device_tree::THE
         .root_node()
@@ -56,6 +69,7 @@ pub fn heap_size() -> usize {
     ram_end_address - LinkerInformation::__start_heap().as_usize()
 }
 
+#[cfg(not(kani))]
 pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
     let heap_start = LinkerInformation::__start_heap();
     let heap_size = heap_size();
@@ -77,10 +91,12 @@ pub fn init_page_allocator(reserved_areas: &[Range<*const u8>]) {
     PAGE_ALLOCATOR.lock().init(memory, reserved_areas);
 }
 
+#[cfg(not(kani))]
 pub fn used_heap_pages() -> usize {
     PAGE_ALLOCATOR.lock().used_heap_pages()
 }
 
+#[cfg(not(kani))]
 pub fn total_heap_pages() -> usize {
     PAGE_ALLOCATOR.lock().total_heap_pages()
 }

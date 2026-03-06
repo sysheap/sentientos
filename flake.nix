@@ -28,6 +28,7 @@
         lib = pkgs.lib;
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
+        kani = import ./nix/kani.nix { inherit pkgs; };
 
         riscv-toolchain = pkgs.pkgsCross.riscv64-musl.pkgsStatic.extend (
           final: prev: {
@@ -71,6 +72,7 @@
           rustToolchain
           riscv-toolchain.buildPackages.gcc
           riscv-toolchain.buildPackages.binutils
+          kani
         ];
 
         commonEnv = {
