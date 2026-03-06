@@ -1,39 +1,50 @@
 pub mod interrupt {
     pub const SUPERVISOR_SOFTWARE_INTERRUPT: usize = 1;
+    #[allow(dead_code)]
     pub const MACHINE_SOFTWARE_INTERRUPT: usize = 3;
     pub const SUPERVISOR_TIMER_INTERRUPT: usize = 5;
+    #[allow(dead_code)]
     pub const MACHINE_TIMER_INTERRUPT: usize = 7;
     pub const SUPERVISOR_EXTERNAL_INTERRUPT: usize = 9;
+    #[allow(dead_code)]
     pub const MACHINE_EXTERNAL_INTERRUPT: usize = 11;
 }
 
 pub mod exception {
+    #[allow(dead_code)]
     pub const INSTRUCTION_ADDRESS_MISALIGNED: usize = 0;
+    #[allow(dead_code)]
     pub const INSTRUCTION_ACCESS_FAULT: usize = 1;
+    #[allow(dead_code)]
     pub const ILLEGAL_INSTRUCTION: usize = 2;
+    #[allow(dead_code)]
     pub const BREAKPOINT: usize = 3;
+    #[allow(dead_code)]
     pub const LOAD_ADDRESS_MISALIGNED: usize = 4;
+    #[allow(dead_code)]
     pub const LOAD_ACCESS_FAULT: usize = 5;
+    #[allow(dead_code)]
     pub const STORE_AMO_ADDRESS_MISALIGNED: usize = 6;
+    #[allow(dead_code)]
     pub const STORE_AMO_ACCESS_FAULT: usize = 7;
     pub const ENVIRONMENT_CALL_FROM_U_MODE: usize = 8;
+    #[allow(dead_code)]
     pub const ENVIRONMENT_CALL_FROM_S_MODE: usize = 9;
+    #[allow(dead_code)]
     pub const ENVIRONMENT_CALL_FROM_M_MODE: usize = 11;
     pub const INSTRUCTION_PAGE_FAULT: usize = 12;
     pub const LOAD_PAGE_FAULT: usize = 13;
     pub const STORE_AMO_PAGE_FAULT: usize = 15;
 }
 
-use exception::*;
-use interrupt::*;
-
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct InterruptCause(usize);
 
 impl InterruptCause {
+    #[allow(dead_code)]
     pub fn from_scause() -> Self {
-        Self(arch::cpu::read_scause())
+        Self(super::cpu::read_scause())
     }
 
     pub fn is_interrupt(&self) -> bool {
@@ -44,7 +55,11 @@ impl InterruptCause {
         self.0 << 1 >> 1
     }
 
+    #[allow(dead_code)]
     pub fn get_reason(&self) -> &'static str {
+        use exception::*;
+        use interrupt::*;
+
         let is_asynchronous = self.is_interrupt();
 
         if is_asynchronous {

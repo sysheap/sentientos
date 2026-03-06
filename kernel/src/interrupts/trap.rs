@@ -1,4 +1,3 @@
-use super::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt};
 use crate::{
     cpu::Cpu,
     debug, info,
@@ -8,6 +7,7 @@ use crate::{
     processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
     syscalls::linux::LinuxSyscallHandler,
 };
+use arch::trap_cause::{InterruptCause, exception::ENVIRONMENT_CALL_FROM_U_MODE, interrupt};
 use common::syscalls::trap_frame::{Register, TrapFrame};
 use core::{
     panic,
