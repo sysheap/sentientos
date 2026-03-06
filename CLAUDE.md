@@ -21,6 +21,7 @@ just addr2line 0x1234  # Get source line for kernel address
 ## Project Structure
 
 ```
+arch/             # Hardware abstraction (CSR, SBI, timer, trap causes)
 kernel/           # Main kernel (RISC-V 64-bit, no_std)
 userspace/        # Userspace programs (musl libc)
 common/           # Shared no_std library
@@ -124,6 +125,8 @@ Kernel unit tests use `#[test_case]` macro (custom test framework).
 | Purpose | File |
 |---------|------|
 | Kernel entry | kernel/src/main.rs |
+| CSR access | arch/src/riscv64/cpu.rs |
+| SBI calls | arch/src/riscv64/sbi/ |
 | Syscall handlers | kernel/src/syscalls/linux.rs |
 | Process struct | kernel/src/processes/process.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |
