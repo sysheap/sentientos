@@ -83,6 +83,8 @@ linux_syscalls! {
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_SOCKET => socket(domain: c_int, typ: c_int, protocol: c_int);
+    SYSCALL_NR_KILL => kill(pid: c_int, sig: c_int);
+    SYSCALL_NR_TGKILL => tgkill(tgid: c_int, tid: c_int, sig: c_int);
     SYSCALL_NR_TKILL => tkill(tid: c_int, sig: c_int);
     SYSCALL_NR_WAIT4 => wait4(pid: c_int, status: Option<*mut c_int>, options: c_int, rusage: usize);
     SYSCALL_NR_WRITEV => writev(fd: c_int, iov: *const iovec, iovcnt: c_int);
@@ -674,17 +676,42 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         })
     }
 
-    async fn tkill(&mut self, tid: c_int, sig: c_int) -> Result<isize, Errno> {
-        if sig == 0 {
+    async fn kill(&mut self, pid: c_int, sig: c_int) -> Result<isize, Errno> {
+        let sig_u32 = u32::try_from(sig).map_err(|_| Errno::EINVAL)?;
+        if sig_u32 >= _NSIG {
+            return Err(Errno::EINVAL);
+        }
+        let target_tid = if pid > 0 {
+            Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?
+        } else if pid == 0 {
+            self.current_process.with_lock(|p| p.main_tid())
+        } else {
+            return Err(Errno::ESRCH);
+        };
+        if sig_u32 == 0 {
             return Ok(0);
         }
-        let target_tid = Tid::try_from_i32(tid).ok_or(Errno::ESRCH)?;
-        let sig_u8 = u8::try_from(sig).map_err(|_| Errno::EINVAL)?;
-        process_table::THE.lock().kill(
-            target_tid,
-            crate::processes::signal::ExitStatus::Signaled(sig_u8),
-        );
+        process_table::THE
+            .lock()
+            .send_signal_to_process(target_tid, sig_u32);
         Ok(0)
+    }
+
+    async fn tgkill(&mut self, _tgid: c_int, tid: c_int, sig: c_int) -> Result<isize, Errno> {
+        let sig_u32 = u32::try_from(sig).map_err(|_| Errno::EINVAL)?;
+        if sig_u32 >= _NSIG {
+            return Err(Errno::EINVAL);
+        }
+        let target_tid = Tid::try_from_i32(tid).ok_or(Errno::ESRCH)?;
+        if sig_u32 == 0 {
+            return Ok(0);
+        }
+        process_table::THE.lock().send_signal(target_tid, sig_u32);
+        Ok(0)
+    }
+
+    async fn tkill(&mut self, tid: c_int, sig: c_int) -> Result<isize, Errno> {
+        self.tgkill(0, tid, sig).await
     }
 
     async fn socket(

@@ -471,4 +471,70 @@ impl Thread {
     pub fn set_registers_replaced(&mut self, value: bool) {
         self.registers_replaced = value;
     }
+
+    pub fn raise_signal(&mut self, sig: u32) {
+        use super::signal::{DefaultAction, default_action};
+        use headers::syscall_types::{SIGKILL, SIGSTOP};
+
+        assert!((1..=31).contains(&sig), "signal {sig} out of range 1..=31");
+
+        // SIGKILL and SIGSTOP cannot be caught, blocked, or ignored
+        if sig == SIGKILL || sig == SIGSTOP {
+            self.signal_state.pending.raise(sig);
+            return;
+        }
+
+        let action = &self.signal_state.sigaction[sig as usize];
+        let handler = action.sa_handler;
+
+        match handler {
+            None => {
+                // SIG_DFL
+                match default_action(sig) {
+                    DefaultAction::Ignore => {}
+                    DefaultAction::Terminate | DefaultAction::Stop | DefaultAction::Continue => {
+                        self.signal_state.pending.raise(sig);
+                    }
+                }
+            }
+            Some(f) if f as usize == 1 => {
+                // SIG_IGN
+            }
+            Some(_) => {
+                self.signal_state.pending.raise(sig);
+            }
+        }
+    }
+
+    pub fn has_pending_unblocked_signal(&self) -> bool {
+        self.signal_state
+            .pending
+            .first_unblocked(self.signal_state.sigmask.sig[0])
+            .is_some()
+    }
+
+    #[allow(dead_code)]
+    pub fn take_next_pending_signal(&mut self) -> Option<u32> {
+        let sig = self
+            .signal_state
+            .pending
+            .first_unblocked(self.signal_state.sigmask.sig[0])?;
+        self.signal_state.pending.clear(sig);
+        Some(sig)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_sigaction_raw(&self, sig: u32) -> &sigaction {
+        &self.signal_state.sigaction[sig as usize]
+    }
+
+    #[allow(dead_code)]
+    pub fn get_sigmask(&self) -> u64 {
+        self.signal_state.sigmask.sig[0]
+    }
+
+    #[allow(dead_code)]
+    pub fn set_sigmask_raw(&mut self, mask: u64) {
+        self.signal_state.sigmask.sig[0] = mask;
+    }
 }
