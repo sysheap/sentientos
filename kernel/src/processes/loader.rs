@@ -128,6 +128,7 @@ fn set_up_arguments(
 }
 
 pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
+    super::signal::init_trampoline();
     let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(false);
 
     let elf_header = elf_file.get_header();
@@ -171,6 +172,14 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         STACK_SIZE,
         XWRMode::ReadWrite,
         "Stack".to_string(),
+    );
+
+    page_tables.map_userspace(
+        super::signal::TRAMPOLINE_VADDR,
+        super::signal::trampoline_phys_addr(),
+        PAGE_SIZE,
+        XWRMode::ReadExecute,
+        "Signal trampoline".to_string(),
     );
 
     // Map load program header
