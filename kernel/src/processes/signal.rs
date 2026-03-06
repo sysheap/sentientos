@@ -1,8 +1,36 @@
+use crate::{
+    klibc::Spinlock,
+    memory::{PhysAddr, VirtAddr, page::PinnedHeapPages},
+};
 use headers::syscall_types::{
     SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
     SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
     SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ,
 };
+
+pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
+
+// addi a7, zero, 139  (set syscall number to rt_sigreturn)
+// ecall                (invoke syscall)
+const TRAMPOLINE_CODE: [u8; 8] = [0x93, 0x08, 0xb0, 0x08, 0x73, 0x00, 0x00, 0x00];
+
+static TRAMPOLINE_PAGE: Spinlock<Option<PinnedHeapPages>> = Spinlock::new(None);
+
+pub fn init_trampoline() {
+    let mut guard = TRAMPOLINE_PAGE.lock();
+    if guard.is_some() {
+        return;
+    }
+    let mut page = PinnedHeapPages::new(1);
+    page.fill(&TRAMPOLINE_CODE, 0);
+    *guard = Some(page);
+}
+
+pub fn trampoline_phys_addr() -> PhysAddr {
+    let guard = TRAMPOLINE_PAGE.lock();
+    let page = guard.as_ref().expect("signal trampoline not initialized");
+    PhysAddr::new(page.addr())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExitStatus {
@@ -22,6 +50,7 @@ impl ExitStatus {
 #[derive(Debug, Clone, Copy)]
 pub struct PendingSignals(u64);
 
+#[allow(dead_code)]
 impl PendingSignals {
     pub const fn new() -> Self {
         Self(0)

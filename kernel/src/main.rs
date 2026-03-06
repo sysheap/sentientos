@@ -149,6 +149,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     memory::initialize_runtime_mappings(&runtime_mapping);
 
+    processes::signal::init_trampoline();
     process_table::init();
 
     arch::cpu::write_sscratch(Cpu::init(boot_cpu_id, num_cpus) as usize);
