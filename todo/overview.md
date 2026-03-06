@@ -4,65 +4,22 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [Proper Process IDs and Groups](#1-proper-process-ids-and-groups)
-2. [Linux-like Signals](#2-linux-like-signals)
-3. [Virtual File System (VFS)](#3-virtual-file-system-vfs)
-4. [QEMU Block Device Driver](#4-qemu-block-device-driver)
-5. [ext2 Filesystem](#5-ext2-filesystem)
-6. [Feasible Coreutils](#6-feasible-coreutils)
-7. [QEMU Framebuffer](#7-qemu-framebuffer)
-8. [Port Doom](#8-port-doom)
-9. [Async Network Reception with Interrupts](#9-async-network-reception-with-interrupts)
-10. [DHCP Client](#10-dhcp-client)
-11. [Minimal TCP Implementation](#11-minimal-tcp-implementation)
-12. [Dynamic Linking](#12-dynamic-linking)
-13. [QEMU Random Device Driver](#13-qemu-random-device-driver)
+1. [Linux-like Signals](#1-linux-like-signals)
+2. [Virtual File System (VFS)](#2-virtual-file-system-vfs)
+3. [QEMU Block Device Driver](#3-qemu-block-device-driver)
+4. [ext2 Filesystem](#4-ext2-filesystem)
+5. [Feasible Coreutils](#5-feasible-coreutils)
+6. [QEMU Framebuffer](#6-qemu-framebuffer)
+7. [Port Doom](#7-port-doom)
+8. [Async Network Reception with Interrupts](#8-async-network-reception-with-interrupts)
+9. [DHCP Client](#9-dhcp-client)
+10. [Minimal TCP Implementation](#10-minimal-tcp-implementation)
+11. [Dynamic Linking](#11-dynamic-linking)
+12. [QEMU Random Device Driver](#12-qemu-random-device-driver)
 
 ---
 
-## 1. Proper Process IDs and Groups
-
-**Complexity:** Medium
-
-### Currently Implemented ✅
-- Thread ID (TID): Unique per thread
-- Process ID (PID): Returns main thread's TID (partial implementation)
-- Parent Process ID (PPID): Tracked via `parent_tid`
-
-### Missing ❌
-- **Thread Group ID (TGID)**: Not tracked separately (conflated with PID)
-- **Process Group ID (PGID)**: Not tracked at all
-- **Session ID (SID)**: Not tracked at all
-
-### Required Changes
-
-**Data Structures:**
-Add to `Process` or `Thread`:
-```rust
-pgid: Tid  // Process group ID
-sid: Tid   // Session ID
-```
-
-**Syscall Implementations:**
-- `getpgid(pid)` - Get PGID (syscall #155)
-- `setpgid(pid, pgid)` - Set PGID (syscall #154)
-- `getsid(pid)` - Get SID (syscall #156)
-- `setsid()` - Create new session (syscall #157)
-
-**Initialization:**
-- Init process: `pgid=1`, `sid=1`
-- Fork/clone: Child inherits parent's PGID and SID
-- Constraints: `setsid()` fails if caller is process group leader
-
-### Purpose
-- PGID: Job control (shell pipelines, process groups)
-- SID: Session management (terminal control)
-
-**Estimated effort:** 1-2 weeks
-
----
-
-## 2. Linux-like Signals
+## 1. Linux-like Signals
 
 **Complexity:** Medium
 
@@ -113,7 +70,7 @@ sid: Tid   // Session ID
 
 ---
 
-## 3. Virtual File System (VFS)
+## 2. Virtual File System (VFS)
 
 **Complexity:** Medium to High
 
@@ -188,7 +145,7 @@ pub enum FileDescriptor {
 
 ---
 
-## 4. QEMU Block Device Driver
+## 3. QEMU Block Device Driver
 
 **Complexity:** Medium
 
@@ -233,7 +190,7 @@ struct virtio_blk_req {
 
 ---
 
-## 5. ext2 Filesystem
+## 4. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -268,8 +225,8 @@ struct virtio_blk_req {
 - Similar traversal + update bitmaps + allocate blocks
 
 ### Integration
-- Requires VFS layer (see #3)
-- Requires block device driver (see #4)
+- Requires VFS layer (see #2)
+- Requires block device driver (see #3)
 
 ### Complexity Assessment
 
@@ -291,13 +248,13 @@ struct virtio_blk_req {
 
 ---
 
-## 6. Feasible Coreutils
+## 5. Feasible Coreutils
 
 **Complexity:** Varies (Low to High per utility)
 
 ### Prerequisites
-- VFS implementation (#3)
-- Block device (#4) or tmpfs
+- VFS implementation (#2)
+- Block device (#3) or tmpfs
 - Core filesystem syscalls
 
 ### Required Syscalls
@@ -370,7 +327,7 @@ find, sort, diff, ln, readlink, dd
 
 ---
 
-## 7. QEMU Framebuffer
+## 6. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -425,7 +382,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 8. Port Doom
+## 7. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -449,16 +406,16 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#7)
-- **File system** - Need `open/openat/close` for reading WAD files (#3)
+- **Framebuffer access** - Need graphics device (#6)
+- **File system** - Need `open/openat/close` for reading WAD files (#2)
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#7) - VirtIO-GPU or bochs-display driver
-2. **File System** (#3) - Basic VFS for reading WAD file
+1. **Framebuffer** (#6) - VirtIO-GPU or bochs-display driver
+2. **File System** (#2) - Basic VFS for reading WAD file
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
 4. **Timing** - `clock_gettime` syscall
@@ -477,13 +434,13 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #3 (VFS), #7 (framebuffer), plus keyboard driver
+**Dependencies:** Items #2 (VFS), #6 (framebuffer), plus keyboard driver
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
 
 ---
 
-## 9. Async Network Reception with Interrupts
+## 8. Async Network Reception with Interrupts
 
 **Complexity:** Low to Medium
 
@@ -544,7 +501,7 @@ impl Future for RecvWait {
 
 ---
 
-## 10. DHCP Client
+## 9. DHCP Client
 
 **Complexity:** Low to Medium
 
@@ -616,7 +573,7 @@ async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
 
 ---
 
-## 11. Minimal TCP Implementation
+## 10. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -687,7 +644,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 12. Dynamic Linking
+## 11. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -735,7 +692,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ✅ Already implemented: `mmap`, `munmap`, `mprotect`, `brk`
 
-❌ Missing: **Filesystem syscalls** (#3)
+❌ Missing: **Filesystem syscalls** (#2)
 - `openat`, `close`, `read`, `fstat` - To open and read shared libraries
 
 ### Complexity Assessment
@@ -764,13 +721,13 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 - TLS support
 - Performance optimizations
 
-**Main Blocker:** Filesystem support (#3) - currently embeds all binaries
+**Main Blocker:** Filesystem support (#2) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
 
 ---
 
-## 13. QEMU Random Device Driver
+## 12. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -851,25 +808,24 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#1 - Process IDs/Groups** (Foundation for job control)
-2. **#9 - Async Network with Interrupts** (Better performance)
-3. **#13 - QEMU Random Device** (Security foundation)
+1. **#8 - Async Network with Interrupts** (Better performance)
+2. **#12 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-4. **#4 - QEMU Block Device Driver** (Prerequisite for filesystems)
-5. **#3 - Virtual File System** (Core abstraction)
-6. **#5 - ext2 Filesystem** (Persistent storage)
-7. **#6 - Coreutils** (User-facing utilities)
+3. **#3 - QEMU Block Device Driver** (Prerequisite for filesystems)
+4. **#2 - Virtual File System** (Core abstraction)
+5. **#4 - ext2 Filesystem** (Persistent storage)
+6. **#5 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-8. **#10 - DHCP Client** (Network configuration)
-9. **#11 - Minimal TCP** (Protocol expansion)
+7. **#9 - DHCP Client** (Network configuration)
+8. **#10 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-10. **#2 - Linux Signals** (Process control)
-11. **#12 - Dynamic Linking** (Shared libraries)
-12. **#7 - Framebuffer** (Graphics foundation)
-13. **#8 - Port Doom** (Showcase project)
+9. **#1 - Linux Signals** (Process control)
+10. **#11 - Dynamic Linking** (Shared libraries)
+11. **#6 - Framebuffer** (Graphics foundation)
+12. **#7 - Port Doom** (Showcase project)
 
 ---
 
@@ -877,13 +833,13 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 Before implementation, consider:
 
-1. **Storage Strategy:** For items #4-7 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
+1. **Storage Strategy:** For items #2-5 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
 
-2. **Framebuffer Choice (#7):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+2. **Framebuffer Choice (#6):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-3. **Dynamic Linking (#12):** Should we prioritize this over other features, or wait until filesystem support is solid?
+3. **Dynamic Linking (#11):** Should we prioritize this over other features, or wait until filesystem support is solid?
 
-4. **Signals (#2):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
+4. **Signals (#1):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
 
 5. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 

@@ -33,6 +33,8 @@ pub struct Process {
     fd_table: Arc<Spinlock<FdTable>>,
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
+    pgid: Tid,
+    sid: Tid,
     brk: Brk,
     vfork_parent: Option<ProcessRef>,
 }
@@ -60,6 +62,8 @@ impl Process {
         allocated_pages: Vec<PinnedHeapPages>,
         brk: Brk,
         main_thread: Tid,
+        pgid: Tid,
+        sid: Tid,
     ) -> Self {
         Self {
             name,
@@ -71,6 +75,8 @@ impl Process {
             threads: BTreeMap::new(),
             brk,
             main_tid: main_thread,
+            pgid,
+            sid,
             vfork_parent: None,
         }
     }
@@ -220,6 +226,22 @@ impl Process {
 
     pub fn main_tid(&self) -> Tid {
         self.main_tid
+    }
+
+    pub fn pgid(&self) -> Tid {
+        self.pgid
+    }
+
+    pub fn sid(&self) -> Tid {
+        self.sid
+    }
+
+    pub fn set_pgid(&mut self, pgid: Tid) {
+        self.pgid = pgid;
+    }
+
+    pub fn set_sid(&mut self, sid: Tid) {
+        self.sid = sid;
     }
 
     pub fn fd_table(&self) -> crate::klibc::SpinlockGuard<'_, FdTable> {

@@ -21,7 +21,7 @@ use crate::{
         thread::{Thread, ThreadRef, VforkState, VforkWait, get_next_tid},
         timer,
         userspace_ptr::UserspacePtr,
-        wait_child::WaitChild,
+        wait_child::{WaitChild, WaitPid},
     },
     syscalls::macros::linux_syscalls,
 };
@@ -57,8 +57,10 @@ linux_syscalls! {
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
     SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
     SYSCALL_NR_FUTEX => futex(uaddr: usize, op: c_int, val: c_uint, timeout: usize, uaddr2: usize, val3: c_uint);
+    SYSCALL_NR_GETPGID => getpgid(pid: c_int);
     SYSCALL_NR_GETPID => getpid();
     SYSCALL_NR_GETPPID => getppid();
+    SYSCALL_NR_GETSID => getsid(pid: c_int);
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint, arg: usize);
     SYSCALL_NR_MADVISE => madvise(addr: usize, length: usize, advice: c_int);
@@ -75,6 +77,8 @@ linux_syscalls! {
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
     SYSCALL_NR_SENDTO => sendto(fd: c_int, buf: *const u8, len: usize, flags: c_int, dest_addr: *const u8, addrlen: c_uint);
+    SYSCALL_NR_SETPGID => setpgid(pid: c_int, pgid: c_int);
+    SYSCALL_NR_SETSID => setsid();
     SYSCALL_NR_SET_ROBUST_LIST => set_robust_list(head: usize, len: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
@@ -602,6 +606,72 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(self.current_tid.as_isize())
     }
 
+    async fn getpgid(&mut self, pid: c_int) -> Result<isize, Errno> {
+        if pid == 0 {
+            let pgid = self.current_process.with_lock(|p| p.pgid());
+            return Ok(pgid.as_isize());
+        }
+        let target = Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?;
+        let pgid = process_table::THE
+            .lock()
+            .get_pgid_of(target)
+            .ok_or(Errno::ESRCH)?;
+        Ok(pgid.as_isize())
+    }
+
+    async fn getsid(&mut self, pid: c_int) -> Result<isize, Errno> {
+        if pid == 0 {
+            let sid = self.current_process.with_lock(|p| p.sid());
+            return Ok(sid.as_isize());
+        }
+        let target = Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?;
+        let sid = process_table::THE
+            .lock()
+            .get_sid_of(target)
+            .ok_or(Errno::ESRCH)?;
+        Ok(sid.as_isize())
+    }
+
+    async fn setpgid(&mut self, pid: c_int, pgid: c_int) -> Result<isize, Errno> {
+        let my_main_tid = self.current_process.with_lock(|p| p.main_tid());
+        let target_tid = if pid == 0 {
+            my_main_tid
+        } else {
+            Tid::try_from_i32(pid).ok_or(Errno::EINVAL)?
+        };
+        let new_pgid = if pgid == 0 {
+            target_tid
+        } else {
+            Tid::try_from_i32(pgid).ok_or(Errno::EINVAL)?
+        };
+
+        if target_tid != my_main_tid {
+            let is_child = process_table::THE
+                .lock()
+                .is_child_of(my_main_tid, target_tid);
+            if !is_child {
+                return Err(Errno::ESRCH);
+            }
+        }
+
+        if !process_table::THE.lock().set_pgid_of(target_tid, new_pgid) {
+            return Err(Errno::ESRCH);
+        }
+        Ok(0)
+    }
+
+    async fn setsid(&mut self) -> Result<isize, Errno> {
+        self.current_process.with_lock(|mut p| {
+            let main_tid = p.main_tid();
+            if p.pgid() == main_tid {
+                return Err(Errno::EPERM);
+            }
+            p.set_pgid(main_tid);
+            p.set_sid(main_tid);
+            Ok(main_tid.as_isize())
+        })
+    }
+
     async fn tkill(&mut self, tid: c_int, sig: c_int) -> Result<isize, Errno> {
         if sig == 0 {
             return Ok(0);
@@ -770,10 +840,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         options: c_int,
         _rusage: usize,
     ) -> Result<isize, headers::errno::Errno> {
-        assert!(
-            pid > 0 || pid == -1,
-            "wait4: unsupported pid value {pid} (no process groups yet)"
-        );
         let wnohang = (options & headers::syscall_types::WNOHANG as c_int) != 0;
         assert!(
             options & !(headers::syscall_types::WNOHANG as c_int) == 0,
@@ -781,7 +847,19 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         );
 
         let parent_main_tid = self.current_thread.lock().get_tid();
-        let (child_tid, wait_status) = WaitChild::new(parent_main_tid, pid, wnohang).await?;
+        let target = if pid > 0 {
+            WaitPid::Specific(Tid::try_from_i32(pid).expect("pid is positive"))
+        } else if pid == -1 {
+            WaitPid::Any
+        } else if pid == 0 {
+            let own_pgid = self.current_process.with_lock(|p| p.pgid());
+            WaitPid::Pgid(own_pgid)
+        } else {
+            // pid < -1: wait for any child whose pgid == abs(pid)
+            let abs_pid = pid.checked_neg().ok_or(Errno::EINVAL)?;
+            WaitPid::Pgid(Tid::try_from_i32(abs_pid).expect("abs(pid) is positive"))
+        };
+        let (child_tid, wait_status) = WaitChild::new(parent_main_tid, target, wnohang).await?;
 
         status.write_if_not_none(wait_status)?;
 
@@ -854,12 +932,16 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let loaded = loader::load_elf(&elf, name, &args).expect("ELF loading must succeed");
 
         let process_name = Arc::new(String::from(name));
+        let old_process = self.get_process();
+        let (old_pgid, old_sid) = old_process.with_lock(|p| (p.pgid(), p.sid()));
         let new_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
             process_name.clone(),
             loaded.page_tables,
             loaded.allocated_pages,
             loaded.brk,
             self.current_thread.lock().get_tid(),
+            old_pgid,
+            old_sid,
         )));
 
         let mut inherited_fd_table = self.get_process().with_lock(|p| p.fd_table().clone());
@@ -917,8 +999,15 @@ impl LinuxSyscallHandler {
         let parent_pc = arch::cpu::read_sepc();
 
         let parent_process = self.current_process.clone();
-        let (parent_main_tid, child_name) =
-            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
+        let (parent_main_tid, child_name, parent_pgid, parent_sid) =
+            parent_process.with_lock(|p| {
+                (
+                    p.main_tid(),
+                    Arc::new(String::from(p.get_name())),
+                    p.pgid(),
+                    p.sid(),
+                )
+            });
 
         let vfork_state = VforkState::new();
         let child_tid = get_next_tid();
@@ -931,6 +1020,8 @@ impl LinuxSyscallHandler {
             Vec::new(),
             Brk::empty(),
             child_tid,
+            parent_pgid,
+            parent_sid,
         )));
         child_process
             .lock()

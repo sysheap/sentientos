@@ -21,6 +21,8 @@ pub struct Process {
     fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
+    pgid: Tid,                                 // Process group ID
+    sid: Tid,                                  // Session ID
     brk: Brk,                                  // Heap break manager
 }
 ```
@@ -212,6 +214,29 @@ When a process dies in `ProcessTable::kill()`, orphans (children of the dying pr
 ### getppid syscall
 
 Linux syscall 173 (`getppid`) returns `thread.parent_tid()` (read from Thread, not Process).
+
+## Process Groups and Sessions
+
+Each process has a **process group ID** (`pgid`) and **session ID** (`sid`), stored on `Process`.
+
+### Initialization
+- **Init process** (`Thread::from_elf`): `pgid = tid, sid = tid` (session and group leader)
+- **Powersave thread**: `pgid = 0, sid = 0`
+- **vfork child** (`clone_vfork`): inherits parent's `pgid` and `sid`
+- **execve**: preserves the old process's `pgid` and `sid`
+
+### Syscalls
+- `getpgid(pid)` — returns PGID of `pid` (0 = self)
+- `getsid(pid)` — returns SID of `pid` (0 = self)
+- `setpgid(pid, pgid)` — set PGID; can only set own or child's. `pid=0` means self, `pgid=0` means use `pid`
+- `setsid()` — create new session (sets `pgid = pid, sid = pid`). Fails with `EPERM` if already a group leader
+
+### wait4 with process groups
+`wait4` supports all Linux `pid` modes:
+- `pid > 0` — wait for specific child
+- `pid == -1` — wait for any child
+- `pid == 0` — wait for any child in caller's process group
+- `pid < -1` — wait for any child in process group `abs(pid)`
 
 ## ELF Loader
 
