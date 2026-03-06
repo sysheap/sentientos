@@ -95,13 +95,18 @@ impl CpuScheduler {
                     Ok(ret) => ret,
                     Err(errno) => -(errno as isize),
                 };
-                self.current_thread.with_lock(|mut t| {
+                let signal_kill = self.current_thread.with_lock(|mut t| {
                     t.clear_wakeup_pending();
                     let trap_frame = t.get_register_state_mut();
                     trap_frame[Register::a0] = ret.cast_unsigned();
                     let pc = t.get_program_counter();
                     t.set_program_counter(pc + 4); // Skip the ecall instruction
+                    super::signal::deliver_signal(&mut t)
                 });
+                if let Some(exit_status) = signal_kill {
+                    self.kill_current_process(exit_status);
+                    return false;
+                }
                 if !self.set_cpu_reg_for_current_thread() {
                     return false;
                 }
@@ -213,31 +218,40 @@ impl CpuScheduler {
 
             // Acquire the thread lock once for both task check and register load,
             // eliminating the gap where a thread could be killed between the two.
-            let result = self.current_thread.with_lock(|mut t| {
-                if let Some(task) = t.take_syscall_task() {
-                    return Some(ProcessMode::KernelSyscallTask(task));
+            let result: Option<Result<ProcessMode, super::signal::ExitStatus>> =
+                self.current_thread.with_lock(|mut t| {
+                    if let Some(task) = t.take_syscall_task() {
+                        return Some(Ok(ProcessMode::KernelSyscallTask(task)));
+                    }
+                    if matches!(t.get_state(), ThreadState::Zombie(_)) {
+                        return None;
+                    }
+                    // Deliver pending signals before returning to userspace
+                    if let Some(exit_status) = super::signal::deliver_signal(&mut t) {
+                        return Some(Err(exit_status));
+                    }
+                    let cpu_id = Cpu::cpu_id();
+                    assert!(
+                        t.get_state() == ThreadState::Running { cpu_id },
+                        "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
+                        t.get_tid(),
+                        t.get_state(),
+                        cpu_id
+                    );
+                    let pc = t.get_program_counter();
+                    Cpu::write_trap_frame(t.get_register_state().clone());
+                    arch::cpu::write_sepc(pc.as_usize());
+                    arch::cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
+                    Some(Ok(ProcessMode::Userspace))
+                });
+            match result {
+                Some(Ok(mode)) => return mode,
+                Some(Err(exit_status)) => {
+                    let tid = self.current_thread.lock().get_tid();
+                    process_table::THE.lock().kill_process_of(tid, exit_status);
                 }
-                if matches!(t.get_state(), ThreadState::Zombie(_)) {
-                    return None;
-                }
-                let cpu_id = Cpu::cpu_id();
-                assert!(
-                    t.get_state() == ThreadState::Running { cpu_id },
-                    "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
-                    t.get_tid(),
-                    t.get_state(),
-                    cpu_id
-                );
-                let pc = t.get_program_counter();
-                Cpu::write_trap_frame(t.get_register_state().clone());
-                arch::cpu::write_sepc(pc.as_usize());
-                arch::cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
-                Some(ProcessMode::Userspace)
-            });
-            if let Some(mode) = result {
-                return mode;
+                None => {} // Thread was killed — retry
             }
-            // Thread was killed — retry
         }
     }
 

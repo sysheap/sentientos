@@ -513,7 +513,6 @@ impl Thread {
             .is_some()
     }
 
-    #[allow(dead_code)]
     pub fn take_next_pending_signal(&mut self) -> Option<u32> {
         let sig = self
             .signal_state
@@ -523,17 +522,14 @@ impl Thread {
         Some(sig)
     }
 
-    #[allow(dead_code)]
     pub fn get_sigaction_raw(&self, sig: u32) -> &sigaction {
         &self.signal_state.sigaction[sig as usize]
     }
 
-    #[allow(dead_code)]
     pub fn get_sigmask(&self) -> u64 {
         self.signal_state.sigmask.sig[0]
     }
 
-    #[allow(dead_code)]
     pub fn set_sigmask_raw(&mut self, mask: u64) {
         self.signal_state.sigmask.sig[0] = mask;
     }
