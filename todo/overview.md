@@ -4,56 +4,25 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [Reduce Unsafe Code](#1-reduce-unsafe-code)
-2. [Better Kernel Panic Backtraces](#2-better-kernel-panic-backtraces)
-3. [Proper Process IDs and Groups](#3-proper-process-ids-and-groups)
-4. [Kani Model Checking (Formal Verification)](#4-kani-model-checking-formal-verification)
-5. [Linux-like Signals](#5-linux-like-signals)
-6. [Virtual File System (VFS)](#6-virtual-file-system-vfs)
-7. [QEMU Block Device Driver](#7-qemu-block-device-driver)
-8. [ext2 Filesystem](#8-ext2-filesystem)
-9. [Feasible Coreutils](#9-feasible-coreutils)
-10. [QEMU Framebuffer](#10-qemu-framebuffer)
-11. [Port Doom](#11-port-doom)
-12. [Async Network Reception with Interrupts](#12-async-network-reception-with-interrupts)
-13. [DHCP Client](#13-dhcp-client)
-14. [Minimal TCP Implementation](#14-minimal-tcp-implementation)
-15. [Dynamic Linking](#15-dynamic-linking)
-16. [QEMU Random Device Driver](#16-qemu-random-device-driver)
+1. [Better Kernel Panic Backtraces](#1-better-kernel-panic-backtraces)
+2. [Proper Process IDs and Groups](#2-proper-process-ids-and-groups)
+3. [Kani Model Checking (Formal Verification)](#3-kani-model-checking-formal-verification)
+4. [Linux-like Signals](#4-linux-like-signals)
+5. [Virtual File System (VFS)](#5-virtual-file-system-vfs)
+6. [QEMU Block Device Driver](#6-qemu-block-device-driver)
+7. [ext2 Filesystem](#7-ext2-filesystem)
+8. [Feasible Coreutils](#8-feasible-coreutils)
+9. [QEMU Framebuffer](#9-qemu-framebuffer)
+10. [Port Doom](#10-port-doom)
+11. [Async Network Reception with Interrupts](#11-async-network-reception-with-interrupts)
+12. [DHCP Client](#12-dhcp-client)
+13. [Minimal TCP Implementation](#13-minimal-tcp-implementation)
+14. [Dynamic Linking](#14-dynamic-linking)
+15. [QEMU Random Device Driver](#15-qemu-random-device-driver)
 
 ---
 
-## 1. Reduce Unsafe Code
-
-**Complexity:** Low (for quick wins) to Medium (for comprehensive refactoring)
-
-### Current State
-- ~169 unsafe occurrences across 38 kernel files
-- Breakdown: ~127 unsafe blocks, ~10 unsafe functions, ~11 unsafe trait impls
-- Most concentrated in: memory management (69), klibc utilities (40), CPU/arch (14)
-
-### Quick Wins (3-5 blocks eliminable)
-1. **page_allocator.rs:84-86**: Replace `transmute` with `MaybeUninit::slice_assume_init_mut()`
-2. **array_vec.rs:107,114**: Use safer MaybeUninit slice operations
-3. **Improve safety comments** for page table traversal
-
-### Cannot Eliminate (Inherently Unsafe)
-- CSR register access and inline assembly
-- MMIO volatile operations (hardware registers)
-- Naked functions for backtrace
-- Core allocator implementations
-
-### Strategy
-- Use newer Rust stdlib APIs (slice_assume_init_mut)
-- Document invariants more thoroughly
-- Create type-safe wrappers around raw pointer operations
-- Consider formal verification for critical paths (see Kani section)
-
-**Estimated effort:** 1-2 days for immediate refactoring; ongoing for architectural improvements
-
----
-
-## 2. Better Kernel Panic Backtraces
+## 1. Better Kernel Panic Backtraces
 
 **Complexity:** Low to Medium
 
@@ -93,7 +62,7 @@ Missing frames when `.eh_frame` has gaps (inline asm, optimized code)
 
 ---
 
-## 3. Proper Process IDs and Groups
+## 2. Proper Process IDs and Groups
 
 **Complexity:** Medium
 
@@ -135,7 +104,7 @@ sid: Tid   // Session ID
 
 ---
 
-## 4. Kani Model Checking (Formal Verification)
+## 3. Kani Model Checking (Formal Verification)
 
 **Complexity:** Low to Medium (per proof harness)
 
@@ -192,7 +161,7 @@ Prove no overflow in critical calculations (physical address computation, etc.)
 
 ---
 
-## 5. Linux-like Signals
+## 4. Linux-like Signals
 
 **Complexity:** Medium
 
@@ -243,7 +212,7 @@ Prove no overflow in critical calculations (physical address computation, etc.)
 
 ---
 
-## 6. Virtual File System (VFS)
+## 5. Virtual File System (VFS)
 
 **Complexity:** Medium to High
 
@@ -318,7 +287,7 @@ pub enum FileDescriptor {
 
 ---
 
-## 7. QEMU Block Device Driver
+## 6. QEMU Block Device Driver
 
 **Complexity:** Medium
 
@@ -363,7 +332,7 @@ struct virtio_blk_req {
 
 ---
 
-## 8. ext2 Filesystem
+## 7. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -398,8 +367,8 @@ struct virtio_blk_req {
 - Similar traversal + update bitmaps + allocate blocks
 
 ### Integration
-- Requires VFS layer (see #6)
-- Requires block device driver (see #7)
+- Requires VFS layer (see #5)
+- Requires block device driver (see #6)
 
 ### Complexity Assessment
 
@@ -421,13 +390,13 @@ struct virtio_blk_req {
 
 ---
 
-## 9. Feasible Coreutils
+## 8. Feasible Coreutils
 
 **Complexity:** Varies (Low to High per utility)
 
 ### Prerequisites
-- VFS implementation (#6)
-- Block device (#7) or tmpfs
+- VFS implementation (#5)
+- Block device (#6) or tmpfs
 - Core filesystem syscalls
 
 ### Required Syscalls
@@ -500,7 +469,7 @@ find, sort, diff, ln, readlink, dd
 
 ---
 
-## 10. QEMU Framebuffer
+## 9. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -555,7 +524,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 11. Port Doom
+## 10. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -579,16 +548,16 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#10)
-- **File system** - Need `open/openat/close` for reading WAD files (#6)
+- **Framebuffer access** - Need graphics device (#9)
+- **File system** - Need `open/openat/close` for reading WAD files (#5)
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#10) - VirtIO-GPU or bochs-display driver
-2. **File System** (#6) - Basic VFS for reading WAD file
+1. **Framebuffer** (#9) - VirtIO-GPU or bochs-display driver
+2. **File System** (#5) - Basic VFS for reading WAD file
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
 4. **Timing** - `clock_gettime` syscall
@@ -607,13 +576,13 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #6 (VFS), #10 (framebuffer), plus keyboard driver
+**Dependencies:** Items #5 (VFS), #9 (framebuffer), plus keyboard driver
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
 
 ---
 
-## 12. Async Network Reception with Interrupts
+## 11. Async Network Reception with Interrupts
 
 **Complexity:** Low to Medium
 
@@ -674,7 +643,7 @@ impl Future for RecvWait {
 
 ---
 
-## 13. DHCP Client
+## 12. DHCP Client
 
 **Complexity:** Low to Medium
 
@@ -746,7 +715,7 @@ async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
 
 ---
 
-## 14. Minimal TCP Implementation
+## 13. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -817,7 +786,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 15. Dynamic Linking
+## 14. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -865,7 +834,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ✅ Already implemented: `mmap`, `munmap`, `mprotect`, `brk`
 
-❌ Missing: **Filesystem syscalls** (#6)
+❌ Missing: **Filesystem syscalls** (#5)
 - `openat`, `close`, `read`, `fstat` - To open and read shared libraries
 
 ### Complexity Assessment
@@ -894,13 +863,13 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 - TLS support
 - Performance optimizations
 
-**Main Blocker:** Filesystem support (#6) - currently embeds all binaries
+**Main Blocker:** Filesystem support (#5) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
 
 ---
 
-## 16. QEMU Random Device Driver
+## 15. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -981,30 +950,29 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#2 - Better Backtraces** (Low complexity, immediate debugging value)
-2. **#3 - Process IDs/Groups** (Foundation for job control)
-3. **#12 - Async Network with Interrupts** (Better performance)
-4. **#16 - QEMU Random Device** (Security foundation)
+1. **#1 - Better Backtraces** (Low complexity, immediate debugging value)
+2. **#2 - Process IDs/Groups** (Foundation for job control)
+3. **#11 - Async Network with Interrupts** (Better performance)
+4. **#15 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-5. **#7 - QEMU Block Device Driver** (Prerequisite for filesystems)
-6. **#6 - Virtual File System** (Core abstraction)
-7. **#8 - ext2 Filesystem** (Persistent storage)
-8. **#9 - Coreutils** (User-facing utilities)
+5. **#6 - QEMU Block Device Driver** (Prerequisite for filesystems)
+6. **#5 - Virtual File System** (Core abstraction)
+7. **#7 - ext2 Filesystem** (Persistent storage)
+8. **#8 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-9. **#13 - DHCP Client** (Network configuration)
-10. **#14 - Minimal TCP** (Protocol expansion)
+9. **#12 - DHCP Client** (Network configuration)
+10. **#13 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-11. **#5 - Linux Signals** (Process control)
-12. **#15 - Dynamic Linking** (Shared libraries)
-13. **#10 - Framebuffer** (Graphics foundation)
-14. **#11 - Port Doom** (Showcase project)
+11. **#4 - Linux Signals** (Process control)
+12. **#14 - Dynamic Linking** (Shared libraries)
+13. **#9 - Framebuffer** (Graphics foundation)
+14. **#10 - Port Doom** (Showcase project)
 
 ### Ongoing/Parallel Work
-- **#1 - Reduce Unsafe Code** (Continuous improvement)
-- **#4 - Kani Verification** (Quality assurance)
+- **#3 - Kani Verification** (Quality assurance)
 
 ---
 
@@ -1012,13 +980,13 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 Before implementation, consider:
 
-1. **Storage Strategy:** For items #6-9 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
+1. **Storage Strategy:** For items #5-8 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
 
-2. **Framebuffer Choice (#10):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+2. **Framebuffer Choice (#9):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-3. **Dynamic Linking (#15):** Should we prioritize this over other features, or wait until filesystem support is solid?
+3. **Dynamic Linking (#14):** Should we prioritize this over other features, or wait until filesystem support is solid?
 
-4. **Signals (#5):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
+4. **Signals (#4):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
 
 5. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 

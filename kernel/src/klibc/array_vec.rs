@@ -61,7 +61,7 @@ impl<T, const LENGTH: usize> Default for ArrayVec<T, LENGTH> {
 impl<T, const LENGTH: usize> Drop for ArrayVec<T, LENGTH> {
     fn drop(&mut self) {
         for index in 0..self.length {
-            // SAFETY: All elements up to <index are initialized
+            // SAFETY: All elements in [0..self.length) are initialized (maintained by push/pop).
             unsafe {
                 self.elements[index].assume_init_drop();
             }
@@ -103,16 +103,14 @@ impl<T, const LENGTH: usize> Deref for ArrayVec<T, LENGTH> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: MaybeUninit has the same memory layout as the underlying type
-        unsafe { core::slice::from_raw_parts(self.elements.as_ptr().cast::<T>(), self.len()) }
+        // SAFETY: All elements in [0..self.length) are initialized (maintained by push/pop).
+        unsafe { self.elements[..self.length].assume_init_ref() }
     }
 }
 
 impl<T, const LENGTH: usize> DerefMut for ArrayVec<T, LENGTH> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: MaybeUninit has the same memory layout as the underlying type
-        unsafe {
-            core::slice::from_raw_parts_mut(self.elements.as_mut_ptr().cast::<T>(), self.len())
-        }
+        // SAFETY: All elements in [0..self.length) are initialized (maintained by push/pop).
+        unsafe { self.elements[..self.length].assume_init_mut() }
     }
 }
