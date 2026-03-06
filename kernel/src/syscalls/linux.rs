@@ -914,7 +914,7 @@ impl LinuxSyscallHandler {
         );
 
         let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = Cpu::read_sepc();
+        let parent_pc = arch::cpu::read_sepc();
 
         let parent_process = self.current_process.clone();
         let (parent_main_tid, child_name) =
@@ -976,7 +976,7 @@ impl LinuxSyscallHandler {
         ctid: LinuxUserspaceArg<Option<*mut c_int>>,
     ) -> Result<isize, Errno> {
         let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = Cpu::read_sepc();
+        let parent_pc = arch::cpu::read_sepc();
 
         let parent_process = self.current_process.clone();
         let (parent_main_tid, child_name) =

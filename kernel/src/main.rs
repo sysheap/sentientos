@@ -80,8 +80,6 @@ mod pci;
 #[cfg(not(kani))]
 mod processes;
 #[cfg(not(kani))]
-mod sbi;
-#[cfg(not(kani))]
 mod syscalls;
 
 #[cfg(not(kani))]
@@ -103,14 +101,14 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     info!("Hello World from Solaya!\n");
     info!("Device Tree Pointer: {:p}", device_tree_pointer);
 
-    let version = sbi::extensions::base_extension::sbi_get_spec_version();
+    let version = arch::sbi::extensions::base_extension::sbi_get_spec_version();
     info!("SBI version {}.{}", version.major, version.minor);
     assert!(
         (version.major == 0 && version.minor >= 2) || version.major > 0,
         "Supported SBI Versions >= 0.2"
     );
 
-    let num_cpus = sbi::extensions::hart_state_extension::get_number_of_harts();
+    let num_cpus = arch::sbi::extensions::hart_state_extension::get_number_of_harts();
     info!("Number of Cores: {num_cpus}");
 
     symbols::init();
@@ -159,7 +157,7 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     process_table::init();
 
-    Cpu::write_sscratch(Cpu::init(boot_cpu_id, num_cpus) as usize);
+    arch::cpu::write_sscratch(Cpu::init(boot_cpu_id, num_cpus) as usize);
 
     Cpu::current().activate_kernel_page_table();
 
@@ -190,10 +188,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn prepare_for_scheduling() -> ! {
     // Enable all interrupts
-    Cpu::write_sie(usize::MAX);
+    arch::cpu::write_sie(usize::MAX);
 
     // Enable global interrupts
-    Cpu::csrs_sstatus(0b10);
+    arch::cpu::csrs_sstatus(0b10);
 
     timer::set_timer(0);
 
@@ -213,7 +211,7 @@ fn start_other_harts(current_hart_id: usize, number_of_cpus: usize) {
         }
 
         let cpu_struct = Cpu::init(cpu::CpuId::from_hart_id(hart_id), number_of_cpus);
-        sbi::extensions::hart_state_extension::start_hart(
+        arch::sbi::extensions::hart_state_extension::start_hart(
             hart_id,
             start_hart as *const () as usize,
             cpu_struct as usize,
