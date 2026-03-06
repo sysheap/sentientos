@@ -64,3 +64,13 @@ jobs:
           clean: false
       - uses: ./.github/actions/setup
       - run: just system-test
+
+  kani:
+    needs: build
+    runs-on: [self-hosted, nix]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: ./.github/actions/setup
+      - run: just kani
