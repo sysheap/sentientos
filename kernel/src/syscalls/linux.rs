@@ -76,6 +76,7 @@ linux_syscalls! {
     SYSCALL_NR_RECVFROM => recvfrom(fd: c_int, buf: *mut u8, len: usize, flags: c_int, src_addr: Option<*mut u8>, addrlen: Option<*mut c_uint>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
+    SYSCALL_NR_RT_SIGRETURN => rt_sigreturn();
     SYSCALL_NR_SENDTO => sendto(fd: c_int, buf: *const u8, len: usize, flags: c_int, dest_addr: *const u8, addrlen: c_uint);
     SYSCALL_NR_SETPGID => setpgid(pid: c_int, pgid: c_int);
     SYSCALL_NR_SETSID => setsid();
@@ -267,6 +268,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         oldset.write_if_not_none(old_set_in_thread)?;
 
+        Ok(0)
+    }
+
+    async fn rt_sigreturn(&mut self) -> Result<isize, Errno> {
+        self.current_thread.with_lock(|mut t| {
+            crate::processes::signal::restore_signal_frame(&mut t)?;
+            t.set_registers_replaced(true);
+            Ok::<_, Errno>(())
+        })?;
         Ok(0)
     }
 
