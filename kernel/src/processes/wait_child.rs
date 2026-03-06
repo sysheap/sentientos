@@ -8,17 +8,23 @@ use headers::errno::Errno;
 
 use super::process_table;
 
+pub enum WaitPid {
+    Specific(Tid),
+    Any,
+    Pgid(Tid),
+}
+
 pub struct WaitChild {
     parent_main_tid: Tid,
-    pid: i32,
+    target: WaitPid,
     wnohang: bool,
 }
 
 impl WaitChild {
-    pub fn new(parent_main_tid: Tid, pid: i32, wnohang: bool) -> Self {
+    pub fn new(parent_main_tid: Tid, target: WaitPid, wnohang: bool) -> Self {
         Self {
             parent_main_tid,
-            pid,
+            target,
             wnohang,
         }
     }
@@ -29,7 +35,7 @@ impl Future for WaitChild {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         process_table::THE.with_lock(|mut pt| {
-            if let Some((tid, status)) = pt.take_zombie(self.parent_main_tid, self.pid) {
+            if let Some((tid, status)) = pt.take_zombie(self.parent_main_tid, &self.target) {
                 return Poll::Ready(Ok((tid, status)));
             }
 

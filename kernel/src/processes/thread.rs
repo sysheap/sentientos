@@ -191,6 +191,8 @@ impl Thread {
             true,
             Brk::empty(),
             POWERSAVE_TID,
+            POWERSAVE_TID,
+            POWERSAVE_TID,
         )
     }
 
@@ -214,9 +216,10 @@ impl Thread {
         register_state[Register::a0] = args_start.as_usize();
         register_state[Register::sp] = args_start.as_usize();
 
+        let tid = get_next_tid();
         Ok(Self::new_process(
             name,
-            get_next_tid(),
+            tid,
             register_state,
             page_table,
             entry_address,
@@ -224,6 +227,8 @@ impl Thread {
             false,
             brk,
             parent_tid,
+            tid,
+            tid,
         ))
     }
 
@@ -238,6 +243,8 @@ impl Thread {
         in_kernel_mode: bool,
         brk: Brk,
         parent_tid: Tid,
+        pgid: Tid,
+        sid: Tid,
     ) -> ThreadRef {
         let name = Arc::new(name.into());
         let process = Arc::new(Spinlock::new(Process::new(
@@ -246,6 +253,8 @@ impl Thread {
             allocated_pages,
             brk,
             tid,
+            pgid,
+            sid,
         )));
 
         let main_thread = Thread::new(

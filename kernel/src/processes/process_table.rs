@@ -16,7 +16,10 @@ use crate::{
     processes::{futex, process::POWERSAVE_TID, thread::Thread},
 };
 
-use super::thread::{ThreadRef, ThreadState};
+use super::{
+    thread::{ThreadRef, ThreadState},
+    wait_child::WaitPid,
+};
 
 pub static RUN_QUEUE: Spinlock<VecDeque<ThreadRef>> = Spinlock::new(VecDeque::new());
 static LIVE_THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -91,28 +94,36 @@ impl ProcessTable {
         }
     }
 
-    pub fn take_zombie(&mut self, parent_tid: Tid, pid: i32) -> Option<(Tid, i32)> {
+    pub fn take_zombie(&mut self, parent_tid: Tid, target: &WaitPid) -> Option<(Tid, i32)> {
         let children = self.children.get(&parent_tid)?;
 
-        let tid = if pid > 0 {
-            let tid = Tid::try_from_i32(pid).expect("pid is positive");
-            if !children.contains(&tid) {
-                return None;
+        let tid = match target {
+            WaitPid::Specific(wanted) => {
+                if !children.contains(wanted) {
+                    return None;
+                }
+                let is_zombie = self
+                    .threads
+                    .get(wanted)?
+                    .with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)));
+                if !is_zombie {
+                    return None;
+                }
+                *wanted
             }
-            let is_zombie = self
-                .threads
-                .get(&tid)?
-                .with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)));
-            if !is_zombie {
-                return None;
-            }
-            tid
-        } else {
-            *children.iter().find(|&&child_tid| {
+            WaitPid::Any => *children.iter().find(|&&child_tid| {
                 self.threads.get(&child_tid).is_some_and(|t| {
                     t.with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)))
                 })
-            })?
+            })?,
+            WaitPid::Pgid(pgid) => *children.iter().find(|&&child_tid| {
+                self.threads.get(&child_tid).is_some_and(|t| {
+                    t.with_lock(|t| {
+                        matches!(t.get_state(), ThreadState::Zombie(_))
+                            && t.process().lock().pgid() == *pgid
+                    })
+                })
+            })?,
         };
 
         let thread = self.threads.remove(&tid).expect("tid was just found");
@@ -127,6 +138,31 @@ impl ProcessTable {
         self.children.remove(&tid);
 
         Some((tid, i32::from(exit_code) << 8))
+    }
+
+    pub fn get_pgid_of(&self, tid: Tid) -> Option<Tid> {
+        let thread = self.threads.get(&tid)?;
+        Some(thread.with_lock(|t| t.process().lock().pgid()))
+    }
+
+    pub fn get_sid_of(&self, tid: Tid) -> Option<Tid> {
+        let thread = self.threads.get(&tid)?;
+        Some(thread.with_lock(|t| t.process().lock().sid()))
+    }
+
+    pub fn set_pgid_of(&mut self, tid: Tid, pgid: Tid) -> bool {
+        if let Some(thread) = self.threads.get(&tid) {
+            thread.with_lock(|t| t.process().lock().set_pgid(pgid));
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_child_of(&self, parent_tid: Tid, child_tid: Tid) -> bool {
+        self.children
+            .get(&parent_tid)
+            .is_some_and(|c| c.contains(&child_tid))
     }
 
     pub fn has_any_child_of(&self, parent_tid: Tid) -> bool {
