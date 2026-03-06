@@ -285,16 +285,16 @@ unsafe impl<Allocator: PageAllocator> GlobalAlloc for SpinlockHeap<Allocator> {
     }
 }
 
-#[cfg(not(miri))]
+#[cfg(target_arch = "riscv64")]
 #[global_allocator]
 static HEAP: SpinlockHeap<super::StaticPageAllocator> = SpinlockHeap::new();
 
-#[cfg(not(miri))]
+#[cfg(target_arch = "riscv64")]
 pub fn allocated_size() -> usize {
     HEAP.inner.lock().allocated_memory()
 }
 
-#[cfg(miri)]
+#[cfg(not(target_arch = "riscv64"))]
 pub fn allocated_size() -> usize {
     0
 }

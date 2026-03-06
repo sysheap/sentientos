@@ -11,7 +11,6 @@ use crate::test::qemu_exit::exit_failure;
 static PANIC_COUNTER: AtomicU8 = AtomicU8::new(0);
 static CPU_ENTERED_PANIC: AtomicIsize = AtomicIsize::new(-1);
 
-#[cfg(not(any(miri, kani)))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     use core::sync::atomic::Ordering;

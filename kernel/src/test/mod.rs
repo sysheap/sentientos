@@ -25,6 +25,7 @@ where
 #[allow(dead_code)]
 pub fn test_runner(tests: &[&dyn Testable]) {
     println!("Running {} tests", tests.len());
+    #[cfg(target_arch = "riscv64")]
     crate::memory::initialize_runtime_mappings(&[]);
     // #[cfg(miri)]
     // {

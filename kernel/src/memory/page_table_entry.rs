@@ -4,10 +4,10 @@ use crate::klibc::{
 };
 
 use super::address::PhysAddr;
-#[cfg(not(kani))]
+#[cfg(target_arch = "riscv64")]
 use super::page_tables::PageTable;
 
-#[cfg(kani)]
+#[cfg(not(target_arch = "riscv64"))]
 type PageTable = u8;
 
 #[repr(u8)]

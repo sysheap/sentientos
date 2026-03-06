@@ -5,7 +5,7 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-#[cfg(not(any(test, kani)))]
+#[cfg(target_arch = "riscv64")]
 use crate::cpu::Cpu;
 
 const NO_OWNER: usize = usize::MAX;
@@ -59,7 +59,7 @@ impl<T> Spinlock<T> {
         SpinlockGuard { spinlock: self }
     }
 
-    #[cfg(not(any(test, kani)))]
+    #[cfg(target_arch = "riscv64")]
     fn detect_same_cpu_deadlock(&self) {
         // The gap between loading `locked` and `owner_cpu` is benign: if the
         // lock is released in between, we just skip the check (no deadlock).
@@ -74,10 +74,10 @@ impl<T> Spinlock<T> {
         }
     }
 
-    #[cfg(any(test, kani))]
+    #[cfg(not(target_arch = "riscv64"))]
     fn detect_same_cpu_deadlock(&self) {}
 
-    #[cfg(not(any(test, kani)))]
+    #[cfg(target_arch = "riscv64")]
     fn warn_possible_deadlock(&self, spin_count: u64) {
         if spin_count.is_multiple_of(10_000_000) {
             let cpu_id = Cpu::cpu_id();
@@ -91,16 +91,16 @@ impl<T> Spinlock<T> {
         }
     }
 
-    #[cfg(any(test, kani))]
+    #[cfg(not(target_arch = "riscv64"))]
     fn warn_possible_deadlock(&self, _spin_count: u64) {}
 
-    #[cfg(not(any(test, kani)))]
+    #[cfg(target_arch = "riscv64")]
     fn set_owner(&self) {
         self.owner_cpu
             .store(Cpu::cpu_id().as_usize(), Ordering::Relaxed);
     }
 
-    #[cfg(any(test, kani))]
+    #[cfg(not(target_arch = "riscv64"))]
     fn set_owner(&self) {}
 
     fn clear_owner(&self) {

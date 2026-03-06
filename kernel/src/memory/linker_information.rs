@@ -1,6 +1,6 @@
 macro_rules! getter_address {
     ($name:ident) => {
-        #[cfg(not(miri))]
+        #[cfg(target_arch = "riscv64")]
         pub fn $name() -> VirtAddr {
             // SAFETY: These symbols are defined by the linker script. We only
             // take their address (never read their value), which is always safe.
@@ -9,11 +9,8 @@ macro_rules! getter_address {
             }
             VirtAddr::new(core::ptr::addr_of!($name) as usize)
         }
-        #[cfg(miri)]
+        #[cfg(not(target_arch = "riscv64"))]
         pub fn $name() -> VirtAddr {
-            // When running under Miri we don't have any sections
-            // Just choose any value which does not collide with any
-            // other mappings
             VirtAddr::new($crate::klibc::util::align_down(
                 u32::MAX as usize,
                 $crate::memory::PAGE_SIZE,
@@ -67,7 +64,7 @@ macro_rules! sections {
                 VirtAddr::new(align_up(debugging::symbols::symbols_end(), PAGE_SIZE))
             }
 
-            #[cfg(not(miri))]
+            #[cfg(target_arch = "riscv64")]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
@@ -78,9 +75,8 @@ macro_rules! sections {
                     },)*
                 ]
             }
-            #[cfg(miri)]
+            #[cfg(not(target_arch = "riscv64"))]
             pub fn all_mappings() -> [MappingDescription; 0] {
-                // When running under Miri we don't have any sections
                 []
             }
         }
