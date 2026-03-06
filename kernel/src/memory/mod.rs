@@ -43,12 +43,12 @@ impl PageAllocator for StaticPageAllocator {
     }
 }
 
-#[cfg(not(target_arch = "riscv64"))]
+#[cfg(any(not(target_arch = "riscv64"), miri))]
 pub fn heap_size() -> usize {
     crate::memory::PAGE_SIZE
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(target_arch = "riscv64", not(miri)))]
 pub fn heap_size() -> usize {
     let memory_node = device_tree::THE
         .root_node()

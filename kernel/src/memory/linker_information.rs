@@ -1,6 +1,6 @@
 macro_rules! getter_address {
     ($name:ident) => {
-        #[cfg(target_arch = "riscv64")]
+        #[cfg(all(target_arch = "riscv64", not(miri)))]
         pub fn $name() -> VirtAddr {
             // SAFETY: These symbols are defined by the linker script. We only
             // take their address (never read their value), which is always safe.
@@ -9,7 +9,7 @@ macro_rules! getter_address {
             }
             VirtAddr::new(core::ptr::addr_of!($name) as usize)
         }
-        #[cfg(not(target_arch = "riscv64"))]
+        #[cfg(any(not(target_arch = "riscv64"), miri))]
         pub fn $name() -> VirtAddr {
             VirtAddr::new($crate::klibc::util::align_down(
                 u32::MAX as usize,
@@ -64,7 +64,7 @@ macro_rules! sections {
                 VirtAddr::new(align_up(debugging::symbols::symbols_end(), PAGE_SIZE))
             }
 
-            #[cfg(target_arch = "riscv64")]
+            #[cfg(all(target_arch = "riscv64", not(miri)))]
             pub fn all_mappings() -> [MappingDescription; count_idents!($($name)*)] {
                 [
                     $(MappingDescription {
@@ -75,7 +75,7 @@ macro_rules! sections {
                     },)*
                 ]
             }
-            #[cfg(not(target_arch = "riscv64"))]
+            #[cfg(any(not(target_arch = "riscv64"), miri))]
             pub fn all_mappings() -> [MappingDescription; 0] {
                 []
             }
