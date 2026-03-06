@@ -81,9 +81,7 @@ impl<'a> MetadataPageAllocator<'a> {
         });
 
         // SAFETY: All elements were initialized via MaybeUninit::write above.
-        self.metadata = unsafe {
-            core::mem::transmute::<&mut [MaybeUninit<PageStatus>], &mut [PageStatus]>(metadata)
-        };
+        self.metadata = unsafe { metadata.assume_init_mut() };
 
         self.pages = heap.as_mut_ptr_range();
 
