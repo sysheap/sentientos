@@ -140,16 +140,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn exit(&mut self, status: c_int) -> Result<isize, Errno> {
+        let exit_status = crate::processes::signal::ExitStatus::Exited(status.to_le_bytes()[0]);
         Cpu::with_scheduler(|mut s| {
-            s.kill_current_thread(status);
+            s.kill_current_thread(exit_status);
         });
         debug!("Exit thread with status: {status}\n");
         Ok(0)
     }
 
     async fn exit_group(&mut self, status: c_int) -> Result<isize, Errno> {
+        let exit_status = crate::processes::signal::ExitStatus::Exited(status.to_le_bytes()[0]);
         Cpu::with_scheduler(|mut s| {
-            s.kill_current_process(status);
+            s.kill_current_process(exit_status);
         });
 
         debug!("Exit process with status: {status}\n");
@@ -677,7 +679,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             return Ok(0);
         }
         let target_tid = Tid::try_from_i32(tid).ok_or(Errno::ESRCH)?;
-        process_table::THE.lock().kill(target_tid, sig);
+        let sig_u8 = u8::try_from(sig).map_err(|_| Errno::EINVAL)?;
+        process_table::THE.lock().kill(
+            target_tid,
+            crate::processes::signal::ExitStatus::Signaled(sig_u8),
+        );
         Ok(0)
     }
 

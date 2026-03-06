@@ -102,7 +102,7 @@ pub enum ThreadState {
     Running { cpu_id: crate::cpu::CpuId },
     Runnable,
     Waiting,
-    Zombie(u8),
+    Zombie(super::signal::ExitStatus),
 }
 
 #[derive(Debug)]
@@ -110,6 +110,8 @@ struct SignalState {
     sigaltstack: ContainsUserspacePtr<stack_t>,
     sigmask: sigset_t,
     sigaction: [sigaction; _NSIG as usize],
+    #[allow(dead_code)]
+    pending: super::signal::PendingSignals,
 }
 
 impl SignalState {
@@ -126,6 +128,7 @@ impl SignalState {
                 sa_flags: 0,
                 sa_mask: sigset_t { sig: [0] },
             }; _NSIG as usize],
+            pending: super::signal::PendingSignals::new(),
         }
     }
 }

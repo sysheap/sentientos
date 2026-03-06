@@ -13,6 +13,7 @@ use core::{
     panic,
     task::{Context, Poll},
 };
+use headers::syscall_types::SIGSEGV;
 
 // SAFETY: Called from trap.S assembly; must use C ABI and fixed symbol name.
 #[unsafe(no_mangle)]
@@ -246,7 +247,9 @@ fn handle_unhandled_exception() {
     });
     if from_userspace {
         info!("{}", message);
-        scheduler.kill_current_process(0);
+        scheduler.kill_current_process(crate::processes::signal::ExitStatus::Signaled(
+            u8::try_from(SIGSEGV).expect("signal number fits in u8"),
+        ));
         scheduler.schedule();
         return;
     }

@@ -6,6 +6,8 @@ pub(crate) mod loader;
 pub mod process;
 pub mod process_table;
 pub mod scheduler;
+#[allow(dead_code)]
+pub mod signal;
 pub mod task;
 pub mod thread;
 pub mod timer;
