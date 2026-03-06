@@ -228,3 +228,22 @@ fn setup_signal_frame(
 
     true
 }
+
+pub fn restore_signal_frame(thread: &mut Thread) -> Result<(), headers::errno::Errno> {
+    let sp = thread.get_register_state()[Register::sp];
+    let process = thread.process();
+    let read_ptr: UserspacePtr<*const u8> = UserspacePtr::new(core::ptr::without_provenance(sp));
+    let bytes = process
+        .lock()
+        .read_userspace_slice(&read_ptr, SIGNAL_FRAME_SIZE)?;
+    assert!(bytes.len() == SIGNAL_FRAME_SIZE);
+    // SAFETY: SignalFrame is repr(C) with only primitive fields, valid for any bit pattern.
+    let frame: SignalFrame =
+        unsafe { core::ptr::read_unaligned(bytes.as_ptr().cast::<SignalFrame>()) };
+
+    *thread.get_register_state_mut().gp_registers_mut() = frame.saved_regs;
+    *thread.get_register_state_mut().fp_registers_mut() = frame.saved_fregs;
+    thread.set_program_counter(VirtAddr::new(frame.saved_pc));
+    thread.set_sigmask_raw(frame.saved_sigmask);
+    Ok(())
+}
