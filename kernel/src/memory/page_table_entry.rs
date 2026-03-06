@@ -128,8 +128,7 @@ impl PageTableEntry {
         );
         let mask: usize = !(Self::PHYSICAL_PAGE_BITS << Self::PHYSICAL_PAGE_BIT_POS);
         let address_usize = address.as_usize();
-        self.0 = self.0.map_addr(|_| {
-            let mut original = self.0.addr();
+        self.0 = self.0.map_addr(|mut original| {
             original &= mask;
             original |=
                 ((address_usize >> 12) & Self::PHYSICAL_PAGE_BITS) << Self::PHYSICAL_PAGE_BIT_POS;
@@ -138,10 +137,8 @@ impl PageTableEntry {
     }
 
     pub(super) fn get_physical_address(&self) -> PhysAddr {
-        let ptr = self.0.map_addr(|addr| {
-            ((addr >> Self::PHYSICAL_PAGE_BIT_POS) & Self::PHYSICAL_PAGE_BITS) << 12
-        });
-        PhysAddr::new(ptr.addr())
+        let addr = self.0.addr();
+        PhysAddr::new(((addr >> Self::PHYSICAL_PAGE_BIT_POS) & Self::PHYSICAL_PAGE_BITS) << 12)
     }
 
     pub(super) fn get_target_page_table(&self) -> *mut PageTable {
@@ -155,10 +152,8 @@ impl PageTableEntry {
 #[cfg(kani)]
 mod kani_proofs {
     use super::*;
-    use core::ptr::null_mut;
-
     fn entry_from_bits(bits: usize) -> PageTableEntry {
-        PageTableEntry(null_mut::<PageTable>().map_addr(|_| bits))
+        PageTableEntry(core::ptr::without_provenance_mut(bits))
     }
 
     #[kani::proof]
@@ -201,7 +196,11 @@ mod kani_proofs {
     #[kani::proof]
     fn leaf_address_roundtrip() {
         let ppn: usize = kani::any();
-        kani::assume(ppn <= 0xfffffffffff);
+        // CBMC limits pointer addresses to 48 bits. The internal
+        // representation stores PPN at bit offset 10, so we need
+        // ppn << 10 < 2^48, i.e. ppn < 2^38. This still covers
+        // 50-bit physical addresses (well beyond typical hardware).
+        kani::assume(ppn <= 0x3FFFFFFFFF);
         let addr = PhysAddr::new(ppn << 12);
         let mut entry = entry_from_bits(0);
         entry.set_leaf_address(addr);

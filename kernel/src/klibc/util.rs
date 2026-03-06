@@ -320,13 +320,14 @@ mod kani_proofs {
     }
 
     #[kani::proof]
+    #[kani::unwind(9)]
     fn set_get_multiple_bits_roundtrip() {
         let mut data: u64 = kani::any();
         let value: u8 = kani::any();
         let n_bits: usize = kani::any();
         let bit_pos: usize = kani::any();
         kani::assume(n_bits > 0 && n_bits <= 8);
-        kani::assume(bit_pos + n_bits <= 64);
+        kani::assume(bit_pos <= 64 - n_bits);
         let mask = u8::MAX >> (8 - n_bits);
         kani::assume(value == value & mask);
         set_multiple_bits(&mut data, value, n_bits, bit_pos);
