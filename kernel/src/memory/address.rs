@@ -121,6 +121,51 @@ impl fmt::Display for VirtAddr {
     }
 }
 
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    #[kani::proof]
+    fn phys_addr_page_aligned_iff_low_bits_zero() {
+        let val: usize = kani::any();
+        let addr = PhysAddr::new(val);
+        assert!(addr.is_page_aligned() == (val & 0xFFF == 0));
+    }
+
+    #[kani::proof]
+    fn virt_addr_page_aligned_iff_low_bits_zero() {
+        let val: usize = kani::any();
+        let addr = VirtAddr::new(val);
+        assert!(addr.is_page_aligned() == (val & 0xFFF == 0));
+    }
+
+    #[kani::proof]
+    fn phys_addr_add_sub_inverse() {
+        let base: usize = kani::any();
+        let n: usize = kani::any();
+        kani::assume(base <= usize::MAX - n);
+        let addr = PhysAddr::new(base);
+        let result = (addr + n) - n;
+        assert!(result == addr);
+    }
+
+    #[kani::proof]
+    fn phys_addr_sub_gives_distance() {
+        let a: usize = kani::any();
+        let b: usize = kani::any();
+        kani::assume(a >= b);
+        let addr_a = PhysAddr::new(a);
+        let addr_b = PhysAddr::new(b);
+        assert!(addr_a - addr_b == a - b);
+    }
+
+    #[kani::proof]
+    fn virt_addr_roundtrip() {
+        let val: usize = kani::any();
+        assert!(VirtAddr::new(val).as_usize() == val);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

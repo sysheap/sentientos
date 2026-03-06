@@ -7,8 +7,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=../flake.nix");
     println!("cargo:rerun-if-changed=../flake.lock");
     println!("cargo:rustc-link-arg-bin=kernel=-Tkernel/qemu.ld");
+    println!("cargo::rustc-check-cfg=cfg(kani)");
 
-    if is_miri_execution() {
+    if is_miri_execution() || is_kani_execution() {
         return Ok(());
     }
 
@@ -19,6 +20,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn is_miri_execution() -> bool {
     env::var_os("CARGO_CFG_MIRI").is_some()
+}
+
+fn is_kani_execution() -> bool {
+    env::var_os("CARGO_CFG_KANI").is_some()
 }
 
 fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
