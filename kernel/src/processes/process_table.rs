@@ -127,8 +127,8 @@ impl ProcessTable {
         };
 
         let thread = self.threads.remove(&tid).expect("tid was just found");
-        let exit_code = thread.with_lock(|t| match t.get_state() {
-            ThreadState::Zombie(code) => code,
+        let wstatus = thread.with_lock(|t| match t.get_state() {
+            ThreadState::Zombie(exit_status) => exit_status.to_wstatus(),
             _ => unreachable!(),
         });
 
@@ -137,7 +137,7 @@ impl ProcessTable {
         }
         self.children.remove(&tid);
 
-        Some((tid, i32::from(exit_code) << 8))
+        Some((tid, wstatus))
     }
 
     pub fn get_pgid_of(&self, tid: Tid) -> Option<Tid> {
@@ -181,7 +181,7 @@ impl ProcessTable {
         }
     }
 
-    pub fn kill_process_of(&mut self, tid: Tid, exit_status: i32) {
+    pub fn kill_process_of(&mut self, tid: Tid, exit_status: super::signal::ExitStatus) {
         let Some(thread) = self.threads.get(&tid).cloned() else {
             return;
         };
@@ -191,13 +191,12 @@ impl ProcessTable {
         }
     }
 
-    pub fn kill(&mut self, tid: Tid, exit_status: i32) {
+    pub fn kill(&mut self, tid: Tid, exit_status: super::signal::ExitStatus) {
         assert!(
             tid != POWERSAVE_TID,
             "We are not allowed to kill the never process"
         );
         debug!("Killing tid={tid}");
-        let exit_code = u8::try_from(exit_status & 0xff).expect("masked to 8 bits");
         if let Some(thread) = self.threads.get(&tid).cloned() {
             let already_dead =
                 thread.with_lock(|t| matches!(t.get_state(), ThreadState::Zombie(_)));
@@ -206,7 +205,7 @@ impl ProcessTable {
             }
             LIVE_THREAD_COUNT.fetch_sub(1, Ordering::Relaxed);
             let (main_tid, futex_addr) = thread.with_lock(|mut t| {
-                t.set_state(ThreadState::Zombie(exit_code));
+                t.set_state(ThreadState::Zombie(exit_status));
                 Cpu::current().ipi_to_all_but_me();
 
                 let futex_addr = if let Some(clear_child_tid) = t.get_clear_child_tid() {

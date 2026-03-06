@@ -17,6 +17,7 @@ use crate::{
 use alloc::sync::Arc;
 use common::syscalls::trap_frame::Register;
 use core::task::{Context, Poll};
+use headers::syscall_types::SIGINT;
 
 pub struct CpuScheduler {
     current_thread: ThreadRef,
@@ -115,12 +116,12 @@ impl CpuScheduler {
         }
     }
 
-    pub fn kill_current_thread(&mut self, exit_status: i32) {
+    pub fn kill_current_thread(&mut self, exit_status: super::signal::ExitStatus) {
         let tid = self.current_thread.lock().get_tid();
         process_table::THE.lock().kill(tid, exit_status);
     }
 
-    pub fn kill_current_process(&mut self, exit_status: i32) {
+    pub fn kill_current_process(&mut self, exit_status: super::signal::ExitStatus) {
         let all_tids = self.current_thread.lock().process().lock().thread_tids();
         let mut pt = process_table::THE.lock();
         for tid in all_tids {
@@ -132,7 +133,12 @@ impl CpuScheduler {
         process_table::THE.with_lock(|mut pt| {
             let highest_tid = pt.get_highest_tid_without(&["sosh"]);
             if let Some(tid) = highest_tid {
-                pt.kill_process_of(tid, 0);
+                pt.kill_process_of(
+                    tid,
+                    super::signal::ExitStatus::Signaled(
+                        u8::try_from(SIGINT).expect("signal number fits in u8"),
+                    ),
+                );
             }
         });
         self.schedule();
