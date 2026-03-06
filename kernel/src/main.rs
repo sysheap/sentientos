@@ -1,5 +1,5 @@
-#![cfg_attr(target_arch = "riscv64", no_std)]
-#![cfg_attr(target_arch = "riscv64", no_main)]
+#![cfg_attr(all(target_arch = "riscv64", not(miri)), no_std)]
+#![cfg_attr(all(target_arch = "riscv64", not(miri)), no_main)]
 #![cfg_attr(not(target_arch = "riscv64"), allow(dead_code))]
 #![cfg_attr(not(target_arch = "riscv64"), allow(unused_imports))]
 #![cfg_attr(not(target_arch = "riscv64"), allow(unused_macros))]
@@ -69,7 +69,7 @@ mod klibc;
 mod logging;
 mod memory;
 mod net;
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(target_arch = "riscv64", not(miri)))]
 mod panic;
 mod pci;
 #[cfg(target_arch = "riscv64")]

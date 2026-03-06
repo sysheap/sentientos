@@ -80,7 +80,7 @@ macro_rules! println {
     };
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(target_arch = "riscv64", not(miri)))]
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use crate::io::uart;
@@ -89,4 +89,13 @@ pub fn _print(args: fmt::Arguments) {
         .lock()
         .write_fmt(args)
         .expect("Failed to write to UART");
+}
+
+#[cfg(miri)]
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout().lock();
+    stdout.write_fmt(args).expect("Failed to write to stdout");
+    stdout.flush().expect("Failed to flush stdout");
 }
