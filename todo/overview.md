@@ -4,64 +4,23 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [Better Kernel Panic Backtraces](#1-better-kernel-panic-backtraces)
-2. [Proper Process IDs and Groups](#2-proper-process-ids-and-groups)
-3. [Linux-like Signals](#3-linux-like-signals)
-4. [Virtual File System (VFS)](#4-virtual-file-system-vfs)
-5. [QEMU Block Device Driver](#5-qemu-block-device-driver)
-6. [ext2 Filesystem](#6-ext2-filesystem)
-7. [Feasible Coreutils](#7-feasible-coreutils)
-8. [QEMU Framebuffer](#8-qemu-framebuffer)
-9. [Port Doom](#9-port-doom)
-10. [Async Network Reception with Interrupts](#10-async-network-reception-with-interrupts)
-11. [DHCP Client](#11-dhcp-client)
-12. [Minimal TCP Implementation](#12-minimal-tcp-implementation)
-13. [Dynamic Linking](#13-dynamic-linking)
-14. [QEMU Random Device Driver](#14-qemu-random-device-driver)
+1. [Proper Process IDs and Groups](#1-proper-process-ids-and-groups)
+2. [Linux-like Signals](#2-linux-like-signals)
+3. [Virtual File System (VFS)](#3-virtual-file-system-vfs)
+4. [QEMU Block Device Driver](#4-qemu-block-device-driver)
+5. [ext2 Filesystem](#5-ext2-filesystem)
+6. [Feasible Coreutils](#6-feasible-coreutils)
+7. [QEMU Framebuffer](#7-qemu-framebuffer)
+8. [Port Doom](#8-port-doom)
+9. [Async Network Reception with Interrupts](#9-async-network-reception-with-interrupts)
+10. [DHCP Client](#10-dhcp-client)
+11. [Minimal TCP Implementation](#11-minimal-tcp-implementation)
+12. [Dynamic Linking](#12-dynamic-linking)
+13. [QEMU Random Device Driver](#13-qemu-random-device-driver)
 
 ---
 
-## 1. Better Kernel Panic Backtraces
-
-**Complexity:** Low to Medium
-
-### Current Implementation
-- Uses DWARF `.eh_frame` information for stack unwinding
-- Stops at first address without DWARF info (may miss valid frames)
-- Location: `kernel/src/debugging/backtrace.rs`
-
-### Problem
-Missing frames when `.eh_frame` has gaps (inline asm, optimized code)
-
-### Proposed Solutions
-
-**Option A: Enhanced DWARF-only (Recommended for MVP)**
-- Validate addresses are in text segment before lookup
-- Continue past missing FDEs by scanning forward in stack
-- Complexity: ~20 lines of code
-- Add `LinkerInformation::text_range().contains(&addr)` check
-
-**Option B: Hybrid DWARF + Stack Scan (Linux-like)**
-- Primary: DWARF unwinding (verified frames)
-- Fallback: Scan remaining stack for text addresses (mark with `?`)
-- More complete traces but potential false positives
-- Complexity: ~50-100 lines
-
-**Option C: DWARF + Validation Only**
-- Keep current approach but add text segment validation
-- Print warning when RA outside text segment
-- Complexity: ~10 lines
-
-### Implementation Points
-- Text segment bounds already available via `LinkerInformation::text_range()`
-- Need kernel stack range per-CPU
-- Address validation function to check bounds
-
-**Estimated effort:** 1-2 days for Option A; 3-5 days for Option B
-
----
-
-## 2. Proper Process IDs and Groups
+## 1. Proper Process IDs and Groups
 
 **Complexity:** Medium
 
@@ -103,7 +62,7 @@ sid: Tid   // Session ID
 
 ---
 
-## 3. Linux-like Signals
+## 2. Linux-like Signals
 
 **Complexity:** Medium
 
@@ -154,7 +113,7 @@ sid: Tid   // Session ID
 
 ---
 
-## 4. Virtual File System (VFS)
+## 3. Virtual File System (VFS)
 
 **Complexity:** Medium to High
 
@@ -229,7 +188,7 @@ pub enum FileDescriptor {
 
 ---
 
-## 5. QEMU Block Device Driver
+## 4. QEMU Block Device Driver
 
 **Complexity:** Medium
 
@@ -274,7 +233,7 @@ struct virtio_blk_req {
 
 ---
 
-## 6. ext2 Filesystem
+## 5. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -309,8 +268,8 @@ struct virtio_blk_req {
 - Similar traversal + update bitmaps + allocate blocks
 
 ### Integration
-- Requires VFS layer (see #4)
-- Requires block device driver (see #5)
+- Requires VFS layer (see #3)
+- Requires block device driver (see #4)
 
 ### Complexity Assessment
 
@@ -332,13 +291,13 @@ struct virtio_blk_req {
 
 ---
 
-## 7. Feasible Coreutils
+## 6. Feasible Coreutils
 
 **Complexity:** Varies (Low to High per utility)
 
 ### Prerequisites
-- VFS implementation (#4)
-- Block device (#5) or tmpfs
+- VFS implementation (#3)
+- Block device (#4) or tmpfs
 - Core filesystem syscalls
 
 ### Required Syscalls
@@ -411,7 +370,7 @@ find, sort, diff, ln, readlink, dd
 
 ---
 
-## 8. QEMU Framebuffer
+## 7. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -466,7 +425,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 9. Port Doom
+## 8. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -490,16 +449,16 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#8)
-- **File system** - Need `open/openat/close` for reading WAD files (#4)
+- **Framebuffer access** - Need graphics device (#7)
+- **File system** - Need `open/openat/close` for reading WAD files (#3)
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#8) - VirtIO-GPU or bochs-display driver
-2. **File System** (#4) - Basic VFS for reading WAD file
+1. **Framebuffer** (#7) - VirtIO-GPU or bochs-display driver
+2. **File System** (#3) - Basic VFS for reading WAD file
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
 4. **Timing** - `clock_gettime` syscall
@@ -518,13 +477,13 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #4 (VFS), #8 (framebuffer), plus keyboard driver
+**Dependencies:** Items #3 (VFS), #7 (framebuffer), plus keyboard driver
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
 
 ---
 
-## 10. Async Network Reception with Interrupts
+## 9. Async Network Reception with Interrupts
 
 **Complexity:** Low to Medium
 
@@ -585,7 +544,7 @@ impl Future for RecvWait {
 
 ---
 
-## 11. DHCP Client
+## 10. DHCP Client
 
 **Complexity:** Low to Medium
 
@@ -657,7 +616,7 @@ async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
 
 ---
 
-## 12. Minimal TCP Implementation
+## 11. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -728,7 +687,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 13. Dynamic Linking
+## 12. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -776,7 +735,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ✅ Already implemented: `mmap`, `munmap`, `mprotect`, `brk`
 
-❌ Missing: **Filesystem syscalls** (#4)
+❌ Missing: **Filesystem syscalls** (#3)
 - `openat`, `close`, `read`, `fstat` - To open and read shared libraries
 
 ### Complexity Assessment
@@ -805,13 +764,13 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 - TLS support
 - Performance optimizations
 
-**Main Blocker:** Filesystem support (#4) - currently embeds all binaries
+**Main Blocker:** Filesystem support (#3) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
 
 ---
 
-## 14. QEMU Random Device Driver
+## 13. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -892,26 +851,25 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#1 - Better Backtraces** (Low complexity, immediate debugging value)
-2. **#2 - Process IDs/Groups** (Foundation for job control)
-3. **#10 - Async Network with Interrupts** (Better performance)
-4. **#14 - QEMU Random Device** (Security foundation)
+1. **#1 - Process IDs/Groups** (Foundation for job control)
+2. **#9 - Async Network with Interrupts** (Better performance)
+3. **#13 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-5. **#5 - QEMU Block Device Driver** (Prerequisite for filesystems)
-6. **#4 - Virtual File System** (Core abstraction)
-7. **#6 - ext2 Filesystem** (Persistent storage)
-8. **#7 - Coreutils** (User-facing utilities)
+4. **#4 - QEMU Block Device Driver** (Prerequisite for filesystems)
+5. **#3 - Virtual File System** (Core abstraction)
+6. **#5 - ext2 Filesystem** (Persistent storage)
+7. **#6 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-9. **#11 - DHCP Client** (Network configuration)
-10. **#12 - Minimal TCP** (Protocol expansion)
+8. **#10 - DHCP Client** (Network configuration)
+9. **#11 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-11. **#3 - Linux Signals** (Process control)
-12. **#13 - Dynamic Linking** (Shared libraries)
-13. **#8 - Framebuffer** (Graphics foundation)
-14. **#9 - Port Doom** (Showcase project)
+10. **#2 - Linux Signals** (Process control)
+11. **#12 - Dynamic Linking** (Shared libraries)
+12. **#7 - Framebuffer** (Graphics foundation)
+13. **#8 - Port Doom** (Showcase project)
 
 ---
 
@@ -921,11 +879,11 @@ Before implementation, consider:
 
 1. **Storage Strategy:** For items #4-7 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
 
-2. **Framebuffer Choice (#8):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+2. **Framebuffer Choice (#7):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-3. **Dynamic Linking (#13):** Should we prioritize this over other features, or wait until filesystem support is solid?
+3. **Dynamic Linking (#12):** Should we prioritize this over other features, or wait until filesystem support is solid?
 
-4. **Signals (#3):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
+4. **Signals (#2):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
 
 5. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 

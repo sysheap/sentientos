@@ -1,6 +1,7 @@
 use super::eh_frame_parser;
 use crate::{
     assert::static_assert_size,
+    cpu::KERNEL_STACK_SIZE,
     debugging::{
         self,
         eh_frame_parser::EhFrameParser,
@@ -8,7 +9,7 @@ use crate::{
     },
     info,
     klibc::{runtime_initialized::RuntimeInitializedData, util::UsizeExt},
-    memory::linker_information::LinkerInformation,
+    memory::{address::VirtAddr, linker_information::LinkerInformation},
 };
 use alloc::vec::Vec;
 // Needed for the native backtrace impl for debugging purposes
@@ -22,6 +23,11 @@ use alloc::vec::Vec;
 enum BacktraceNextError {
     RaIsZero,
     CouldNotGetFde(usize),
+    RaOutsideText(usize),
+}
+
+fn is_in_text_segment(address: usize) -> bool {
+    LinkerInformation::text_range().contains(&VirtAddr::new(address))
 }
 
 /// We keep the already parsed information in a Vec
@@ -74,6 +80,10 @@ impl<'a> Backtrace<'a> {
 
         if ra == 0 {
             return Err(BacktraceNextError::RaIsZero);
+        }
+
+        if !is_in_text_segment(ra) {
+            return Err(BacktraceNextError::RaOutsideText(ra));
         }
 
         // RA points to the next instruction. Move it back one byte such
@@ -250,6 +260,10 @@ impl CalleeSavedRegs {
         self.x1 = value;
     }
 
+    fn sp(&self) -> usize {
+        self.x2
+    }
+
     fn set_sp(&mut self, value: usize) {
         self.x2 = value;
     }
@@ -334,20 +348,29 @@ pub fn init() {
 pub fn print() {
     CalleeSavedRegs::with_context(|regs| {
         let mut counter = 0u64;
+        let mut last_sp = regs.sp();
         loop {
             match BACKTRACE.next(regs) {
                 Ok(address) => {
                     print_stacktrace_frame(counter, address);
                     counter += 1;
+                    last_sp = regs.sp();
                 }
                 Err(BacktraceNextError::RaIsZero) => {
                     info!("{counter}: 0x0");
                     break;
                 }
                 Err(BacktraceNextError::CouldNotGetFde(address)) => {
-                    // We don't have any backtracing info from here
-                    // but anyways it is the end of our call stack
                     print_stacktrace_frame(counter, address);
+                    counter += 1;
+                    info!("  --- DWARF unwinding lost, scanning stack ---");
+                    scan_stack_for_return_addresses(last_sp, &mut counter);
+                    break;
+                }
+                Err(BacktraceNextError::RaOutsideText(address)) => {
+                    info!("  RA {address:#x} outside text segment, scanning stack");
+                    info!("  --- DWARF unwinding lost, scanning stack ---");
+                    scan_stack_for_return_addresses(last_sp, &mut counter);
                     break;
                 }
             }
@@ -355,20 +378,57 @@ pub fn print() {
     });
 }
 
+const MAX_STACK_SCAN_SLOTS: usize = 512;
+
+fn scan_stack_for_return_addresses(sp: usize, counter: &mut u64) {
+    // Per-CPU kernel stacks are mapped at the top of the address space
+    let stack_bottom = 0usize.wrapping_sub(KERNEL_STACK_SIZE);
+    // Validate SP is within the per-CPU kernel stack before scanning
+    if sp < stack_bottom {
+        info!("  SP {sp:#x} outside kernel stack, cannot scan");
+        return;
+    }
+    let remaining_bytes = 0usize.wrapping_sub(sp);
+    let remaining_slots = remaining_bytes / size_of::<usize>();
+    let slots_to_scan = remaining_slots.min(MAX_STACK_SCAN_SLOTS);
+
+    let text_range = LinkerInformation::text_range();
+    for i in 0..slots_to_scan {
+        let slot_addr = sp.wrapping_add(i * size_of::<usize>());
+        // SAFETY: slot_addr is within the per-CPU kernel stack (validated above).
+        let value = unsafe { (slot_addr as *const usize).read() };
+        if text_range.contains(&VirtAddr::new(value)) {
+            print_uncertain_stacktrace_frame(*counter, value);
+            *counter += 1;
+        }
+    }
+}
+
 fn print_stacktrace_frame(counter: u64, address: usize) {
+    print_stacktrace_frame_inner(counter, address, "");
+}
+
+fn print_uncertain_stacktrace_frame(counter: u64, address: usize) {
+    print_stacktrace_frame_inner(counter, address, "[?] ");
+}
+
+fn print_stacktrace_frame_inner(counter: u64, address: usize, prefix: &str) {
     let symbol = debugging::symbols::get_symbol(address);
     if let Some(symbol) = symbol {
         let offset = address - symbol.address;
         if let Some(file) = symbol.file {
             info!(
-                "{counter}: {address:#x} <{}+{}>\n\t\t{}\n",
+                "{counter}: {prefix}{address:#x} <{}+{}>\n\t\t{}\n",
                 symbol.symbol, offset, file
             );
         } else {
-            info!("{counter}: {address:#x} <{}+{}>\n", symbol.symbol, offset);
+            info!(
+                "{counter}: {prefix}{address:#x} <{}+{}>\n",
+                symbol.symbol, offset
+            );
         }
     } else {
-        info!("{counter}: {address:#x}\n");
+        info!("{counter}: {prefix}{address:#x}\n");
     }
 }
 
@@ -414,7 +474,8 @@ mod tests {
                         own_addr.push_back(0);
                         break;
                     }
-                    Err(BacktraceNextError::CouldNotGetFde(address)) => {
+                    Err(BacktraceNextError::CouldNotGetFde(address))
+                    | Err(BacktraceNextError::RaOutsideText(address)) => {
                         own_addr.push_back(address);
                         break;
                     }

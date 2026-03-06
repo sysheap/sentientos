@@ -15,7 +15,7 @@ use crate::{
 };
 use arch::sbi::extensions::ipi_extension::sbi_send_ipi;
 
-const KERNEL_STACK_SIZE: usize = KiB(512);
+pub(crate) const KERNEL_STACK_SIZE: usize = KiB(512);
 
 pub static STARTING_CPU_ID: RuntimeInitializedData<CpuId> = RuntimeInitializedData::new();
 
