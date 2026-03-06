@@ -1,11 +1,15 @@
 use crate::{
+    debug,
     klibc::Spinlock,
     memory::{PhysAddr, VirtAddr, page::PinnedHeapPages},
+    processes::{thread::Thread, userspace_ptr::UserspacePtr},
 };
+use common::syscalls::trap_frame::Register;
 use headers::syscall_types::{
-    SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL,
-    SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP,
-    SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ,
+    SA_NODEFER, SA_RESETHAND, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL,
+    SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS,
+    SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH,
+    SIGXCPU, SIGXFSZ, sigset_t,
 };
 
 pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
@@ -97,4 +101,130 @@ pub fn default_action(sig: u32) -> DefaultAction {
         SIGCONT => DefaultAction::Continue,
         _ => DefaultAction::Terminate,
     }
+}
+
+#[repr(C)]
+struct SignalFrame {
+    saved_regs: [usize; 32],
+    saved_fregs: [usize; 32],
+    saved_pc: usize,
+    saved_sigmask: u64,
+}
+
+const SIGNAL_FRAME_SIZE: usize = core::mem::size_of::<SignalFrame>();
+
+impl SignalFrame {
+    fn as_bytes(&self) -> &[u8] {
+        // SAFETY: SignalFrame is repr(C) with only primitive fields, valid for any bit pattern.
+        unsafe {
+            core::slice::from_raw_parts((self as *const Self).cast::<u8>(), SIGNAL_FRAME_SIZE)
+        }
+    }
+}
+
+/// Check for pending signals and either set up a signal handler frame or return
+/// an ExitStatus if the default action is to terminate. Called before returning
+/// to userspace.
+pub fn deliver_signal(thread: &mut Thread) -> Option<ExitStatus> {
+    loop {
+        let sig = thread.take_next_pending_signal()?;
+        let action = *thread.get_sigaction_raw(sig);
+        let handler = action.sa_handler;
+
+        match handler {
+            None => {
+                // SIG_DFL
+                match default_action(sig) {
+                    DefaultAction::Terminate => {
+                        return Some(ExitStatus::Signaled(
+                            u8::try_from(sig).expect("signal number fits in u8"),
+                        ));
+                    }
+                    DefaultAction::Ignore | DefaultAction::Stop | DefaultAction::Continue => {
+                        continue;
+                    }
+                }
+            }
+            Some(f) if f as usize == 1 => {
+                // SIG_IGN
+                continue;
+            }
+            Some(handler_fn) => {
+                if setup_signal_frame(thread, sig, handler_fn, &action) {
+                    return None;
+                }
+                // Frame write failed — force-kill if this was already SIGSEGV
+                // to avoid infinite loop, otherwise raise SIGSEGV and retry.
+                if sig == SIGSEGV {
+                    return Some(ExitStatus::Signaled(
+                        u8::try_from(SIGSEGV).expect("signal number fits in u8"),
+                    ));
+                }
+                thread.raise_signal(SIGSEGV);
+                continue;
+            }
+        }
+    }
+}
+
+fn setup_signal_frame(
+    thread: &mut Thread,
+    sig: u32,
+    handler: unsafe extern "C" fn(core::ffi::c_int),
+    action: &headers::syscall_types::sigaction,
+) -> bool {
+    let regs = thread.get_register_state();
+    let pc = thread.get_program_counter();
+    let sigmask = thread.get_sigmask();
+
+    let frame = SignalFrame {
+        saved_regs: *regs.gp_registers(),
+        saved_fregs: *regs.fp_registers(),
+        saved_pc: pc.as_usize(),
+        saved_sigmask: sigmask,
+    };
+
+    let user_sp = regs[Register::sp];
+    let frame_sp = (user_sp - SIGNAL_FRAME_SIZE) & !0xF;
+
+    // Write the signal frame to the user stack through page tables
+    let process = thread.process();
+    let write_ptr: UserspacePtr<*mut u8> =
+        UserspacePtr::new(core::ptr::without_provenance_mut(frame_sp));
+    if process
+        .lock()
+        .write_userspace_slice(&write_ptr, frame.as_bytes())
+        .is_err()
+    {
+        debug!("Failed to write signal frame for sig={sig}");
+        return false;
+    }
+
+    // Set up registers for the signal handler
+    let trap_frame = thread.get_register_state_mut();
+    trap_frame[Register::sp] = frame_sp;
+    trap_frame[Register::a0] = sig as usize;
+    trap_frame[Register::ra] = TRAMPOLINE_VADDR.as_usize();
+    thread.set_program_counter(VirtAddr::new(handler as usize));
+
+    // Update signal mask: block sa_mask and the signal itself (unless SA_NODEFER)
+    let mut new_mask = sigmask | action.sa_mask.sig[0];
+    if action.sa_flags & u64::from(SA_NODEFER) == 0 {
+        new_mask |= 1u64 << sig;
+    }
+    thread.set_sigmask_raw(new_mask);
+
+    // SA_RESETHAND: reset handler to SIG_DFL after first delivery
+    if action.sa_flags & u64::from(SA_RESETHAND) != 0 {
+        let _ = thread.set_sigaction(
+            sig,
+            headers::syscall_types::sigaction {
+                sa_handler: None,
+                sa_flags: 0,
+                sa_mask: sigset_t { sig: [0] },
+            },
+        );
+    }
+
+    true
 }

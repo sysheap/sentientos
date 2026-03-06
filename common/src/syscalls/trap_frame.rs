@@ -138,4 +138,20 @@ impl TrapFrame {
             floating_registers: [0; 32],
         }
     }
+
+    pub fn gp_registers(&self) -> &[usize; 32] {
+        &self.registers
+    }
+
+    pub fn fp_registers(&self) -> &[usize; 32] {
+        &self.floating_registers
+    }
+
+    pub fn gp_registers_mut(&mut self) -> &mut [usize; 32] {
+        &mut self.registers
+    }
+
+    pub fn fp_registers_mut(&mut self) -> &mut [usize; 32] {
+        &mut self.floating_registers
+    }
 }
