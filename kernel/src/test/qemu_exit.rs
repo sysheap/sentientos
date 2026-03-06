@@ -1,5 +1,4 @@
 use crate::{
-    cpu::Cpu,
     io::TEST_DEVICE_ADDRESS,
     klibc::{MMIO, Spinlock},
 };
@@ -34,9 +33,9 @@ pub fn exit_reset() -> ! {
 pub fn wait_for_the_end() -> ! {
     // SAFETY: We are shutting down — disabling interrupts prevents further preemption.
     unsafe {
-        Cpu::disable_global_interrupts();
+        arch::cpu::disable_global_interrupts();
     }
     loop {
-        Cpu::wait_for_interrupt();
+        arch::cpu::wait_for_interrupt();
     }
 }

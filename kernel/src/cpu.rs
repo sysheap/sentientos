@@ -1,6 +1,8 @@
 use alloc::{boxed::Box, sync::Arc};
 use common::syscalls::trap_frame::TrapFrame;
-use core::{arch::asm, mem::offset_of, ptr::addr_of};
+use core::{mem::offset_of, ptr::addr_of};
+
+pub use arch::CpuId;
 
 use crate::{
     klibc::{Spinlock, SpinlockGuard, runtime_initialized::RuntimeInitializedData, sizes::KiB},
@@ -10,33 +12,10 @@ use crate::{
         scheduler::CpuScheduler,
         thread::{ThreadRef, ThreadWeakRef},
     },
-    sbi::extensions::ipi_extension::sbi_send_ipi,
 };
+use arch::sbi::extensions::ipi_extension::sbi_send_ipi;
 
 const KERNEL_STACK_SIZE: usize = KiB(512);
-
-const SIE_STIE: usize = 5;
-const SSTATUS_SPP: usize = 8;
-const SIP_SSIP: usize = 1;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CpuId(usize);
-
-impl CpuId {
-    pub fn from_hart_id(hart_id: usize) -> Self {
-        Self(hart_id)
-    }
-
-    pub fn as_usize(self) -> usize {
-        self.0
-    }
-}
-
-impl core::fmt::Display for CpuId {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 pub static STARTING_CPU_ID: RuntimeInitializedData<CpuId> = RuntimeInitializedData::new();
 
@@ -53,81 +32,7 @@ pub struct Cpu {
     number_cpus: usize,
 }
 
-macro_rules! read_csrr {
-    ($name: ident) => {
-        #[allow(dead_code)]
-        pub fn ${concat(read_, $name)}() -> usize {
-            if cfg!(miri) {
-                return 0;
-            }
-
-            let $name: usize;
-            // SAFETY: Reading a CSR has no memory side-effects; the value is
-            // returned in a general-purpose register.
-            unsafe {
-                asm!(concat!("csrr {}, ", stringify!($name)), out(reg) $name);
-            }
-            $name
-        }
-    };
-}
-
-macro_rules! write_csrr {
-    ($name: ident) => {
-        #[allow(dead_code)]
-        pub fn ${concat(write_, $name)}(value: usize)  {
-            if cfg!(miri) {
-                return ;
-            }
-            // SAFETY: Writing a CSR is a privileged operation with no memory
-            // aliasing concerns. Callers are responsible for semantic correctness.
-            unsafe {
-                asm!(concat!("csrw ", stringify!($name), ", {}"), in(reg) value);
-            }
-        }
-
-        #[allow(dead_code)]
-        pub fn ${concat(csrs_, $name)}(mask: usize)  {
-            if cfg!(miri) {
-                return ;
-            }
-            // SAFETY: csrs (set bits) is a privileged CSR operation with no
-            // memory aliasing concerns.
-            unsafe {
-                asm!(concat!("csrs ", stringify!($name), ", {}"), in(reg) mask);
-            }
-        }
-
-        #[allow(dead_code)]
-        pub fn ${concat(csrc_, $name)}(mask: usize)  {
-            if cfg!(miri) {
-                return ;
-            }
-            // SAFETY: csrc (clear bits) is a privileged CSR operation with no
-            // memory aliasing concerns.
-            unsafe {
-                asm!(concat!("csrc ", stringify!($name), ", {}"), in(reg) mask);
-            }
-        }
-    };
-}
-
 impl Cpu {
-    read_csrr!(satp);
-    read_csrr!(stval);
-    read_csrr!(sepc);
-    read_csrr!(scause);
-    read_csrr!(sscratch);
-    read_csrr!(sie);
-    read_csrr!(sstatus);
-
-    write_csrr!(satp);
-    write_csrr!(sepc);
-    write_csrr!(sscratch);
-    write_csrr!(sstatus);
-    write_csrr!(sie);
-    write_csrr!(sip);
-
     pub fn ipi_to_all_but_me(&self) {
         assert!(
             self.number_cpus <= 64,
@@ -174,7 +79,7 @@ impl Cpu {
     }
 
     fn cpu_ptr() -> *mut Cpu {
-        let ptr = Self::read_sscratch() as *mut Self;
+        let ptr = arch::cpu::read_sscratch() as *mut Self;
         assert!(!ptr.is_null() && ptr.is_aligned());
         ptr
     }
@@ -223,7 +128,7 @@ impl Cpu {
     }
 
     pub fn maybe_kernel_page_tables() -> Option<&'static RootPageTableHolder> {
-        let ptr = Self::read_sscratch() as *mut Self;
+        let ptr = arch::cpu::read_sscratch() as *mut Self;
         if ptr.is_null() || !ptr.is_aligned() {
             return None;
         }
@@ -233,7 +138,7 @@ impl Cpu {
     }
 
     pub fn cpu_id() -> CpuId {
-        let ptr = Self::read_sscratch() as *mut Self;
+        let ptr = arch::cpu::read_sscratch() as *mut Self;
         if ptr.is_null() {
             return *STARTING_CPU_ID;
         }
@@ -248,68 +153,6 @@ impl Cpu {
 
     pub fn scheduler(&self) -> &Spinlock<CpuScheduler> {
         &self.scheduler
-    }
-
-    /// # Safety
-    /// Caller must ensure `satp_val` points to a valid page table.
-    pub unsafe fn write_satp_and_fence(satp_val: usize) {
-        Cpu::write_satp(satp_val);
-        // SAFETY: sfence.vma flushes the TLB; required after changing satp.
-        unsafe {
-            asm!("sfence.vma");
-        }
-    }
-
-    pub fn memory_fence() {
-        // SAFETY: `fence` is a memory ordering instruction with no operands.
-        unsafe {
-            asm!("fence");
-        }
-    }
-
-    /// # Safety
-    /// Must only be called during panic or shutdown paths where no further
-    /// interrupt handling is expected.
-    pub unsafe fn disable_global_interrupts() {
-        Self::csrc_sstatus(0b10);
-        Self::write_sie(0);
-    }
-
-    pub fn wait_for_interrupt() {
-        // SAFETY: `wfi` halts the hart until an interrupt arrives; it has
-        // no memory side-effects.
-        unsafe {
-            asm!("wfi");
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_timer_enabled() -> bool {
-        let sie = Self::read_sie();
-        (sie & (1 << SIE_STIE)) > 0
-    }
-
-    pub fn enable_timer_interrupt() {
-        Self::csrs_sie(1 << SIE_STIE);
-    }
-
-    /// Clear SSIP (supervisor software interrupt pending)
-    pub fn clear_supervisor_software_interrupt() {
-        Self::csrc_sip(1 << SIP_SSIP);
-    }
-
-    #[allow(dead_code)]
-    pub fn is_in_kernel_mode() -> bool {
-        let sstatus = Self::read_sstatus();
-        (sstatus & (1 << SSTATUS_SPP)) > 0
-    }
-
-    pub fn set_ret_to_kernel_mode(kernel_mode: bool) {
-        if kernel_mode {
-            Self::csrs_sstatus(1 << SSTATUS_SPP);
-        } else {
-            Self::csrc_sstatus(1 << SSTATUS_SPP);
-        }
     }
 }
 

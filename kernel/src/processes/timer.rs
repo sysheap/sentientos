@@ -1,11 +1,9 @@
 use crate::{
-    cpu::Cpu,
     debug, device_tree,
     klibc::{
         Spinlock, big_endian::BigEndian, btreemap::SplitOffLowerThan,
         runtime_initialized::RuntimeInitializedData,
     },
-    sbi,
 };
 use alloc::collections::BTreeMap;
 use core::{
@@ -98,8 +96,8 @@ pub fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = get_current_clocks();
     let next = current.wrapping_add(*CLOCKS_PER_NANO * 1000 * milliseconds);
-    sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
-    Cpu::enable_timer_interrupt();
+    arch::sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
+    arch::cpu::enable_timer_interrupt();
 }
 
 fn get_current_clocks() -> u64 {

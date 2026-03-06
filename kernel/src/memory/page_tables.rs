@@ -14,7 +14,6 @@ use common::{pointer::Pointer, unwrap_or_return};
 
 use crate::{
     assert::static_assert_size,
-    cpu::Cpu,
     debug, debugging,
     interrupts::plic,
     io::TEST_DEVICE_ADDRESS,
@@ -154,7 +153,7 @@ impl RootPageTableHolder {
     }
 
     fn is_active(&self) -> bool {
-        let satp = Cpu::read_satp();
+        let satp = arch::cpu::read_satp();
         let ppn = satp & 0xfffffffffff;
         let page_table_address = ppn << 12;
 
@@ -593,7 +592,7 @@ impl RootPageTableHolder {
         // SAFETY: satp_val encodes a valid page table that identity-maps all
         // kernel memory, so execution can continue after the switch.
         unsafe {
-            Cpu::write_satp_and_fence(satp_val);
+            arch::cpu::write_satp_and_fence(satp_val);
         };
     }
 
