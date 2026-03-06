@@ -114,6 +114,28 @@ async fn my_test() -> anyhow::Result<()> {
 ### Unit Tests
 Kernel unit tests use `#[test_case]` macro (custom test framework).
 
+### Kani Model Checking
+Kani verifies correctness of pure functions via bounded model checking. Run with `just kani`. Existing proofs are in `kernel/src/memory/address.rs`, `kernel/src/memory/page_table_entry.rs`, and `kernel/src/klibc/util.rs`.
+
+When adding or modifying pure logic (bit manipulation, arithmetic, data structure invariants, encoding/decoding), add Kani proof harnesses. Good candidates: functions with bitwise operations, numeric conversions, invariants that must hold for all inputs. Not suited for: code requiring hardware, allocators, or complex kernel state.
+
+```rust
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    #[kani::proof]
+    fn my_roundtrip_proof() {
+        let input: u64 = kani::any();
+        let encoded = encode(input);
+        let decoded = decode(encoded);
+        assert_eq!(input, decoded);
+    }
+}
+```
+
+The `arch` crate provides no-op stubs for non-riscv64 targets so Kani can compile kernel code without hardware dependencies.
+
 ## Adding Userspace Programs
 
 1. Create `userspace/src/bin/myprogram.rs`
