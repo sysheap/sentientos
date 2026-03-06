@@ -181,6 +181,37 @@ impl ProcessTable {
         }
     }
 
+    pub fn send_signal(&mut self, tid: Tid, sig: u32) {
+        if let Some(thread) = self.threads.get(&tid).cloned() {
+            let should_enqueue = thread.with_lock(|mut t| {
+                if matches!(t.get_state(), ThreadState::Zombie(_)) {
+                    return false;
+                }
+                t.raise_signal(sig);
+                if t.has_pending_unblocked_signal() && t.get_state() == ThreadState::Waiting {
+                    t.set_state(ThreadState::Runnable);
+                    return true;
+                }
+                false
+            });
+            if should_enqueue {
+                RUN_QUEUE.lock().push_back(thread);
+            }
+        }
+    }
+
+    /// Sends signal to all threads in the process. Linux delivers process-directed
+    /// signals to a single eligible thread; we simplify by raising on all.
+    pub fn send_signal_to_process(&mut self, tid: Tid, sig: u32) {
+        let Some(thread) = self.threads.get(&tid).cloned() else {
+            return;
+        };
+        let all_tids = thread.lock().process().lock().thread_tids();
+        for t in all_tids {
+            self.send_signal(t, sig);
+        }
+    }
+
     pub fn kill_process_of(&mut self, tid: Tid, exit_status: super::signal::ExitStatus) {
         let Some(thread) = self.threads.get(&tid).cloned() else {
             return;
