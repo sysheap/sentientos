@@ -210,7 +210,8 @@ mod kani_proofs {
     #[kani::proof]
     fn set_leaf_address_preserves_low_bits() {
         let ppn: usize = kani::any();
-        kani::assume(ppn <= 0xfffffffffff);
+        // Same CBMC 48-bit pointer constraint as leaf_address_roundtrip.
+        kani::assume(ppn <= 0x3FFFFFFFFF);
         let addr = PhysAddr::new(ppn << 12);
         let mut entry = entry_from_bits(0);
         entry.set_validity(true);
