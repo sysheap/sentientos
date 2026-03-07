@@ -40,7 +40,7 @@ doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 | kernel/src/processes/ | Process, thread, scheduler, signals |
 | kernel/src/syscalls/ | syscall handlers |
 | kernel/src/interrupts/ | Trap handling, PLIC, timer |
-| kernel/src/fs/ | VFS layer (tmpfs, procfs) |
+| kernel/src/fs/ | VFS layer (tmpfs, procfs, devfs) |
 | kernel/src/net/ | UDP network stack |
 | kernel/src/drivers/virtio/ | VirtIO network driver |
 | kernel/src/io/ | UART, stdin buffer |
