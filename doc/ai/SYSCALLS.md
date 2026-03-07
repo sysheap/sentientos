@@ -114,6 +114,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
 When a syscall is invoked, `LinuxSyscallHandler::new()` captures the current thread, process, and TID from the scheduler at syscall entry. These fields are then directly accessible to all syscall implementations without additional indirection.
 
+Helper methods on `LinuxSyscallHandler` are split across files:
+- `helpers.rs` — path resolution (`read_path`, `make_absolute`, `read_cstring`), FD helpers (`resolve_dirfd_node`), `effective_process()`
+- `process_ops.rs` — `clone_vfork()`, `clone_thread()`
+- `exec_ops.rs` — `do_execve()`
+
 ### Solaya ioctl Extensions
 
 Custom kernel functionality exposed via `ioctl` on stdout. Constants and userspace wrappers defined in `common/src/ioctl.rs`.
@@ -206,7 +211,10 @@ Example output:
 | File | Purpose |
 |------|---------|
 | kernel/src/syscalls/mod.rs | Module exports |
-| kernel/src/syscalls/linux.rs | Linux syscall implementations |
+| kernel/src/syscalls/linux.rs | Syscall trait impl, struct, macro invocation (~1420 lines) |
+| kernel/src/syscalls/helpers.rs | Path/FD/process helpers for LinuxSyscallHandler |
+| kernel/src/syscalls/process_ops.rs | clone_vfork, clone_thread |
+| kernel/src/syscalls/exec_ops.rs | do_execve |
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro + SYSCALL_METADATA generation |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
 | kernel/src/syscalls/trace_config.rs | Syscall tracer process name configuration |

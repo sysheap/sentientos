@@ -8,11 +8,11 @@ use crate::{
 };
 use common::syscalls::trap_frame::{Register, TrapFrame};
 
-use super::linux::LinuxSyscallHandler;
+use super::linux::{LinuxSyscallHandler, LinuxSyscalls};
 
 impl LinuxSyscallHandler {
     pub(super) fn do_execve(&mut self, filename: usize, argv: usize) -> Result<isize, Errno> {
-        let process = self.effective_process();
+        let process = self.get_process();
         let filename_bytes = process.with_lock(|p| {
             let ptr = UserspacePtr::new(filename as *const u8);
             p.read_userspace_slice(&ptr, 256)
@@ -61,7 +61,7 @@ impl LinuxSyscallHandler {
         let loaded = loader::load_elf(&elf, name, &args).expect("ELF loading must succeed");
 
         let process_name = Arc::new(String::from(name));
-        let old_process = self.effective_process();
+        let old_process = self.get_process();
         let (old_pgid, old_sid, old_cwd) =
             old_process.with_lock(|p| (p.pgid(), p.sid(), String::from(p.cwd())));
         let new_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
@@ -74,7 +74,7 @@ impl LinuxSyscallHandler {
             old_sid,
         )));
 
-        let mut inherited_fd_table = self.effective_process().with_lock(|p| p.fd_table().clone());
+        let mut inherited_fd_table = self.get_process().with_lock(|p| p.fd_table().clone());
         inherited_fd_table.close_cloexec_fds();
         {
             let mut np = new_process.lock();

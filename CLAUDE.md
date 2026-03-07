@@ -150,7 +150,7 @@ The `arch` crate provides no-op stubs for non-riscv64 targets so Kani can compil
 | Kernel entry | kernel/src/main.rs |
 | CSR access | arch/src/riscv64/cpu.rs |
 | SBI calls | arch/src/riscv64/sbi/ |
-| Syscall handlers | kernel/src/syscalls/linux.rs |
+| Syscall handlers | kernel/src/syscalls/linux.rs (+ helpers.rs, process_ops.rs, exec_ops.rs) |
 | Process struct | kernel/src/processes/process.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |
 | Page tables | kernel/src/memory/page_tables.rs |
