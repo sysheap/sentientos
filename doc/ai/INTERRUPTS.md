@@ -8,7 +8,7 @@ Interrupt handling in Solaya:
 3. **Timer** - Scheduling timer via SBI
 4. **Syscalls** - User ecall traps
 
-When in Kernel Mode, interrupts are always disabled. So we don't pre-empt the kernel.
+Interrupts are disabled while holding a Spinlock (via `InterruptGuard` in `SpinlockGuard`). The kernel worker thread runs with interrupts enabled between lock acquisitions. Kernel-mode threads are preemptible by timer interrupts.
 
 ## Trap Flow
 
@@ -70,8 +70,7 @@ User/Kernel Code
 
 Called on supervisor timer interrupt:
 ```rust
-#[unsafe(no_mangle)]
-extern "C" fn handle_timer_interrupt() {
+fn handle_timer_interrupt() {
     timer::wakeup_wakers();  // Wake sleeping threads
     Cpu::with_scheduler(|mut s| s.schedule());  // Reschedule
 }
@@ -79,19 +78,34 @@ extern "C" fn handle_timer_interrupt() {
 
 ### handle_external_interrupt()
 
-Called on external interrupt (UART):
+Called on external interrupt (UART or VirtIO network):
 ```rust
 fn handle_external_interrupt() {
     let plic_interrupt = PLIC.lock().get_next_pending()?;
-    // Read UART input
-    while let Some(input) = QEMU_UART.lock().read() {
-        match input {
-            3 => send_ctrl_c(),        // Ctrl+C
-            4 => dump_current_state(), // Ctrl+D
-            _ => STDIN_BUFFER.lock().push(input),
+    match plic_interrupt {
+        Uart => { /* read input, handle Ctrl+C/D */ }
+        VirtioNet => {
+            net::on_network_interrupt();  // Wakes network task wakers
+            // Worker thread polls ready tasks (not done in interrupt context)
         }
     }
-    PLIC.lock().complete_interrupt(plic_interrupt);
+}
+```
+
+### handle_supervisor_software_interrupt()
+
+Handles both IPIs (for thread kills) and worker thread sleep requests:
+```rust
+fn handle_supervisor_software_interrupt() {
+    let sleep_requested = kernel_tasks::take_sleep_request();
+    Cpu::with_scheduler(|mut s| {
+        if sleep_requested && is_current_worker {
+            // Save registers, suspend unless wakeup_pending
+            t.set_register_state(Cpu::read_trap_frame());
+            t.suspend_unless_wakeup_pending();
+        }
+        s.schedule();  // Always reschedule (handles IPIs too)
+    });
 }
 ```
 
