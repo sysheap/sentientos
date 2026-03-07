@@ -51,6 +51,11 @@ const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
+pub struct InitializedNetworkDevice {
+    pub device: NetworkDevice,
+    pub interrupt_status: MMIO<u32>,
+}
+
 impl NetworkDevice {
     pub fn is_virtio_net(device: &PCIDevice) -> bool {
         let cs = device.configuration_space();
@@ -59,7 +64,7 @@ impl NetworkDevice {
             && cs.subsystem_id().read() == VIRTIO_NETWORK_SUBSYSTEM_ID
     }
 
-    pub fn initialize(mut pci_device: PCIDevice) -> Result<(Self, MMIO<u32>), &'static str> {
+    pub fn initialize(mut pci_device: PCIDevice) -> Result<InitializedNetworkDevice, &'static str> {
         let capabilities = pci_device.capabilities();
         let mut virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities
             .filter(|cap| cap.id().read() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
@@ -185,7 +190,10 @@ impl NetworkDevice {
             transmit_queue,
         };
 
-        Ok((device, isr_status))
+        Ok(InitializedNetworkDevice {
+            device,
+            interrupt_status: isr_status,
+        })
     }
 
     fn reset_and_acknowledge(common_cfg: &MMIO<virtio_pci_common_cfg>) {
