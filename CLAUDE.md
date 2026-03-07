@@ -43,7 +43,7 @@ doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 | kernel/src/fs/ | VFS layer (tmpfs, procfs, devfs) |
 | kernel/src/net/ | UDP network stack |
 | kernel/src/drivers/virtio/ | VirtIO network driver |
-| kernel/src/io/ | UART, stdin buffer |
+| kernel/src/io/ | UART, TTY line discipline, stdin buffer |
 
 ## Debugging
 
