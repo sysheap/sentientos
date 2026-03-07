@@ -10,6 +10,6 @@ pub use vfs::{resolve_parent, resolve_path, resolve_relative};
 pub fn init() {
     vfs::mount("/", vfs::RootDir::new());
     vfs::mount("/tmp", tmpfs::TmpfsDir::new());
-    vfs::mount("/proc", procfs::ProcDir::new());
-    vfs::mount("/dev", devfs::DevDir::new());
+    vfs::mount("/proc", procfs::new());
+    vfs::mount("/dev", devfs::new());
 }

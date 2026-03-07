@@ -1,7 +1,7 @@
-use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use alloc::sync::Arc;
 use headers::errno::Errno;
 
-use super::vfs::{DirEntry, NodeType, VfsNode, VfsNodeRef, alloc_ino};
+use super::vfs::{NodeType, StaticDir, VfsNode, VfsNodeRef, alloc_ino};
 
 struct ProcVersionFile {
     ino: u64,
@@ -37,46 +37,9 @@ impl VfsNode for ProcVersionFile {
     }
 }
 
-pub struct ProcDir {
-    ino: u64,
-    version: VfsNodeRef,
-}
-
-impl ProcDir {
-    pub fn new() -> Arc<Self> {
-        let version: VfsNodeRef = Arc::new(ProcVersionFile { ino: alloc_ino() });
-        Arc::new(Self {
-            ino: alloc_ino(),
-            version,
-        })
-    }
-}
-
-impl VfsNode for ProcDir {
-    fn node_type(&self) -> NodeType {
-        NodeType::Directory
-    }
-
-    fn ino(&self) -> u64 {
-        self.ino
-    }
-
-    fn size(&self) -> usize {
-        0
-    }
-
-    fn lookup(&self, name: &str) -> Result<VfsNodeRef, Errno> {
-        match name {
-            "version" => Ok(self.version.clone()),
-            _ => Err(Errno::ENOENT),
-        }
-    }
-
-    fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
-        Ok(vec![DirEntry {
-            name: String::from("version"),
-            ino: self.version.ino(),
-            node_type: NodeType::File,
-        }])
-    }
+pub(super) fn new() -> Arc<StaticDir> {
+    StaticDir::new(vec![(
+        "version",
+        Arc::new(ProcVersionFile { ino: alloc_ino() }) as VfsNodeRef,
+    )])
 }

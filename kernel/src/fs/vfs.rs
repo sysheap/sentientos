@@ -137,6 +137,53 @@ fn walk(mut node: VfsNodeRef, path: &str) -> Result<VfsNodeRef, Errno> {
     Ok(node)
 }
 
+pub(super) struct StaticDir {
+    ino: u64,
+    entries: BTreeMap<String, VfsNodeRef>,
+}
+
+impl StaticDir {
+    pub fn new(entries: Vec<(&str, VfsNodeRef)>) -> Arc<Self> {
+        Arc::new(Self {
+            ino: alloc_ino(),
+            entries: entries
+                .into_iter()
+                .map(|(n, v)| (String::from(n), v))
+                .collect(),
+        })
+    }
+}
+
+impl VfsNode for StaticDir {
+    fn node_type(&self) -> NodeType {
+        NodeType::Directory
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn lookup(&self, name: &str) -> Result<VfsNodeRef, Errno> {
+        self.entries.get(name).cloned().ok_or(Errno::ENOENT)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
+        Ok(self
+            .entries
+            .iter()
+            .map(|(name, node)| DirEntry {
+                name: name.clone(),
+                ino: node.ino(),
+                node_type: node.node_type(),
+            })
+            .collect())
+    }
+}
+
 pub(super) struct RootDir {
     ino: u64,
 }
