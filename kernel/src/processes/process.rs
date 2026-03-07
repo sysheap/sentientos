@@ -36,7 +36,6 @@ pub struct Process {
     pgid: Tid,
     sid: Tid,
     brk: Brk,
-    vfork_parent: Option<ProcessRef>,
     umask: u32,
     cwd: String,
 }
@@ -79,7 +78,6 @@ impl Process {
             main_tid: main_thread,
             pgid,
             sid,
-            vfork_parent: None,
             umask: 0o022,
             cwd: String::from("/"),
         }
@@ -273,20 +271,7 @@ impl Process {
     }
 
     pub fn get_satp_value(&self) -> usize {
-        if let Some(parent) = &self.vfork_parent {
-            // Vfork child uses the parent's page tables. No ABBA deadlock risk:
-            // the parent is blocked on VforkWait and cannot acquire any locks.
-            return parent.lock().page_table.get_satp_value_from_page_tables();
-        }
         self.page_table.get_satp_value_from_page_tables()
-    }
-
-    pub fn set_vfork_parent(&mut self, parent: ProcessRef) {
-        self.vfork_parent = Some(parent);
-    }
-
-    pub fn vfork_parent(&self) -> Option<&ProcessRef> {
-        self.vfork_parent.as_ref()
     }
 
     pub fn remove_thread(&mut self, tid: Tid) {
@@ -338,14 +323,17 @@ impl Process {
                     let src_slice: &[u8] = &**src;
                     dst_slice.copy_from_slice(src_slice);
                 }
-                let perm = parent_pt.get_userspace_permissions(va);
-                pt.map_userspace(
-                    va,
-                    PhysAddr::new(child_pages.addr()),
-                    child_pages.size(),
-                    perm,
-                    "fork".into(),
-                );
+                for i in 0..parent_pages.len() {
+                    let page_va = va + i * PAGE_SIZE;
+                    let perm = parent_pt.get_userspace_permissions(page_va);
+                    pt.map_userspace(
+                        page_va,
+                        PhysAddr::new(child_pages.addr() + i * PAGE_SIZE),
+                        PAGE_SIZE,
+                        perm,
+                        "fork".into(),
+                    );
+                }
                 child_map.insert(va, child_pages);
             }
             child_map

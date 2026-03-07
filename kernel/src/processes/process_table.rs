@@ -253,10 +253,6 @@ impl ProcessTable {
                     None
                 };
 
-                if let Some(vfork_state) = t.take_vfork_state() {
-                    vfork_state.lock().wake();
-                }
-
                 let process = t.process();
                 let mut p = process.lock();
                 p.remove_thread(tid);

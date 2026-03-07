@@ -81,7 +81,7 @@ impl LinuxSyscallHandler {
             .current_process
             .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
-        let st = match descriptor {
+        let st = match &descriptor {
             FileDescriptor::VfsFile(file) => {
                 let node = file.lock().node().clone();
                 fs::stat_from_node(&node)

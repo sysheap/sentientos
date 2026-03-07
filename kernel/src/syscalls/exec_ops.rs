@@ -118,10 +118,6 @@ impl LinuxSyscallHandler {
             t.set_register_state(regs);
             t.set_program_counter(loaded.entry_address);
             t.set_registers_replaced(true);
-
-            if let Some(vfork_state) = t.take_vfork_state() {
-                vfork_state.lock().wake();
-            }
         });
 
         new_process

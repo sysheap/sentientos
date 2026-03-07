@@ -15,6 +15,8 @@ pub struct PipeInner {
     read_wakers: Vec<Waker>,
     write_closed: bool,
     read_closed: bool,
+    reader_count: usize,
+    writer_count: usize,
 }
 
 impl PipeInner {
@@ -24,6 +26,8 @@ impl PipeInner {
             read_wakers: Vec::new(),
             write_closed: false,
             read_closed: false,
+            reader_count: 1,
+            writer_count: 1,
         }
     }
 
@@ -47,13 +51,29 @@ impl PipeInner {
         Err(Errno::EAGAIN)
     }
 
+    pub fn add_reader(&mut self) {
+        self.reader_count += 1;
+    }
+
+    pub fn add_writer(&mut self) {
+        self.writer_count += 1;
+    }
+
     pub fn close_write(&mut self) {
-        self.write_closed = true;
-        self.wake_readers();
+        assert!(self.writer_count > 0);
+        self.writer_count -= 1;
+        if self.write_closed() {
+            self.write_closed = true;
+            self.wake_readers();
+        }
     }
 
     pub fn close_read(&mut self) {
-        self.read_closed = true;
+        assert!(self.reader_count > 0);
+        self.reader_count -= 1;
+        if self.reader_count == 0 {
+            self.read_closed = true;
+        }
     }
 
     fn wake_readers(&mut self) {

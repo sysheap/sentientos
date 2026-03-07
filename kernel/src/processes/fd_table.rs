@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::collections::BTreeMap;
 use core::fmt;
 use headers::{
     errno::Errno,
@@ -38,7 +38,6 @@ impl FdFlags {
     }
 }
 
-#[derive(Clone)]
 pub enum FileDescriptor {
     Stdin,
     Stdout,
@@ -48,6 +47,37 @@ pub enum FileDescriptor {
     PipeRead(SharedPipeBuffer),
     PipeWrite(SharedPipeBuffer),
     VfsFile(VfsOpenFile),
+}
+
+impl Clone for FileDescriptor {
+    fn clone(&self) -> Self {
+        match self {
+            Self::PipeRead(buf) => {
+                buf.lock().add_reader();
+                Self::PipeRead(buf.clone())
+            }
+            Self::PipeWrite(buf) => {
+                buf.lock().add_writer();
+                Self::PipeWrite(buf.clone())
+            }
+            Self::Stdin => Self::Stdin,
+            Self::Stdout => Self::Stdout,
+            Self::Stderr => Self::Stderr,
+            Self::UnboundUdpSocket => Self::UnboundUdpSocket,
+            Self::UdpSocket(s) => Self::UdpSocket(s.clone()),
+            Self::VfsFile(f) => Self::VfsFile(f.clone()),
+        }
+    }
+}
+
+impl Drop for FileDescriptor {
+    fn drop(&mut self) {
+        match self {
+            Self::PipeRead(buf) => buf.lock().close_read(),
+            Self::PipeWrite(buf) => buf.lock().close_write(),
+            _ => {}
+        }
+    }
 }
 
 impl fmt::Debug for FileDescriptor {
@@ -112,14 +142,6 @@ impl FileDescriptor {
             FileDescriptor::PipeWrite(buf) => buf.lock().write(data),
             FileDescriptor::VfsFile(file) => file.lock().write(data),
             _ => Err(Errno::EBADF),
-        }
-    }
-
-    pub fn on_close(&self) {
-        match self {
-            FileDescriptor::PipeRead(buf) => buf.lock().close_read(),
-            FileDescriptor::PipeWrite(buf) => buf.lock().close_write(),
-            _ => {}
         }
     }
 }
@@ -216,9 +238,7 @@ impl FdTable {
             return Err(Errno::EINVAL);
         }
         let entry = self.table.get(&oldfd).ok_or(Errno::EBADF)?.clone();
-        if let Some(old_entry) = self.table.remove(&newfd) {
-            old_entry.descriptor.on_close();
-        }
+        self.table.remove(&newfd);
         self.table.insert(
             newfd,
             FdEntry {
@@ -230,9 +250,7 @@ impl FdTable {
     }
 
     pub fn close(&mut self, fd: RawFd) -> Result<FdEntry, Errno> {
-        let entry = self.table.remove(&fd).ok_or(Errno::EBADF)?;
-        entry.descriptor.on_close();
-        Ok(entry)
+        self.table.remove(&fd).ok_or(Errno::EBADF)
     }
 
     pub fn get_descriptor(&self, fd: RawFd) -> Result<FileDescriptor, Errno> {
@@ -271,23 +289,10 @@ impl FdTable {
     }
 
     pub fn close_all(&mut self) {
-        let table = core::mem::take(&mut self.table);
-        for (_, entry) in table {
-            entry.descriptor.on_close();
-        }
+        self.table.clear();
     }
 
     pub fn close_cloexec_fds(&mut self) {
-        let cloexec_fds: Vec<RawFd> = self
-            .table
-            .iter()
-            .filter(|(_, entry)| entry.flags.is_cloexec())
-            .map(|(&fd, _)| fd)
-            .collect();
-        for fd in cloexec_fds {
-            if let Some(entry) = self.table.remove(&fd) {
-                entry.descriptor.on_close();
-            }
-        }
+        self.table.retain(|_, entry| !entry.flags.is_cloexec());
     }
 }

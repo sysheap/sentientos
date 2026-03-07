@@ -24,11 +24,8 @@ use common::{
 use core::{
     ffi::{c_int, c_uint},
     fmt::Debug,
-    future::Future,
-    pin::Pin,
     ptr::null_mut,
     sync::atomic::{AtomicU64, Ordering},
-    task::{Context, Poll, Waker},
 };
 use headers::{
     errno::Errno,
@@ -41,52 +38,6 @@ pub type ThreadRef = Arc<Spinlock<Thread>>;
 pub type ThreadWeakRef = Weak<Spinlock<Thread>>;
 
 pub type SyscallTask = Task<Result<isize, Errno>>;
-
-#[derive(Debug)]
-pub struct VforkState {
-    done: bool,
-    waker: Option<Waker>,
-}
-
-impl VforkState {
-    pub fn new() -> Arc<Spinlock<Self>> {
-        Arc::new(Spinlock::new(Self {
-            done: false,
-            waker: None,
-        }))
-    }
-
-    pub fn wake(&mut self) {
-        self.done = true;
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
-    }
-}
-
-pub struct VforkWait {
-    state: Arc<Spinlock<VforkState>>,
-}
-
-impl VforkWait {
-    pub fn new(state: Arc<Spinlock<VforkState>>) -> Self {
-        Self { state }
-    }
-}
-
-impl Future for VforkWait {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        let mut state = self.state.lock();
-        if state.done {
-            Poll::Ready(())
-        } else {
-            state.waker = Some(cx.waker().clone());
-            Poll::Pending
-        }
-    }
-}
 
 pub fn get_next_tid() -> Tid {
     // PIDs will start from 1
@@ -147,12 +98,9 @@ pub struct Thread {
     clear_child_tid: Option<UserspacePtr<*mut c_int>>,
     signal_state: SignalState,
     syscall_task: Option<SyscallTask>,
-    vfork_state: Option<Arc<Spinlock<VforkState>>>,
     // Set by execve when it replaces the thread's register state with a new
     // program's entry state. Signals the syscall return path to skip writing a
-    // return value to a0 and skip advancing PC past ecall. Cannot merge with
-    // vfork_state — they are orthogonal: registers_replaced is set by execve
-    // regardless of whether the thread was vforked.
+    // return value to a0 and skip advancing PC past ecall.
     registers_replaced: bool,
 }
 
@@ -300,7 +248,6 @@ impl Thread {
             clear_child_tid: None,
             signal_state: SignalState::new(),
             syscall_task: None,
-            vfork_state: None,
             registers_replaced: false,
         }))
     }
@@ -455,14 +402,6 @@ impl Thread {
     pub fn set_process(&mut self, new_process: ProcessRef, name: Arc<String>) {
         self.process = new_process;
         self.process_name = name;
-    }
-
-    pub fn set_vfork_state(&mut self, state: Arc<Spinlock<VforkState>>) {
-        self.vfork_state = Some(state);
-    }
-
-    pub fn take_vfork_state(&mut self) -> Option<Arc<Spinlock<VforkState>>> {
-        self.vfork_state.take()
     }
 
     pub fn registers_replaced(&self) -> bool {
