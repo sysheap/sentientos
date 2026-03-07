@@ -138,12 +138,7 @@ impl CpuScheduler {
         process_table::THE.with_lock(|mut pt| {
             let highest_tid = pt.get_highest_tid_without(&["sosh"]);
             if let Some(tid) = highest_tid {
-                pt.kill_process_of(
-                    tid,
-                    super::signal::ExitStatus::Signaled(
-                        u8::try_from(SIGINT).expect("signal number fits in u8"),
-                    ),
-                );
+                pt.send_signal_to_process(tid, SIGINT);
             }
         });
         self.schedule();
