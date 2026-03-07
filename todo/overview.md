@@ -9,12 +9,10 @@ This document contains research summaries for planned future enhancements. Each 
 3. [Feasible Coreutils](#3-feasible-coreutils)
 4. [QEMU Framebuffer](#4-qemu-framebuffer)
 5. [Port Doom](#5-port-doom)
-6. [Async Network Reception with Interrupts](#6-async-network-reception-with-interrupts)
-7. [~~DHCP Client~~](#7-dhcp-client) (Implemented)
-8. [Minimal TCP Implementation](#8-minimal-tcp-implementation)
-9. [Dynamic Linking](#9-dynamic-linking)
-10. [QEMU Random Device Driver](#10-qemu-random-device-driver)
-12. [Replace Unix Coreutils with Rust Coreutils](#12-replace-unix-coreutils-with-rust-coreutils-uutilscoreutils)
+6. [Minimal TCP Implementation](#6-minimal-tcp-implementation)
+7. [Dynamic Linking](#7-dynamic-linking)
+8. [QEMU Random Device Driver](#8-qemu-random-device-driver)
+9. [Replace Unix Coreutils with Rust Coreutils](#9-replace-unix-coreutils-with-rust-coreutils-uutilscoreutils)
 
 ---
 
@@ -317,140 +315,7 @@ qemu-system-riscv64 \
 
 ---
 
-## 6. Async Network Reception with Interrupts
-
-**Complexity:** Low to Medium
-
-### Current Polling Implementation
-`recvfrom()` actively polls network card via `net::receive_and_process_packets()`, returns `EAGAIN` if no data.
-
-**Problem:** Wasteful, prevents true async blocking.
-
-### Proposed Implementation
-
-**Model:** Follow existing timer-based sleep pattern (`kernel/src/processes/timer.rs`)
-
-**Key Components:**
-
-1. **Enable VirtIO Interrupts** (currently disabled)
-   - Clear `VIRTQ_AVAIL_F_NO_INTERRUPT` flag in virtqueue.rs:238
-   - Configure MSIX vectors in VirtIO driver
-
-2. **Create Waker Queue**
-```rust
-static RECV_WAITERS: Spinlock<BTreeMap<Port, Vec<Waker>>> = ...;
-```
-
-3. **RecvWait Future**
-```rust
-impl Future for RecvWait {
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
-        if packet_available(self.port) {
-            return Poll::Ready(());
-        }
-        if !self.registered {
-            RECV_WAITERS.lock().insert(self.port, cx.waker().clone());
-            self.registered = true;
-        }
-        Poll::Pending
-    }
-}
-```
-
-4. **PLIC Interrupt Handler**
-- Detect VirtIO network interrupt
-- Call `handle_network_interrupt()` which processes packets and wakes waiters
-
-### Files to Modify
-- `kernel/src/drivers/virtio/net/mod.rs` - Enable interrupts
-- `kernel/src/interrupts/plic.rs` - Add VirtIO interrupt source
-- `kernel/src/interrupts/trap.rs` - Handle network interrupts
-- `kernel/src/net/sockets.rs` - Add waker registration
-- `kernel/src/syscalls/linux.rs` - Make `recvfrom()` truly async
-
-### Benefits
-- Eliminates wasteful polling
-- Threads truly sleep waiting for network data
-- Better CPU utilization
-- Aligns with existing async infrastructure
-
-**Estimated effort:** 3-5 days
-
----
-
-## 7. DHCP Client
-
-**Complexity:** Low to Medium
-
-### Protocol Basics
-
-**Four-message handshake (RFC 2131):**
-1. **DHCPDISCOVER**: Client broadcasts `0.0.0.0:68` → `255.255.255.255:67`
-2. **DHCPOFFER**: Server proposes IP
-3. **DHCPREQUEST**: Client accepts offer
-4. **DHCPACK**: Server confirms
-
-**Message format:** BOOTP-based (236-byte header + options)
-
-### Recommendation: Userspace Implementation
-
-**Why Userspace:**
-- One-time configuration at boot, not performance-critical
-- Simpler with standard UDP sockets (already working)
-- Follows Unix philosophy
-- Easier to iterate without kernel rebuilds
-
-**Kernel Changes Needed:**
-- Add broadcast UDP support (`255.255.255.255` destination)
-- Bind to `0.0.0.0:68` must work
-- Add syscall to configure IP address dynamically
-- Make `NETWORK_STACK.ip_addr` mutable (currently hardcoded `10.0.2.15`)
-
-### Minimal Viable Implementation
-
-**Userspace client** (`userspace/src/bin/dhcpd.rs`):
-```rust
-fn main() {
-    let socket = UdpSocket::bind("0.0.0.0:68")?;
-    socket.set_broadcast(true)?;
-
-    // 1. Send DHCPDISCOVER
-    socket.send_to(&discover, "255.255.255.255:67")?;
-
-    // 2. Receive DHCPOFFER
-    let offer = parse_offer(&buf)?;
-
-    // 3. Send DHCPREQUEST
-    socket.send_to(&request, "255.255.255.255:67")?;
-
-    // 4. Receive DHCPACK
-    let ack = parse_ack(&buf)?;
-
-    // 5. Configure interface
-    configure_ip(ack.yiaddr)?;  // New syscall
-}
-```
-
-**Not needed for MVP:**
-- Lease renewal, DHCPDECLINE, DHCPRELEASE
-- Multiple interfaces
-- Full option parsing
-
-### Network Interface Configuration
-
-**Option:** Add simple syscall
-```rust
-async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
-    net::set_ip_addr(Ipv4Addr::from(addr_u32));
-    Ok(0)
-}
-```
-
-**Estimated effort:** Kernel changes ~50 LOC; userspace client ~300-400 LOC; 1-2 weeks total
-
----
-
-## 8. Minimal TCP Implementation
+## 6. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -521,7 +386,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 9. Dynamic Linking
+## 7. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -604,7 +469,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 10. QEMU Random Device Driver
+## 8. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -682,7 +547,7 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 ---
 
-## 12. Replace Unix Coreutils with Rust Coreutils (uutils/coreutils)
+## 9. Replace Unix Coreutils with Rust Coreutils (uutils/coreutils)
 
 **Complexity:** Low to Medium
 
@@ -835,8 +700,8 @@ If cross-compilation proves difficult:
 **Blockers:** None (independent improvement)
 
 **Synergies with:**
-- **#4 - Feasible Coreutils** - Once more syscalls exist, can expand Rust utility selection
-- **#10 - Dynamic Linking** - Could enable shared Rust runtime if binaries become too large
+- **#3 - Feasible Coreutils** - Once more syscalls exist, can expand Rust utility selection
+- **#7 - Dynamic Linking** - Could enable shared Rust runtime if binaries become too large
 
 ### Estimated Effort
 
@@ -853,25 +718,23 @@ If cross-compilation proves difficult:
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#6 - Async Network with Interrupts** (Better performance)
-2. **#10 - QEMU Random Device** (Security foundation)
+1. **#8 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-3. **#1 - QEMU Block Device Driver** (Prerequisite for persistent filesystems)
-4. **#2 - ext2 Filesystem** (Persistent storage)
-5. **#3 - Coreutils** (User-facing utilities)
+2. **#1 - QEMU Block Device Driver** (Prerequisite for persistent filesystems)
+3. **#2 - ext2 Filesystem** (Persistent storage)
+4. **#3 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-6. ~~**#7 - DHCP Client**~~ (Implemented)
-7. **#8 - Minimal TCP** (Protocol expansion)
+5. **#6 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-8. **#9 - Dynamic Linking** (Shared libraries)
-9. **#4 - Framebuffer** (Graphics foundation)
-10. **#5 - Port Doom** (Showcase project)
+6. **#7 - Dynamic Linking** (Shared libraries)
+7. **#4 - Framebuffer** (Graphics foundation)
+8. **#5 - Port Doom** (Showcase project)
 
 ### Independent Improvements (Can be done anytime)
-- **#12 - Rust Coreutils** (Drop-in replacement, improved debugging, no blockers)
+- **#9 - Rust Coreutils** (Drop-in replacement, improved debugging, no blockers)
 
 ---
 
