@@ -2,19 +2,12 @@ use alloc::string::String;
 use headers::{errno::Errno, syscall_types::timespec};
 
 use crate::{
-    fs, klibc::consumable_buffer::ConsumableBuffer, processes::process::ProcessRef,
-    syscalls::linux_validator::LinuxUserspaceArg,
+    fs, klibc::consumable_buffer::ConsumableBuffer, syscalls::linux_validator::LinuxUserspaceArg,
 };
 
 use super::linux::LinuxSyscallHandler;
 
 impl LinuxSyscallHandler {
-    pub(super) fn effective_process(&self) -> ProcessRef {
-        let process = self.current_process.clone();
-        let vfork_parent = process.lock().vfork_parent().cloned();
-        vfork_parent.unwrap_or(process)
-    }
-
     pub(super) fn resolve_dirfd_node(&self, dirfd: i32) -> Result<fs::vfs::VfsNodeRef, Errno> {
         let file = self
             .current_process
