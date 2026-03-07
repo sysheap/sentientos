@@ -113,7 +113,30 @@ impl CpuScheduler {
             }
             true
         } else {
-            // Still pending — store the task back and keep the thread waiting.
+            // Still pending — check if a terminating signal arrived while we
+            // were blocked. We intentionally avoid deliver_signal() here because
+            // it may set up a handler frame (modifying PC/SP), which would
+            // corrupt state if we then stored the task back.
+            let exit_status = self.current_thread.with_lock(|mut t| {
+                let sig = t.peek_first_unblocked_signal()?;
+                let action = t.get_sigaction_raw(sig);
+                if action.sa_handler.is_none()
+                    && matches!(
+                        super::signal::default_action(sig),
+                        super::signal::DefaultAction::Terminate
+                    )
+                {
+                    t.take_next_pending_signal();
+                    return Some(super::signal::ExitStatus::Signaled(
+                        u8::try_from(sig).expect("signal number fits in u8"),
+                    ));
+                }
+                None
+            });
+            if let Some(exit_status) = exit_status {
+                self.kill_current_process(exit_status);
+                return false;
+            }
             self.current_thread
                 .lock()
                 .set_syscall_task_and_suspend(task);

@@ -513,6 +513,12 @@ impl Thread {
             .is_some()
     }
 
+    pub fn peek_first_unblocked_signal(&self) -> Option<u32> {
+        self.signal_state
+            .pending
+            .first_unblocked(self.signal_state.sigmask.sig[0])
+    }
+
     pub fn take_next_pending_signal(&mut self) -> Option<u32> {
         let sig = self
             .signal_state

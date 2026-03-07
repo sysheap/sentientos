@@ -237,6 +237,7 @@ impl ProcessTable {
             LIVE_THREAD_COUNT.fetch_sub(1, Ordering::Relaxed);
             let (main_tid, futex_addr) = thread.with_lock(|mut t| {
                 t.set_state(ThreadState::Zombie(exit_status));
+                t.take_syscall_task();
                 Cpu::current().ipi_to_all_but_me();
 
                 let futex_addr = if let Some(clear_child_tid) = t.get_clear_child_tid() {
