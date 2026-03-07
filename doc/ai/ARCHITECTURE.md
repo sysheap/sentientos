@@ -67,6 +67,7 @@ kernel_init()
   +-> enumerate_devices()           # Find PCI devices
   +-> NetworkDevice::initialize()   # Init VirtIO network
   +-> net::assign_network_device()  # Register network device
+  +-> kernel_tasks::create_worker_thread()  # Kernel async task executor
   +-> start_other_harts()           # Boot other CPUs
   +-> prepare_for_scheduling()      # Enter scheduler loop
 ```
