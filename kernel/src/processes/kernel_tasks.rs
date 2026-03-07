@@ -77,7 +77,7 @@ pub fn create_worker_thread() {
         register_state,
         page_table,
         VirtAddr::new(kernel_worker_entry as *const () as usize),
-        alloc::vec![],
+        alloc::collections::BTreeMap::new(),
         true,
         Brk::empty(),
         POWERSAVE_TID,

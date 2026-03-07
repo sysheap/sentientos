@@ -27,7 +27,7 @@ pub type ProcessRef = Arc<Spinlock<Process>>;
 pub struct Process {
     name: Arc<String>,
     page_table: RootPageTableHolder,
-    allocated_pages: Vec<PinnedHeapPages>,
+    allocated_pages: BTreeMap<VirtAddr, PinnedHeapPages>,
     mmap_allocations: BTreeMap<VirtAddr, PinnedHeapPages>,
     free_mmap_address: VirtAddr,
     fd_table: Arc<Spinlock<FdTable>>,
@@ -47,7 +47,7 @@ impl Debug for Process {
             f,
             "Process [
             Page Table: {:?},
-            Number of allocated pages: {},
+            Number of allocated page groups: {},
             Threads: {:?}
         ]",
             self.page_table,
@@ -61,7 +61,7 @@ impl Process {
     pub fn new(
         name: Arc<String>,
         page_table: RootPageTableHolder,
-        allocated_pages: Vec<PinnedHeapPages>,
+        allocated_pages: BTreeMap<VirtAddr, PinnedHeapPages>,
         brk: Brk,
         main_thread: Tid,
         pgid: Tid,

@@ -9,7 +9,7 @@ use crate::{
 
 const BRK_SIZE: Pages = Pages::new(4);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Brk {
     brk_start: VirtAddr,
     brk_current: VirtAddr,
@@ -48,6 +48,10 @@ impl Brk {
             brk_current: VirtAddr::zero(),
             brk_end: VirtAddr::new(1),
         }
+    }
+
+    pub fn start(&self) -> VirtAddr {
+        self.brk_start
     }
 
     pub fn brk(&mut self, brk: VirtAddr) -> VirtAddr {

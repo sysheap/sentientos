@@ -12,9 +12,9 @@ use crate::{
     },
 };
 use alloc::{
+    collections::BTreeMap,
     string::String,
     sync::{Arc, Weak},
-    vec::Vec,
 };
 use common::{
     errors::LoaderError,
@@ -178,7 +178,7 @@ impl Thread {
             fn powersave();
         }
 
-        let allocated_pages = vec![];
+        let allocated_pages = BTreeMap::new();
 
         let page_table = RootPageTableHolder::new_with_kernel_mapping(false);
 
@@ -242,7 +242,7 @@ impl Thread {
         register_state: TrapFrame,
         page_table: RootPageTableHolder,
         program_counter: VirtAddr,
-        allocated_pages: Vec<PinnedHeapPages>,
+        allocated_pages: BTreeMap<VirtAddr, PinnedHeapPages>,
         in_kernel_mode: bool,
         brk: Brk,
         parent_tid: Tid,
