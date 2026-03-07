@@ -334,6 +334,14 @@ impl Thread {
         false
     }
 
+    pub fn suspend_unless_wakeup_pending(&mut self) {
+        if self.wakeup_pending {
+            self.wakeup_pending = false;
+        } else {
+            self.suspend();
+        }
+    }
+
     fn suspend(&mut self) {
         assert_ne!(
             self.state,

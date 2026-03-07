@@ -53,7 +53,6 @@ extern "C" fn handle_trap() {
 
 fn handle_timer_interrupt() {
     timer::wakeup_wakers();
-    crate::processes::kernel_tasks::poll_ready_tasks();
     Cpu::with_scheduler(|mut s| s.schedule());
     assert_sepc_not_in_trap_handler();
 }
@@ -97,7 +96,6 @@ fn handle_external_interrupt() {
             plic.complete_interrupt(plic_interrupt);
             drop(plic);
             crate::net::on_network_interrupt();
-            crate::processes::kernel_tasks::poll_ready_tasks();
         }
     }
 }
@@ -267,10 +265,24 @@ fn handle_exception() {
 }
 
 fn handle_supervisor_software_interrupt() {
-    // This interrupt is fired when we kill a thread
-    // It could be that our cpu is currently running this
-    // thread, therefore, reschedule.
-    Cpu::with_scheduler(|mut s| s.schedule());
+    let sleep_requested = crate::processes::kernel_tasks::take_sleep_request();
+
+    Cpu::with_scheduler(|mut s| {
+        if sleep_requested {
+            let is_worker = s
+                .get_current_thread()
+                .with_lock(|t| crate::processes::kernel_tasks::is_current_worker_tid(t.get_tid()));
+            if is_worker {
+                s.get_current_thread().with_lock(|mut t| {
+                    t.set_register_state(Cpu::read_trap_frame());
+                    t.set_program_counter(VirtAddr::new(arch::cpu::read_sepc()));
+                    t.suspend_unless_wakeup_pending();
+                });
+            }
+        }
+        s.schedule();
+    });
+
     arch::cpu::clear_supervisor_software_interrupt();
     assert_sepc_not_in_trap_handler();
 }
