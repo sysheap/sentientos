@@ -1,3 +1,5 @@
+use core::arch::global_asm;
+
 use crate::{
     debug,
     klibc::util::ByteInterpretable,
@@ -14,28 +16,24 @@ use headers::syscall_types::{
 
 pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
 
-// addi a7, zero, 139  (set syscall number to rt_sigreturn)
-// ecall                (invoke syscall)
-const fn make_trampoline_page() -> [u8; PAGE_SIZE] {
-    let mut page = [0u8; PAGE_SIZE];
-    page[0] = 0x93;
-    page[1] = 0x08;
-    page[2] = 0xb0;
-    page[3] = 0x08;
-    page[4] = 0x73;
-    page[5] = 0x00;
-    page[6] = 0x00;
-    page[7] = 0x00;
-    page
+global_asm!(
+    ".pushsection .data",
+    ".balign {PAGE_SIZE}",
+    "__signal_trampoline:",
+    "li a7, {NR_RT_SIGRETURN}",
+    "ecall",
+    ".skip {PAGE_SIZE} - (. - __signal_trampoline)",
+    ".popsection",
+    PAGE_SIZE = const PAGE_SIZE,
+    NR_RT_SIGRETURN = const headers::syscalls::SYSCALL_NR_RT_SIGRETURN,
+);
+
+unsafe extern "C" {
+    static __signal_trampoline: u8;
 }
 
-#[repr(C, align(4096))]
-struct TrampolinePage([u8; PAGE_SIZE]);
-
-static TRAMPOLINE_PAGE: TrampolinePage = TrampolinePage(make_trampoline_page());
-
 pub fn trampoline_phys_addr() -> PhysAddr {
-    PhysAddr::new(TRAMPOLINE_PAGE.0.as_ptr() as usize)
+    PhysAddr::new(core::ptr::addr_of!(__signal_trampoline) as usize)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
