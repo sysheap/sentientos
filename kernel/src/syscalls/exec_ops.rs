@@ -11,7 +11,35 @@ use common::syscalls::trap_frame::{Register, TrapFrame};
 use super::linux::{LinuxSyscallHandler, LinuxSyscalls};
 
 impl LinuxSyscallHandler {
-    pub(super) fn do_execve(&mut self, filename: usize, argv: usize) -> Result<isize, Errno> {
+    fn read_string_array(&self, array_ptr: usize) -> Result<Vec<Vec<u8>>, Errno> {
+        let process = self.get_process();
+        let mut buffers = Vec::new();
+        let mut current = array_ptr;
+        loop {
+            let ptr_val = process.with_lock(|p| {
+                let ptr = UserspacePtr::new(current as *const usize);
+                p.read_userspace_ptr(&ptr)
+            })?;
+            if ptr_val == 0 {
+                break;
+            }
+            let max_read = usize::MAX.wrapping_sub(ptr_val).wrapping_add(1).min(256);
+            let bytes = process.with_lock(|p| {
+                let uptr = UserspacePtr::new(ptr_val as *const u8);
+                p.read_userspace_slice(&uptr, max_read)
+            })?;
+            buffers.push(bytes);
+            current = current.wrapping_add(core::mem::size_of::<usize>());
+        }
+        Ok(buffers)
+    }
+
+    pub(super) fn do_execve(
+        &mut self,
+        filename: usize,
+        argv: usize,
+        envp: usize,
+    ) -> Result<isize, Errno> {
         let process = self.get_process();
         let filename_bytes = process.with_lock(|p| {
             let ptr = UserspacePtr::new(filename as *const u8);
@@ -19,35 +47,28 @@ impl LinuxSyscallHandler {
         })?;
         let mut buf = ConsumableBuffer::new(&filename_bytes);
         let filename_str = buf.consume_str().ok_or(Errno::EFAULT)?;
-        let name = filename_str.strip_prefix('/').unwrap_or(filename_str);
+        let name = filename_str.rsplit('/').next().unwrap_or(filename_str);
 
+        let argv_buffers = self.read_string_array(argv)?;
         let mut args: Vec<&str> = Vec::new();
-        let argv_ptrs = process.with_lock(|p| {
-            let ptr = UserspacePtr::new(argv as *const usize);
-            p.read_userspace_slice(&ptr, 32)
-        })?;
-
         // Skip argv[0] (program name) since load_elf adds it automatically
-        let mut arg_buffers: Vec<Vec<u8>> = Vec::new();
-        let mut first = true;
-        for &arg_ptr in &argv_ptrs {
-            if arg_ptr == 0 {
-                break;
-            }
-            if first {
-                first = false;
-                continue;
-            }
-            let arg_bytes = process.with_lock(|p| {
-                let ptr = UserspacePtr::new(arg_ptr as *const u8);
-                p.read_userspace_slice(&ptr, 256)
-            })?;
-            arg_buffers.push(arg_bytes);
-        }
-        for buf_ref in &arg_buffers {
+        for buf_ref in argv_buffers.iter().skip(1) {
             let mut cb = ConsumableBuffer::new(buf_ref);
             if let Some(s) = cb.consume_str() {
                 args.push(s);
+            }
+        }
+
+        let envp_buffers = if envp != 0 {
+            self.read_string_array(envp)?
+        } else {
+            Vec::new()
+        };
+        let mut env_strs: Vec<&str> = Vec::new();
+        for buf_ref in &envp_buffers {
+            let mut cb = ConsumableBuffer::new(buf_ref);
+            if let Some(s) = cb.consume_str() {
+                env_strs.push(s);
             }
         }
 
@@ -58,7 +79,8 @@ impl LinuxSyscallHandler {
             .ok_or(Errno::ENOENT)?;
 
         let elf = ElfFile::parse(elf_data).expect("Cannot parse ELF file");
-        let loaded = loader::load_elf(&elf, name, &args).expect("ELF loading must succeed");
+        let loaded =
+            loader::load_elf(&elf, name, &args, &env_strs).expect("ELF loading must succeed");
 
         let process_name = Arc::new(String::from(name));
         let old_process = self.get_process();

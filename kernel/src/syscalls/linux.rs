@@ -344,8 +344,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
     }
 
-    async fn execve(&mut self, filename: usize, argv: usize, _envp: usize) -> Result<isize, Errno> {
-        self.do_execve(filename, argv)
+    async fn execve(&mut self, filename: usize, argv: usize, envp: usize) -> Result<isize, Errno> {
+        self.do_execve(filename, argv, envp)
     }
 
     // --- Signals (signal_ops.rs) ---
