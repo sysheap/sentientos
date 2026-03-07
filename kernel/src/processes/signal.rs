@@ -17,7 +17,7 @@ use headers::syscall_types::{
 pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
 
 global_asm!(
-    ".pushsection .data",
+    ".pushsection .text",
     ".balign {PAGE_SIZE}",
     "__signal_trampoline:",
     "li a7, {NR_RT_SIGRETURN}",
