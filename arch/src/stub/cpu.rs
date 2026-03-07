@@ -65,3 +65,14 @@ pub fn is_in_kernel_mode() -> bool {
 
 #[allow(dead_code)]
 pub fn set_ret_to_kernel_mode(_kernel_mode: bool) {}
+
+#[allow(dead_code)]
+pub fn trigger_supervisor_software_interrupt() {}
+
+pub struct InterruptGuard;
+
+impl InterruptGuard {
+    pub fn new() -> Self {
+        Self
+    }
+}

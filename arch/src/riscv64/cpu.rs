@@ -125,3 +125,31 @@ pub fn set_ret_to_kernel_mode(kernel_mode: bool) {
         csrc_sstatus(1 << SSTATUS_SPP);
     }
 }
+
+pub fn trigger_supervisor_software_interrupt() {
+    csrs_sip(1 << SIP_SSIP);
+}
+
+pub struct InterruptGuard {
+    was_enabled: bool,
+}
+
+impl InterruptGuard {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let sstatus = read_sstatus();
+        let was_enabled = (sstatus & 0b10) != 0;
+        if was_enabled {
+            csrc_sstatus(0b10);
+        }
+        Self { was_enabled }
+    }
+}
+
+impl Drop for InterruptGuard {
+    fn drop(&mut self) {
+        if self.was_enabled {
+            csrs_sstatus(0b10);
+        }
+    }
+}
