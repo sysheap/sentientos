@@ -15,6 +15,7 @@ This document contains research summaries for planned future enhancements. Each 
 9. [Minimal TCP Implementation](#9-minimal-tcp-implementation)
 10. [Dynamic Linking](#10-dynamic-linking)
 11. [QEMU Random Device Driver](#11-qemu-random-device-driver)
+12. [Replace Unix Coreutils with Rust Coreutils](#12-replace-unix-coreutils-with-rust-coreutils-uutilscoreutils)
 
 ---
 
@@ -753,6 +754,174 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 ---
 
+## 12. Replace Unix Coreutils with Rust Coreutils (uutils/coreutils)
+
+**Complexity:** Low to Medium
+
+### Current Setup
+
+**C Coreutils from Nixpkgs:**
+- Cross-compiled for RISC-V with musl libc
+- Built with debug symbols (`-O0 -ggdb`, `dontStrip = true`)
+- Selected subset specified in `flake.nix` (`userBins`):
+  - `cat`, `echo`, `false`, `ls`, `pwd`, `rm`, `touch`, `true`
+- Symlinked into `kernel/compiled_userspace_nix/` during shell hook
+- Source copied to `$out/src/` for GDB source access
+
+### Motivation for Rust Coreutils
+
+**Advantages:**
+- **Same language as kernel** - Unified debugging experience
+- **Modern codebase** - Active development, feature parity with GNU coreutils
+- **Safety guarantees** - Rust's memory safety reduces potential bugs
+- **Better integration** - Easier to patch, modify, and understand alongside kernel code
+- **Educational value** - Learn from Rust implementations of classic Unix utilities
+
+**Repository:** https://github.com/uutils/coreutils
+
+### Implementation Strategy
+
+**Phase 1: Nix Integration**
+1. Add `uutils/coreutils` to `flake.nix` inputs
+2. Set up cross-compilation for RISC-V 64-bit with musl
+3. Configure Rust toolchain for target `riscv64gc-unknown-linux-musl`
+4. Build with debug symbols (`-C debuginfo=2`, `profile.release.debug = true`)
+
+**Phase 2: Build Configuration**
+```nix
+rust-coreutils = pkgs.rustPlatform.buildRustPackage {
+  pname = "uutils-coreutils";
+  version = "...";
+  src = uutils-coreutils-src;
+
+  cargoLock = { /* ... */ };
+
+  # Cross-compilation for RISC-V
+  target = "riscv64gc-unknown-linux-musl";
+
+  # Debug symbols
+  cargoBuildFlags = [ "--release" ];
+  CARGO_PROFILE_RELEASE_DEBUG = "true";
+
+  # Static linking with musl
+  CARGO_BUILD_TARGET = "riscv64gc-unknown-linux-musl";
+  RUSTFLAGS = "-C target-feature=+crt-static -C debuginfo=2";
+
+  # Don't strip binaries
+  dontStrip = true;
+
+  # Build specific utilities only (or all)
+  buildPhase = ''
+    cargo build --release --bins
+  '';
+
+  installPhase = ''
+    mkdir -p $out/bin $out/src
+    # Copy selected binaries
+    cp target/riscv64gc-unknown-linux-musl/release/{cat,echo,ls,pwd,rm,touch,false,true} $out/bin/
+    # Copy sources for GDB
+    cp -r ./ $out/src/
+  '';
+};
+```
+
+**Phase 3: Integration**
+- Update `userBins` list to point to Rust coreutils
+- Adjust shell hook to symlink from new location
+- Verify existing system tests still pass
+- Update GDB configuration if needed for Rust debugging
+
+### Utility Selection
+
+**Initial subset (matching current setup):**
+- `cat`, `echo`, `false`, `ls`, `pwd`, `rm`, `touch`, `true`
+
+**Future expansion** (once #3 Feasible Coreutils is implemented):
+- `mkdir`, `rmdir`, `head`, `tail`, `wc`, `cp`, `mv`, `chmod`, `stat`, etc.
+- Can gradually replace as filesystem syscalls mature
+
+### Technical Considerations
+
+**RISC-V Cross-Compilation:**
+- Rust target: `riscv64gc-unknown-linux-musl`
+- Requires musl cross-compilation toolchain (already in Nix)
+- May need to patch dependencies for no_std or musl compatibility
+
+**Debug Symbols:**
+- Rust debug info format: DWARF
+- GDB should work seamlessly (same format as kernel)
+- Source mapping: Ensure source paths in debug info match symlinked paths
+
+**Binary Size:**
+- Rust binaries may be larger than C equivalents
+- Use `strip` selectively if space becomes an issue
+- Consider `opt-level = "z"` for size optimization (trade-off with debuggability)
+
+**Compatibility:**
+- uutils aims for GNU coreutils compatibility
+- May have minor behavioral differences - test thoroughly
+- Check for any platform-specific features not yet implemented
+
+### Required Nix Changes
+
+**`flake.nix` modifications:**
+
+1. Add input:
+```nix
+inputs = {
+  # ...
+  uutils-coreutils = {
+    url = "github:uutils/coreutils";
+    flake = false;  # Just source, we'll build it
+  };
+};
+```
+
+2. Replace `coreutils` derivation (lines 52-62)
+3. Update `userBins` list (lines 83-92) to point to Rust coreutils
+4. Adjust shell hook if needed
+
+### Testing Strategy
+
+**Verification steps:**
+1. Build Rust coreutils for RISC-V: `nix build`
+2. Check binary format: `file ./result/bin/ls` (should show RISC-V 64-bit)
+3. Inspect debug symbols: `riscv64-unknown-linux-gnu-objdump --debugging ./result/bin/ls`
+4. Boot kernel with new utilities: `just run`
+5. Run existing system tests: `just system-test`
+6. Test each utility manually in QEMU shell
+
+**Regression tests:**
+- Ensure all existing tests in `system-tests/` pass
+- No behavioral changes expected for current utilities
+
+### Fallback Plan
+
+If cross-compilation proves difficult:
+1. Keep C coreutils temporarily
+2. Build Rust coreutils natively for RISC-V (slower but simpler)
+3. Mix-and-match: Use C coreutils for basic utilities, Rust for new ones
+
+### Dependencies
+
+**Blockers:** None (independent improvement)
+
+**Synergies with:**
+- **#4 - Feasible Coreutils** - Once more syscalls exist, can expand Rust utility selection
+- **#10 - Dynamic Linking** - Could enable shared Rust runtime if binaries become too large
+
+### Estimated Effort
+
+**Nix setup and cross-compilation:** 3-5 days
+- Add input, configure build, handle cross-compilation quirks
+
+**Integration and testing:** 2-3 days
+- Update shell hook, verify system tests, debug any issues
+
+**Total:** 1-2 weeks
+
+---
+
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
@@ -773,6 +942,9 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 9. **#10 - Dynamic Linking** (Shared libraries)
 10. **#5 - Framebuffer** (Graphics foundation)
 11. **#6 - Port Doom** (Showcase project)
+
+### Independent Improvements (Can be done anytime)
+- **#12 - Rust Coreutils** (Drop-in replacement, improved debugging, no blockers)
 
 ---
 
