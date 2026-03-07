@@ -93,6 +93,10 @@ impl<T: Number + BitAnd<T, Output = T>> BitAndAssign<T> for MMIO<T> {
 // pointer to another thread is safe; callers must provide synchronization
 // for concurrent access (e.g., Spinlock).
 unsafe impl<T> Send for MMIO<T> {}
+// SAFETY: MMIO performs volatile reads/writes to hardware registers. Sharing
+// the pointer between threads is safe; concurrent access semantics are
+// defined by the hardware (e.g., reading ISR status is idempotent).
+unsafe impl<T> Sync for MMIO<T> {}
 
 impl<T> core::fmt::Pointer for MMIO<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

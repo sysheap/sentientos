@@ -1,11 +1,17 @@
-use core::{cell::LazyCell, net::Ipv4Addr};
+use core::{
+    cell::LazyCell,
+    net::Ipv4Addr,
+    pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
+    task::{Context, Poll, Waker},
+};
 
 use alloc::vec::Vec;
 
 use crate::{
     debug,
     drivers::virtio::net::NetworkDevice,
-    klibc::Spinlock,
+    klibc::{MMIO, Spinlock, runtime_initialized::RuntimeInitializedData},
     net::{ipv4::IpV4Header, udp::UdpHeader},
 };
 
@@ -31,6 +37,70 @@ static NETWORK_STACK: NetworkStack = NetworkStack {
     open_sockets: Spinlock::new(LazyCell::new(OpenSockets::new)),
 };
 
+static ISR_STATUS: RuntimeInitializedData<MMIO<u32>> = RuntimeInitializedData::new();
+static NETWORK_INTERRUPT_COUNTER: AtomicU64 = AtomicU64::new(0);
+static NETWORK_INTERRUPT_WAKERS: Spinlock<Vec<Waker>> = Spinlock::new(Vec::new());
+
+pub fn init_isr_status(isr: MMIO<u32>) {
+    ISR_STATUS.initialize(isr);
+}
+
+pub fn on_network_interrupt() {
+    // Reading ISR status acknowledges the interrupt on the device side
+    let _isr = ISR_STATUS.read();
+    NETWORK_INTERRUPT_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let wakers: Vec<Waker> = NETWORK_INTERRUPT_WAKERS.lock().drain(..).collect();
+    for waker in wakers {
+        waker.wake();
+    }
+}
+
+struct NetworkInterruptWait {
+    seen_counter: u64,
+    registered: bool,
+}
+
+impl NetworkInterruptWait {
+    fn new(seen_counter: u64) -> Self {
+        Self {
+            seen_counter,
+            registered: false,
+        }
+    }
+}
+
+impl Future for NetworkInterruptWait {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let current = NETWORK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+        if current != self.seen_counter {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            NETWORK_INTERRUPT_WAKERS.lock().push(cx.waker().clone());
+            self.registered = true;
+            // Double-check after registering to prevent lost wakeups
+            let current = NETWORK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+            if current != self.seen_counter {
+                return Poll::Ready(());
+            }
+        }
+        Poll::Pending
+    }
+}
+
+pub async fn network_rx_task() {
+    loop {
+        let seen = NETWORK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+        let count = receive_and_process_packets();
+        if count > 0 {
+            sockets::wake_socket_waiters();
+        }
+        NetworkInterruptWait::new(seen).await;
+    }
+}
+
 pub fn ip_addr() -> Ipv4Addr {
     NETWORK_STACK.ip_addr
 }
@@ -43,7 +113,7 @@ pub fn assign_network_device(device: NetworkDevice) {
     *NETWORK_STACK.device.lock() = Some(device);
 }
 
-pub fn receive_and_process_packets() {
+fn receive_and_process_packets() -> usize {
     let packets = NETWORK_STACK
         .device
         .lock()
@@ -51,9 +121,11 @@ pub fn receive_and_process_packets() {
         .expect("There must be a configured network device.")
         .receive_packets();
 
+    let count = packets.len();
     for packet in packets {
         process_packet(packet);
     }
+    count
 }
 
 pub fn send_packet(packet: Vec<u8>) {

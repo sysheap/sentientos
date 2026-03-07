@@ -164,9 +164,13 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         .position(drivers::virtio::net::NetworkDevice::is_virtio_net);
     if let Some(index) = virtio_net {
         let device = pci_devices.swap_remove(index);
-        let network_device = drivers::virtio::net::NetworkDevice::initialize(device)
+        let plic_irq = device.plic_interrupt_id();
+        let (network_device, isr_status) = drivers::virtio::net::NetworkDevice::initialize(device)
             .expect("Initialization must work.");
         net::assign_network_device(network_device);
+        net::init_isr_status(isr_status);
+        plic::init_virtio_net_interrupt(plic_irq);
+        processes::kernel_tasks::spawn(net::network_rx_task());
     }
 
     info!("kernel_init done! Starting other harts");

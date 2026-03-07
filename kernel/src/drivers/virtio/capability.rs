@@ -7,7 +7,6 @@ pub const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
 #[allow(dead_code)]
 pub const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
 /* ISR Status */
-#[allow(dead_code)]
 pub const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
 /* Device specific configuration */
 pub const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;

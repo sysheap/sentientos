@@ -113,7 +113,9 @@
               pkgs.tmux
               pwndbg.packages.${system}.default
               pkgs.typos-lsp
-            ] ++ basePackages;
+              pkgs.dtc
+            ]
+            ++ basePackages;
             shellHook = hook;
           }
         );

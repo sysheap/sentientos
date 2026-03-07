@@ -33,6 +33,8 @@ const CAPABILITY_POINTER_MASK: u8 = !0x3;
 pub mod command_register {
     pub const IO_SPACE: u16 = 1 << 0;
     pub const MEMORY_SPACE: u16 = 1 << 1;
+    pub const BUS_MASTER: u16 = 1 << 2;
+    pub const INTERRUPT_DISABLE: u16 = 1 << 10;
 }
 
 mmio_struct! {
@@ -116,6 +118,7 @@ impl Iterator for PciCapabilityIter<'_> {
 pub struct PCIDevice {
     configuration_space: MMIO<GeneralDevicePciHeader>,
     initialized_bars: BTreeMap<u8, PCIAllocatedSpace>,
+    device_number: u8,
 }
 
 impl PCIDevice {
@@ -127,9 +130,18 @@ impl PCIDevice {
         &self.configuration_space
     }
 
+    // QEMU riscv virt PCI interrupt mapping: IRQ = 32 + (device + pin - 1) % 4
+    // where pin is the PCI INTx pin (1=INTA, 2=INTB, etc.)
+    pub fn plic_interrupt_id(&self) -> u32 {
+        const PLIC_PCI_BASE: u32 = 32;
+        // VirtIO PCI devices use INTA (pin 1)
+        let pin: u32 = 1;
+        PLIC_PCI_BASE + (u32::from(self.device_number) + pin - 1) % 4
+    }
+
     /// # Safety
     /// `address` must point to a valid PCI configuration space MMIO region.
-    unsafe fn try_new(address: PciCpuAddr) -> Option<Self> {
+    unsafe fn try_new(address: PciCpuAddr, device_number: u8) -> Option<Self> {
         let pci_device: MMIO<GeneralDevicePciHeader> = MMIO::new(address.as_usize());
         if pci_device.vendor_id().read() == INVALID_VENDOR_ID {
             return None;
@@ -138,6 +150,7 @@ impl PCIDevice {
         Some(Self {
             configuration_space: pci_device,
             initialized_bars: BTreeMap::new(),
+            device_number,
         })
     }
 
@@ -224,7 +237,7 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
                 );
                 // SAFETY: address is computed from the PCI host bridge base
                 // and valid bus/device/function numbers.
-                let maybe_device = unsafe { PCIDevice::try_new(address) };
+                let maybe_device = unsafe { PCIDevice::try_new(address, device) };
                 if let Some(device) = maybe_device {
                     let vendor_id = device.configuration_space.vendor_id().read();
                     let device_id = device.configuration_space.device_id().read();

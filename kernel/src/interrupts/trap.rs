@@ -53,6 +53,7 @@ extern "C" fn handle_trap() {
 
 fn handle_timer_interrupt() {
     timer::wakeup_wakers();
+    crate::processes::kernel_tasks::poll_ready_tasks();
     Cpu::with_scheduler(|mut s| s.schedule());
     assert_sepc_not_in_trap_handler();
 }
@@ -64,34 +65,40 @@ fn handle_external_interrupt() {
         Some(i) => i,
         None => return,
     };
-    assert!(
-        plic_interrupt == InterruptSource::Uart,
-        "Plic interrupt should be uart."
-    );
 
-    let mut ctrl_c = false;
-    let mut ctrl_d = false;
-    {
-        let uart = QEMU_UART.lock();
-        while let Some(input) = uart.read() {
-            match input {
-                3 => ctrl_c = true,
-                4 => ctrl_d = true,
-                _ => STDIN_BUFFER.lock().push(input),
+    match plic_interrupt {
+        InterruptSource::Uart => {
+            let mut ctrl_c = false;
+            let mut ctrl_d = false;
+            {
+                let uart = QEMU_UART.lock();
+                while let Some(input) = uart.read() {
+                    match input {
+                        3 => ctrl_c = true,
+                        4 => ctrl_d = true,
+                        _ => STDIN_BUFFER.lock().push(input),
+                    }
+                }
+            }
+
+            plic.complete_interrupt(plic_interrupt);
+            drop(plic);
+
+            if ctrl_c {
+                Cpu::with_scheduler(|mut s| {
+                    s.send_ctrl_c();
+                });
+            }
+            if ctrl_d {
+                crate::debugging::dump_current_state();
             }
         }
-    }
-
-    plic.complete_interrupt(plic_interrupt);
-    drop(plic);
-
-    if ctrl_c {
-        Cpu::with_scheduler(|mut s| {
-            s.send_ctrl_c();
-        });
-    }
-    if ctrl_d {
-        crate::debugging::dump_current_state();
+        InterruptSource::VirtioNet => {
+            plic.complete_interrupt(plic_interrupt);
+            drop(plic);
+            crate::net::on_network_interrupt();
+            crate::processes::kernel_tasks::poll_ready_tasks();
+        }
     }
 }
 

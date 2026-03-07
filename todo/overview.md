@@ -11,11 +11,10 @@ This document contains research summaries for planned future enhancements. Each 
 5. [Feasible Coreutils](#5-feasible-coreutils)
 6. [QEMU Framebuffer](#6-qemu-framebuffer)
 7. [Port Doom](#7-port-doom)
-8. [Async Network Reception with Interrupts](#8-async-network-reception-with-interrupts)
-9. [DHCP Client](#9-dhcp-client)
-10. [Minimal TCP Implementation](#10-minimal-tcp-implementation)
-11. [Dynamic Linking](#11-dynamic-linking)
-12. [QEMU Random Device Driver](#12-qemu-random-device-driver)
+8. [DHCP Client](#8-dhcp-client)
+9. [Minimal TCP Implementation](#9-minimal-tcp-implementation)
+10. [Dynamic Linking](#10-dynamic-linking)
+11. [QEMU Random Device Driver](#11-qemu-random-device-driver)
 
 ---
 
@@ -440,68 +439,7 @@ qemu-system-riscv64 \
 
 ---
 
-## 8. Async Network Reception with Interrupts
-
-**Complexity:** Low to Medium
-
-### Current Polling Implementation
-`recvfrom()` actively polls network card via `net::receive_and_process_packets()`, returns `EAGAIN` if no data.
-
-**Problem:** Wasteful, prevents true async blocking.
-
-### Proposed Implementation
-
-**Model:** Follow existing timer-based sleep pattern (`kernel/src/processes/timer.rs`)
-
-**Key Components:**
-
-1. **Enable VirtIO Interrupts** (currently disabled)
-   - Clear `VIRTQ_AVAIL_F_NO_INTERRUPT` flag in virtqueue.rs:238
-   - Configure MSIX vectors in VirtIO driver
-
-2. **Create Waker Queue**
-```rust
-static RECV_WAITERS: Spinlock<BTreeMap<Port, Vec<Waker>>> = ...;
-```
-
-3. **RecvWait Future**
-```rust
-impl Future for RecvWait {
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
-        if packet_available(self.port) {
-            return Poll::Ready(());
-        }
-        if !self.registered {
-            RECV_WAITERS.lock().insert(self.port, cx.waker().clone());
-            self.registered = true;
-        }
-        Poll::Pending
-    }
-}
-```
-
-4. **PLIC Interrupt Handler**
-- Detect VirtIO network interrupt
-- Call `handle_network_interrupt()` which processes packets and wakes waiters
-
-### Files to Modify
-- `kernel/src/drivers/virtio/net/mod.rs` - Enable interrupts
-- `kernel/src/interrupts/plic.rs` - Add VirtIO interrupt source
-- `kernel/src/interrupts/trap.rs` - Handle network interrupts
-- `kernel/src/net/sockets.rs` - Add waker registration
-- `kernel/src/syscalls/linux.rs` - Make `recvfrom()` truly async
-
-### Benefits
-- Eliminates wasteful polling
-- Threads truly sleep waiting for network data
-- Better CPU utilization
-- Aligns with existing async infrastructure
-
-**Estimated effort:** 3-5 days
-
----
-
-## 9. DHCP Client
+## 8. DHCP Client
 
 **Complexity:** Low to Medium
 
@@ -573,7 +511,7 @@ async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
 
 ---
 
-## 10. Minimal TCP Implementation
+## 9. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -644,7 +582,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 11. Dynamic Linking
+## 10. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -727,7 +665,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 12. QEMU Random Device Driver
+## 11. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -808,24 +746,23 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#8 - Async Network with Interrupts** (Better performance)
-2. **#12 - QEMU Random Device** (Security foundation)
+1. **#11 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-3. **#3 - QEMU Block Device Driver** (Prerequisite for filesystems)
-4. **#2 - Virtual File System** (Core abstraction)
-5. **#4 - ext2 Filesystem** (Persistent storage)
-6. **#5 - Coreutils** (User-facing utilities)
+2. **#3 - QEMU Block Device Driver** (Prerequisite for filesystems)
+3. **#2 - Virtual File System** (Core abstraction)
+4. **#4 - ext2 Filesystem** (Persistent storage)
+5. **#5 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-7. **#9 - DHCP Client** (Network configuration)
-8. **#10 - Minimal TCP** (Protocol expansion)
+6. **#8 - DHCP Client** (Network configuration)
+7. **#9 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-9. **#1 - Linux Signals** (Process control)
-10. **#11 - Dynamic Linking** (Shared libraries)
-11. **#6 - Framebuffer** (Graphics foundation)
-12. **#7 - Port Doom** (Showcase project)
+8. **#1 - Linux Signals** (Process control)
+9. **#10 - Dynamic Linking** (Shared libraries)
+10. **#6 - Framebuffer** (Graphics foundation)
+11. **#7 - Port Doom** (Showcase project)
 
 ---
 
