@@ -637,17 +637,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         fd: c_int,
         statbuf: LinuxUserspaceArg<*mut u8>,
     ) -> Result<isize, Errno> {
-        let node = self
+        let file = self
             .current_process
             .with_lock(|p| {
                 p.fd_table().get(fd).map(|e| match &e.descriptor {
-                    FileDescriptor::VfsFile(f) => Some(f.lock().node().clone()),
+                    FileDescriptor::VfsFile(f) => Some(f.clone()),
                     _ => None,
                 })
             })
             .ok_or(Errno::EBADF)?;
 
-        let st = if let Some(node) = node {
+        let st = if let Some(file) = file {
+            let node = file.lock().node().clone();
             let mode = match node.node_type() {
                 fs::vfs::NodeType::File => headers::fs::S_IFREG | 0o644,
                 fs::vfs::NodeType::Directory => headers::fs::S_IFDIR | 0o755,
@@ -1150,15 +1151,16 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         flags: c_int,
     ) -> Result<isize, Errno> {
         let node = if (flags & headers::fs::AT_EMPTY_PATH) != 0 && !pathname.arg_nonzero() {
-            // fstat-on-fd: dirfd refers to the open file
-            self.current_process
+            let file = self
+                .current_process
                 .with_lock(|p| {
                     p.fd_table().get(dirfd).and_then(|e| match &e.descriptor {
-                        FileDescriptor::VfsFile(f) => Some(f.lock().node().clone()),
+                        FileDescriptor::VfsFile(f) => Some(f.clone()),
                         _ => None,
                     })
                 })
-                .ok_or(Errno::EBADF)?
+                .ok_or(Errno::EBADF)?;
+            file.lock().node().clone()
         } else {
             assert!(
                 dirfd == headers::fs::AT_FDCWD,
