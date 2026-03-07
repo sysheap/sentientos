@@ -150,7 +150,8 @@ The `arch` crate provides no-op stubs for non-riscv64 targets so Kani can compil
 | Kernel entry | kernel/src/main.rs |
 | CSR access | arch/src/riscv64/cpu.rs |
 | SBI calls | arch/src/riscv64/sbi/ |
-| Syscall handlers | kernel/src/syscalls/linux.rs (+ helpers.rs, process_ops.rs, exec_ops.rs) |
+| Syscall dispatch | kernel/src/syscalls/linux.rs (thin trait methods) |
+| Syscall impls | kernel/src/syscalls/*_ops.rs (io, ioctl, fs, mm, signal, net, time, id, process, exec) |
 | Process struct | kernel/src/processes/process.rs |
 | Scheduler | kernel/src/processes/scheduler.rs |
 | Page tables | kernel/src/memory/page_tables.rs |
@@ -209,6 +210,8 @@ Already configured in `.mcp.json` at the project root. Claude Code picks it up a
 - `is_power_of_2_or_zero()`, `is_aligned()` (kernel/src/klibc/util.rs) - Common checks
 
 **Reuse Linux/musl header definitions.** Constants and structs from Linux UAPI or musl libc headers must be auto-generated via bindgen in the `headers` crate, not defined manually. Only define types manually when they are not available in any header (e.g., kernel-internal structs like `linux_dirent64`).
+
+**Syscall organization.** New syscalls: add the trait method in `linux.rs` (≤5 lines, delegates to `do_*` helper), implement in the appropriate `*_ops.rs` file grouped by concern. Trivial stubs stay inline.
 
 **Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:
 - Run `just clippy` to ensure no warnings

@@ -114,10 +114,21 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
 When a syscall is invoked, `LinuxSyscallHandler::new()` captures the current thread, process, and TID from the scheduler at syscall entry. These fields are then directly accessible to all syscall implementations without additional indirection.
 
-Helper methods on `LinuxSyscallHandler` are split across files:
-- `helpers.rs` — path resolution (`read_path`, `make_absolute`, `read_cstring`), FD helpers (`resolve_dirfd_node`), `effective_process()`
-- `process_ops.rs` — `clone_vfork()`, `clone_thread()`
-- `exec_ops.rs` — `do_execve()`
+Syscall implementations are split across concern-grouped files. Each trait method in `linux.rs` is a thin wrapper (≤5 lines) that delegates to a `do_*` helper in the appropriate file. Trivial stubs (`Ok(0)`, `Err(EINVAL)`) stay inline.
+
+| File | Syscalls |
+|------|----------|
+| `io_ops.rs` | read, write, writev, pipe2, fcntl |
+| `ioctl_ops.rs` | ioctl |
+| `fs_ops.rs` | openat, fstat, newfstatat, statx, getdents64, faccessat, mkdirat, unlinkat, getcwd |
+| `mm_ops.rs` | mmap, mprotect |
+| `process_ops.rs` | clone_vfork, clone_thread, wait4 |
+| `exec_ops.rs` | execve (do_execve) |
+| `signal_ops.rs` | rt_sigaction, rt_sigprocmask, sigaltstack, kill |
+| `net_ops.rs` | socket, bind, sendto, recvfrom |
+| `time_ops.rs` | nanosleep, clock_nanosleep, ppoll |
+| `id_ops.rs` | getpgid, getsid, setpgid, futex |
+| `helpers.rs` | path resolution, read_cstring, resolve_dirfd_node |
 
 ### Solaya ioctl Extensions
 
@@ -164,16 +175,16 @@ linux_syscalls! {
 }
 ```
 
-2. Implement handler in `LinuxSyscalls` impl:
+2. Add a thin trait method in `impl LinuxSyscalls for LinuxSyscallHandler` in `linux.rs` that delegates to a helper:
 ```rust
 async fn mysyscall(&mut self, arg1: LinuxUserspaceArg<type1>, arg2: LinuxUserspaceArg<type2>)
     -> Result<isize, Errno>
 {
-    let arg1 = arg1.validate_ptr()?;
-    // Implementation
-    Ok(0)
+    self.do_mysyscall(arg1, arg2)
 }
 ```
+
+3. Implement the `do_mysyscall` helper in the appropriate `*_ops.rs` file grouped by concern (e.g., `fs_ops.rs` for filesystem, `net_ops.rs` for networking). Trait methods in `linux.rs` should stay ≤5 lines; trivial stubs (`Ok(0)`, `Err(EINVAL)`) can stay inline.
 
 ## Error Handling
 
@@ -211,10 +222,18 @@ Example output:
 | File | Purpose |
 |------|---------|
 | kernel/src/syscalls/mod.rs | Module exports |
-| kernel/src/syscalls/linux.rs | Syscall trait impl, struct, macro invocation (~1420 lines) |
-| kernel/src/syscalls/helpers.rs | Path/FD/process helpers for LinuxSyscallHandler |
-| kernel/src/syscalls/process_ops.rs | clone_vfork, clone_thread |
-| kernel/src/syscalls/exec_ops.rs | do_execve |
+| kernel/src/syscalls/linux.rs | Syscall trait dispatch, struct, macro invocation (~640 lines) |
+| kernel/src/syscalls/io_ops.rs | File descriptor I/O: read, write, writev, pipe2, fcntl |
+| kernel/src/syscalls/ioctl_ops.rs | Device control: ioctl dispatch |
+| kernel/src/syscalls/fs_ops.rs | Filesystem: openat, stat, getdents64, unlinkat, etc. |
+| kernel/src/syscalls/mm_ops.rs | Memory management: mmap, mprotect |
+| kernel/src/syscalls/signal_ops.rs | Signal handling: rt_sigaction, rt_sigprocmask, kill, etc. |
+| kernel/src/syscalls/net_ops.rs | Networking: socket, bind, sendto, recvfrom |
+| kernel/src/syscalls/time_ops.rs | Time & polling: nanosleep, clock_nanosleep, ppoll |
+| kernel/src/syscalls/id_ops.rs | Process/thread identity: getpgid, setpgid, futex |
+| kernel/src/syscalls/process_ops.rs | Process lifecycle: clone_vfork, clone_thread, wait4 |
+| kernel/src/syscalls/exec_ops.rs | Exec: do_execve |
+| kernel/src/syscalls/helpers.rs | Path/FD helpers for LinuxSyscallHandler |
 | kernel/src/syscalls/macros.rs | linux_syscalls! macro + SYSCALL_METADATA generation |
 | kernel/src/syscalls/linux_validator.rs | LinuxUserspaceArg validation |
 | kernel/src/syscalls/trace_config.rs | Syscall tracer process name configuration |
