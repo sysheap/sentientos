@@ -37,6 +37,7 @@ pub struct Process {
     sid: Tid,
     brk: Brk,
     vfork_parent: Option<ProcessRef>,
+    umask: u32,
 }
 
 impl Debug for Process {
@@ -78,6 +79,7 @@ impl Process {
             pgid,
             sid,
             vfork_parent: None,
+            umask: 0o022,
         }
     }
 
@@ -242,6 +244,14 @@ impl Process {
 
     pub fn set_sid(&mut self, sid: Tid) {
         self.sid = sid;
+    }
+
+    pub fn umask(&self) -> u32 {
+        self.umask
+    }
+
+    pub fn set_umask(&mut self, mask: u32) {
+        self.umask = mask;
     }
 
     pub fn fd_table(&self) -> crate::klibc::SpinlockGuard<'_, FdTable> {
