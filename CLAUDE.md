@@ -203,6 +203,10 @@ Already configured in `.mcp.json` at the project root. Claude Code picks it up a
 
 **No bloated comments.** Add comments only when explaining invariants or non-obvious logic. Never add comments that restate what the code does, separators, or decorative formatting.
 
+**Use existing utilities.** Before implementing helper functions, check for existing utilities:
+- `ByteInterpretable::as_slice()` (kernel/src/klibc/util.rs) - Convert any struct to &[u8]
+- `is_power_of_2_or_zero()`, `is_aligned()` (kernel/src/klibc/util.rs) - Common checks
+
 **Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:
 - Run `just clippy` to ensure no warnings
 - Remove any dead or unused code introduced by your changes

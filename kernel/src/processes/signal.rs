@@ -1,7 +1,7 @@
 use crate::{
     debug,
-    klibc::Spinlock,
-    memory::{PhysAddr, VirtAddr, page::PinnedHeapPages},
+    klibc::util::ByteInterpretable,
+    memory::{PAGE_SIZE, PhysAddr, VirtAddr},
     processes::{thread::Thread, userspace_ptr::UserspacePtr},
 };
 use common::syscalls::trap_frame::Register;
@@ -16,24 +16,26 @@ pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
 
 // addi a7, zero, 139  (set syscall number to rt_sigreturn)
 // ecall                (invoke syscall)
-const TRAMPOLINE_CODE: [u8; 8] = [0x93, 0x08, 0xb0, 0x08, 0x73, 0x00, 0x00, 0x00];
-
-static TRAMPOLINE_PAGE: Spinlock<Option<PinnedHeapPages>> = Spinlock::new(None);
-
-pub fn init_trampoline() {
-    let mut guard = TRAMPOLINE_PAGE.lock();
-    if guard.is_some() {
-        return;
-    }
-    let mut page = PinnedHeapPages::new(1);
-    page.fill(&TRAMPOLINE_CODE, 0);
-    *guard = Some(page);
+const fn make_trampoline_page() -> [u8; PAGE_SIZE] {
+    let mut page = [0u8; PAGE_SIZE];
+    page[0] = 0x93;
+    page[1] = 0x08;
+    page[2] = 0xb0;
+    page[3] = 0x08;
+    page[4] = 0x73;
+    page[5] = 0x00;
+    page[6] = 0x00;
+    page[7] = 0x00;
+    page
 }
 
+#[repr(C, align(4096))]
+struct TrampolinePage([u8; PAGE_SIZE]);
+
+static TRAMPOLINE_PAGE: TrampolinePage = TrampolinePage(make_trampoline_page());
+
 pub fn trampoline_phys_addr() -> PhysAddr {
-    let guard = TRAMPOLINE_PAGE.lock();
-    let page = guard.as_ref().expect("signal trampoline not initialized");
-    PhysAddr::new(page.addr())
+    PhysAddr::new(TRAMPOLINE_PAGE.0.as_ptr() as usize)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,7 +56,6 @@ impl ExitStatus {
 #[derive(Debug, Clone, Copy)]
 pub struct PendingSignals(u64);
 
-#[allow(dead_code)]
 impl PendingSignals {
     pub const fn new() -> Self {
         Self(0)
@@ -76,10 +77,6 @@ impl PendingSignals {
             return None;
         }
         Some(deliverable.trailing_zeros())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0 == 0
     }
 }
 
@@ -113,14 +110,7 @@ struct SignalFrame {
 
 const SIGNAL_FRAME_SIZE: usize = core::mem::size_of::<SignalFrame>();
 
-impl SignalFrame {
-    fn as_bytes(&self) -> &[u8] {
-        // SAFETY: SignalFrame is repr(C) with only primitive fields, valid for any bit pattern.
-        unsafe {
-            core::slice::from_raw_parts((self as *const Self).cast::<u8>(), SIGNAL_FRAME_SIZE)
-        }
-    }
-}
+impl ByteInterpretable for SignalFrame {}
 
 /// Check for pending signals and either set up a signal handler frame or return
 /// an ExitStatus if the default action is to terminate. Called before returning
@@ -193,7 +183,7 @@ fn setup_signal_frame(
         UserspacePtr::new(core::ptr::without_provenance_mut(frame_sp));
     if process
         .lock()
-        .write_userspace_slice(&write_ptr, frame.as_bytes())
+        .write_userspace_slice(&write_ptr, frame.as_slice())
         .is_err()
     {
         debug!("Failed to write signal frame for sig={sig}");
