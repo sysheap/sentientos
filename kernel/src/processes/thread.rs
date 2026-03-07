@@ -203,6 +203,7 @@ impl Thread {
         elf_file: &ElfFile,
         name: &str,
         args: &[&str],
+        env: &[&str],
         parent_tid: Tid,
     ) -> Result<Arc<Spinlock<Self>>, LoaderError> {
         debug!("Create process from elf file");
@@ -213,7 +214,7 @@ impl Thread {
             allocated_pages,
             args_start,
             brk,
-        } = loader::load_elf(elf_file, name, args)?;
+        } = loader::load_elf(elf_file, name, args, env)?;
 
         let mut register_state = TrapFrame::zero();
         register_state[Register::a0] = args_start.as_usize();

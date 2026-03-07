@@ -44,13 +44,14 @@ fn set_up_arguments(
     stack: &mut [u8],
     name: &str,
     args: &[&str],
+    env: &[&str],
     auxv_info: &AuxvInfo,
 ) -> Result<VirtAddr, LoaderError> {
     // layout:
-    // [argc, argv[0], argv[n], NULL, envp[0], envp[1], NULL, AUXV AT_NULL, NULL, name, args[0], args[1]...]
+    // [argc, argv[0]..argv[n], NULL, envp[0]..envp[m], NULL, auxv..., name\0, args\0..., env\0...]
     let argc = 1 + args.len(); // name + amount of args
     let mut argv = vec![0usize; args.len() + 2]; // number of args plus name and null terminator
-    let envp = [0usize];
+    let mut envp = vec![0usize; env.len() + 1]; // env entries + NULL
     let auxv = [
         AT_PAGESZ as usize,
         PAGE_SIZE,
@@ -66,6 +67,7 @@ fn set_up_arguments(
     let strings = [name]
         .iter()
         .chain(args)
+        .chain(env)
         .flat_map(|s| s.as_bytes().iter().chain(&[0]))
         .copied()
         .collect::<Vec<u8>>();
@@ -82,15 +84,21 @@ fn set_up_arguments(
     let real_start = STACK_START - total_length + 1;
     let mut addr_current_string = real_start + start_of_strings_offset;
 
-    // Patch pointers
+    // Patch argv pointers
     argv[0] = addr_current_string.as_usize();
     addr_current_string =
         VirtAddr::new(addr_current_string.as_usize().wrapping_add(name.len() + 1));
     for (idx, arg) in args.iter().enumerate() {
         argv[idx + 1] = addr_current_string.as_usize();
-        // It could overflow on the last element, so just use wrapping_add
         addr_current_string =
             VirtAddr::new(addr_current_string.as_usize().wrapping_add(arg.len() + 1));
+    }
+
+    // Patch envp pointers
+    for (idx, e) in env.iter().enumerate() {
+        envp[idx] = addr_current_string.as_usize();
+        addr_current_string =
+            VirtAddr::new(addr_current_string.as_usize().wrapping_add(e.len() + 1));
     }
 
     let offset = stack.len() - total_length;
@@ -107,9 +115,9 @@ fn set_up_arguments(
             .map_err(|_| LoaderError::StackToSmall)?;
     }
 
-    for env in envp {
+    for e in envp {
         writable_buffer
-            .write_usize(env)
+            .write_usize(e)
             .map_err(|_| LoaderError::StackToSmall)?;
     }
 
@@ -127,7 +135,12 @@ fn set_up_arguments(
     Ok(STACK_START - total_length + 1)
 }
 
-pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedElf, LoaderError> {
+pub fn load_elf(
+    elf_file: &ElfFile,
+    name: &str,
+    args: &[&str],
+    env: &[&str],
+) -> Result<LoadedElf, LoaderError> {
     let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(false);
 
     let elf_header = elf_file.get_header();
@@ -155,7 +168,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     // Map 4KB stack
     let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
 
-    let args_start = set_up_arguments(stack.as_u8_slice(), name, args, &auxv_info)?;
+    let args_start = set_up_arguments(stack.as_u8_slice(), name, args, env, &auxv_info)?;
 
     let stack_addr = stack.addr();
     let prev = allocated_pages.insert(STACK_END, stack);

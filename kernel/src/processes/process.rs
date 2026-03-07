@@ -413,16 +413,16 @@ mod tests {
     #[test_case]
     fn create_process_from_elf() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let _process =
-            Thread::from_elf(&elf, "prog1", &[], Tid::new(0)).expect("ELF loading must succeed");
+        let _process = Thread::from_elf(&elf, "prog1", &[], &[], Tid::new(0))
+            .expect("ELF loading must succeed");
     }
 
     #[test_case]
     fn mmap_process() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
 
-        let process_ref =
-            Thread::from_elf(&elf, "prog1", &[], Tid::new(0)).expect("ELF loading must succeed");
+        let process_ref = Thread::from_elf(&elf, "prog1", &[], &[], Tid::new(0))
+            .expect("ELF loading must succeed");
 
         let thread = Arc::into_inner(process_ref)
             .expect("Must be sole owner")
@@ -458,8 +458,8 @@ mod tests {
     #[test_case]
     fn munmap_process() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let process_ref =
-            Thread::from_elf(&elf, "prog1", &[], Tid::new(0)).expect("ELF loading must succeed");
+        let process_ref = Thread::from_elf(&elf, "prog1", &[], &[], Tid::new(0))
+            .expect("ELF loading must succeed");
         let thread = Arc::into_inner(process_ref)
             .expect("Must be sole owner")
             .into_inner();
@@ -480,8 +480,8 @@ mod tests {
     #[test_case]
     fn munmap_unknown_address_returns_einval() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let process_ref =
-            Thread::from_elf(&elf, "prog1", &[], Tid::new(0)).expect("ELF loading must succeed");
+        let process_ref = Thread::from_elf(&elf, "prog1", &[], &[], Tid::new(0))
+            .expect("ELF loading must succeed");
         let thread = Arc::into_inner(process_ref)
             .expect("Must be sole owner")
             .into_inner();
@@ -496,8 +496,8 @@ mod tests {
     #[test_case]
     fn munmap_wrong_length_returns_einval() {
         let elf = ElfFile::parse(PROG1).expect("Cannot parse elf file");
-        let process_ref =
-            Thread::from_elf(&elf, "prog1", &[], Tid::new(0)).expect("ELF loading must succeed");
+        let process_ref = Thread::from_elf(&elf, "prog1", &[], &[], Tid::new(0))
+            .expect("ELF loading must succeed");
         let thread = Arc::into_inner(process_ref)
             .expect("Must be sole owner")
             .into_inner();
