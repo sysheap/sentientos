@@ -16,6 +16,7 @@ use headers::syscall_types::{
 
 pub const TRAMPOLINE_VADDR: VirtAddr = VirtAddr::new(0x1000);
 
+#[cfg(not(miri))]
 global_asm!(
     ".pushsection .text",
     ".balign {PAGE_SIZE}",
@@ -28,12 +29,17 @@ global_asm!(
     NR_RT_SIGRETURN = const headers::syscalls::SYSCALL_NR_RT_SIGRETURN,
 );
 
-unsafe extern "C" {
-    static __signal_trampoline: u8;
+#[cfg(not(miri))]
+pub fn trampoline_phys_addr() -> PhysAddr {
+    unsafe extern "C" {
+        static __signal_trampoline: u8;
+    }
+    PhysAddr::new(core::ptr::addr_of!(__signal_trampoline) as usize)
 }
 
+#[cfg(miri)]
 pub fn trampoline_phys_addr() -> PhysAddr {
-    PhysAddr::new(core::ptr::addr_of!(__signal_trampoline) as usize)
+    PhysAddr::new(0x1000)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
