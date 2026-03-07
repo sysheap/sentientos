@@ -3,29 +3,22 @@ use crate::{
     cpu::Cpu,
     debug, fs,
     io::pipe,
-    klibc::{
-        consumable_buffer::ConsumableBuffer,
-        elf::ElfFile,
-        util::{ByteInterpretable, UsizeExt},
-    },
+    klibc::util::{ByteInterpretable, UsizeExt},
     memory::{PAGE_SIZE, VirtAddr, page::Pages, page_tables::XWRMode},
     net::{self, arp, sockets::Port, udp::UdpHeader},
     print, println,
     processes::{
-        brk::Brk,
         fd_table::{FdFlags, FileDescriptor},
         futex::{self, FutexWait},
-        loader,
-        process::{Process, ProcessRef},
+        process::ProcessRef,
         process_table,
-        thread::{Thread, ThreadRef, VforkState, VforkWait, get_next_tid},
+        thread::ThreadRef,
         timer,
-        userspace_ptr::UserspacePtr,
         wait_child::{WaitChild, WaitPid},
     },
     syscalls::macros::linux_syscalls,
 };
-use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use alloc::{string::String, vec, vec::Vec};
 use common::{
     ioctl::{ARPHRD_ETHER, Ifreq, SIOCGIFHWADDR, SIOCSIFADDR, SOLAYA_LIST_PROGRAMS, SOLAYA_PANIC},
     pid::Tid,
@@ -36,11 +29,10 @@ use headers::{
     errno::Errno,
     socket::{AF_INET, SOCK_CLOEXEC, SOCK_DGRAM, sockaddr_in},
     syscall_types::{
-        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID,
-        CLONE_SETTLS, CLONE_THREAD, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
+        _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_THREAD, F_GETFL, F_SETFL, FIONBIO,
         FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
-        O_CLOEXEC, O_CREAT, O_DIRECTORY, O_TRUNC, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD,
-        SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
+        O_CLOEXEC, O_CREAT, O_DIRECTORY, O_TRUNC, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGKILL,
+        SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
     },
 };
 
@@ -116,9 +108,9 @@ linux_syscalls! {
 }
 
 pub struct LinuxSyscallHandler {
-    current_process: ProcessRef,
-    current_thread: ThreadRef,
-    current_tid: Tid,
+    pub(super) current_process: ProcessRef,
+    pub(super) current_thread: ThreadRef,
+    pub(super) current_tid: Tid,
 }
 
 impl LinuxSyscalls for LinuxSyscallHandler {
@@ -1412,102 +1404,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn execve(&mut self, filename: usize, argv: usize, _envp: usize) -> Result<isize, Errno> {
-        let process = self.get_process();
-        let filename_bytes = process.with_lock(|p| {
-            let ptr = UserspacePtr::new(filename as *const u8);
-            p.read_userspace_slice(&ptr, 256)
-        })?;
-        let mut buf = ConsumableBuffer::new(&filename_bytes);
-        let filename_str = buf.consume_str().ok_or(Errno::EFAULT)?;
-        let name = filename_str.strip_prefix('/').unwrap_or(filename_str);
-
-        // Read argv
-        let mut args: Vec<&str> = Vec::new();
-        let argv_ptrs = process.with_lock(|p| {
-            let ptr = UserspacePtr::new(argv as *const usize);
-            p.read_userspace_slice(&ptr, 32)
-        })?;
-
-        // Skip argv[0] (program name) since load_elf adds it automatically
-        let mut arg_buffers: Vec<Vec<u8>> = Vec::new();
-        let mut first = true;
-        for &arg_ptr in &argv_ptrs {
-            if arg_ptr == 0 {
-                break;
-            }
-            if first {
-                first = false;
-                continue;
-            }
-            let arg_bytes = process.with_lock(|p| {
-                let ptr = UserspacePtr::new(arg_ptr as *const u8);
-                p.read_userspace_slice(&ptr, 256)
-            })?;
-            arg_buffers.push(arg_bytes);
-        }
-        for buf_ref in &arg_buffers {
-            let mut cb = ConsumableBuffer::new(buf_ref);
-            if let Some(s) = cb.consume_str() {
-                args.push(s);
-            }
-        }
-
-        let elf_data = PROGRAMS
-            .iter()
-            .find(|(prog_name, _)| *prog_name == name)
-            .map(|(_, data)| *data)
-            .ok_or(Errno::ENOENT)?;
-
-        let elf = ElfFile::parse(elf_data).expect("Cannot parse ELF file");
-        let loaded = loader::load_elf(&elf, name, &args).expect("ELF loading must succeed");
-
-        let process_name = Arc::new(String::from(name));
-        let old_process = self.get_process();
-        let (old_pgid, old_sid, old_cwd) =
-            old_process.with_lock(|p| (p.pgid(), p.sid(), String::from(p.cwd())));
-        let new_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
-            process_name.clone(),
-            loaded.page_tables,
-            loaded.allocated_pages,
-            loaded.brk,
-            self.current_thread.lock().get_tid(),
-            old_pgid,
-            old_sid,
-        )));
-
-        let mut inherited_fd_table = self.get_process().with_lock(|p| p.fd_table().clone());
-        inherited_fd_table.close_cloexec_fds();
-        {
-            let mut np = new_process.lock();
-            np.set_fd_table(inherited_fd_table);
-            np.set_cwd(old_cwd);
-        }
-
-        let current_thread = self.current_thread.clone();
-        let old_process = current_thread.lock().process();
-        let tid = current_thread.lock().get_tid();
-
-        old_process.lock().remove_thread(tid);
-
-        current_thread.with_lock(|mut t| {
-            t.set_process(new_process.clone(), process_name);
-            let mut regs = TrapFrame::zero();
-            regs[Register::a0] = loaded.args_start.as_usize();
-            regs[Register::sp] = loaded.args_start.as_usize();
-            t.set_register_state(regs);
-            t.set_program_counter(loaded.entry_address);
-            t.set_registers_replaced(true);
-
-            if let Some(vfork_state) = t.take_vfork_state() {
-                vfork_state.lock().wake();
-            }
-        });
-
-        new_process
-            .lock()
-            .add_thread(tid, Arc::downgrade(&current_thread));
-
-        Ok(0)
+        self.do_execve(filename, argv)
     }
 }
 
@@ -1520,180 +1417,6 @@ impl LinuxSyscallHandler {
             current_process,
             current_thread,
             current_tid,
-        }
-    }
-
-    fn resolve_dirfd_node(&self, dirfd: c_int) -> Result<fs::vfs::VfsNodeRef, Errno> {
-        self.current_process
-            .with_lock(|p| {
-                p.fd_table().get(dirfd).and_then(|e| match &e.descriptor {
-                    FileDescriptor::VfsFile(f) => Some(f.lock().node().clone()),
-                    _ => None,
-                })
-            })
-            .ok_or(Errno::EBADF)
-    }
-
-    async fn clone_vfork(&mut self, flags: c_ulong, stack: usize) -> Result<isize, Errno> {
-        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK | SIGCHLD);
-        assert!(
-            flags == expected,
-            "clone_vfork: unsupported flags {flags:#x}, expected {expected:#x}"
-        );
-
-        let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = arch::cpu::read_sepc();
-
-        let parent_process = self.current_process.clone();
-        let (parent_main_tid, child_name, parent_pgid, parent_sid) =
-            parent_process.with_lock(|p| {
-                (
-                    p.main_tid(),
-                    Arc::new(String::from(p.get_name())),
-                    p.pgid(),
-                    p.sid(),
-                )
-            });
-
-        let vfork_state = VforkState::new();
-        let child_tid = get_next_tid();
-
-        let child_page_table =
-            crate::memory::page_tables::RootPageTableHolder::new_with_kernel_mapping(false);
-        let child_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
-            child_name.clone(),
-            child_page_table,
-            Vec::new(),
-            Brk::empty(),
-            child_tid,
-            parent_pgid,
-            parent_sid,
-        )));
-        child_process
-            .lock()
-            .set_vfork_parent(parent_process.clone());
-
-        let (parent_fd_table, parent_cwd) =
-            parent_process.with_lock(|p| (p.fd_table().clone(), String::from(p.cwd())));
-        {
-            let mut child = child_process.lock();
-            child.set_fd_table(parent_fd_table);
-            child.set_cwd(parent_cwd);
-        }
-
-        let mut child_regs = parent_regs;
-        child_regs[Register::a0] = 0;
-        if stack != 0 {
-            child_regs[Register::sp] = stack;
-        }
-
-        let child_thread = Thread::new(
-            child_tid,
-            child_name,
-            child_regs,
-            VirtAddr::new(parent_pc + 4),
-            false,
-            child_process.clone(),
-            parent_main_tid,
-        );
-
-        child_thread.lock().set_vfork_state(vfork_state.clone());
-
-        child_process
-            .lock()
-            .add_thread(child_tid, Arc::downgrade(&child_thread));
-        process_table::THE.lock().add_thread(child_thread);
-
-        VforkWait::new(vfork_state).await;
-
-        Ok(child_tid.as_isize())
-    }
-
-    fn clone_thread(
-        &mut self,
-        flags: c_ulong,
-        stack: usize,
-        ptid: LinuxUserspaceArg<Option<*mut c_int>>,
-        tls: c_ulong,
-        ctid: LinuxUserspaceArg<Option<*mut c_int>>,
-    ) -> Result<isize, Errno> {
-        let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = arch::cpu::read_sepc();
-
-        let parent_process = self.current_process.clone();
-        let (parent_main_tid, child_name) =
-            parent_process.with_lock(|p| (p.main_tid(), Arc::new(String::from(p.get_name()))));
-
-        let child_tid = get_next_tid();
-
-        let mut child_regs = parent_regs;
-        child_regs[Register::a0] = 0;
-        if stack != 0 {
-            child_regs[Register::sp] = stack;
-        }
-        if (flags & c_ulong::from(CLONE_SETTLS)) != 0 {
-            child_regs[Register::tp] = usize::try_from(tls).expect("tls fits in usize");
-        }
-
-        let child_thread = Thread::new(
-            child_tid,
-            child_name,
-            child_regs,
-            VirtAddr::new(parent_pc + 4),
-            false,
-            parent_process.clone(),
-            parent_main_tid,
-        );
-
-        if (flags & c_ulong::from(CLONE_CHILD_CLEARTID)) != 0 {
-            child_thread.lock().set_clear_child_tid((&ctid).into());
-        }
-
-        parent_process.with_lock(|mut p| {
-            p.add_thread(child_tid, Arc::downgrade(&child_thread));
-        });
-
-        if (flags & c_ulong::from(CLONE_PARENT_SETTID)) != 0 {
-            ptid.write_if_not_none(
-                c_int::try_from(child_tid.as_isize()).expect("tid fits in c_int"),
-            )?;
-        }
-
-        process_table::THE.lock().add_thread(child_thread);
-
-        Ok(child_tid.as_isize())
-    }
-
-    fn read_path(&self, arg: &LinuxUserspaceArg<*const u8>) -> Result<String, Errno> {
-        let path = self.read_cstring(arg)?;
-        Ok(self.make_absolute(&path))
-    }
-
-    fn make_absolute(&self, path: &str) -> String {
-        if path.starts_with('/') {
-            return String::from(path);
-        }
-        let cwd = self.current_process.with_lock(|p| String::from(p.cwd()));
-        if cwd == "/" {
-            alloc::format!("/{path}")
-        } else {
-            alloc::format!("{cwd}/{path}")
-        }
-    }
-
-    fn read_cstring(&self, arg: &LinuxUserspaceArg<*const u8>) -> Result<String, Errno> {
-        let addr = arg.raw_arg();
-        let max_len = 256usize.min(usize::MAX - addr + 1);
-        let bytes = arg.validate_slice(max_len)?;
-        let mut buf = ConsumableBuffer::new(&bytes);
-        let s = buf.consume_str().ok_or(Errno::EFAULT)?;
-        Ok(String::from(s))
-    }
-
-    fn validate_poll_timeout(to: Option<timespec>) {
-        if let Some(to) = to {
-            assert_eq!(to.tv_sec, 0, "ppoll with timeout not yet implemented");
-            assert_eq!(to.tv_nsec, 0, "ppoll with timeout not yet implemented");
         }
     }
 }
