@@ -1,3 +1,4 @@
+mod devfs;
 pub mod open_file;
 mod procfs;
 mod tmpfs;
@@ -10,4 +11,5 @@ pub fn init() {
     vfs::mount("/", vfs::RootDir::new());
     vfs::mount("/tmp", tmpfs::TmpfsDir::new());
     vfs::mount("/proc", procfs::ProcDir::new());
+    vfs::mount("/dev", devfs::DevDir::new());
 }
