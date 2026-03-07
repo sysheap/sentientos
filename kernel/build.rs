@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, env, error::Error, fs::read_dir, io::Write, process::Command};
+use std::{
+    collections::BTreeMap, env, error::Error, fs::read_dir, io::Write, path::PathBuf,
+    process::Command,
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");
@@ -41,6 +44,8 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 
     let entries = compiled_userspace.chain(compiled_userspace_nix);
 
+    let mut canonical_to_static: BTreeMap<PathBuf, String> = BTreeMap::new();
+
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
@@ -50,11 +55,19 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
 
         programs.insert(original_file_name.to_owned(), file_name.clone());
 
-        writeln!(
-            userspace_programs,
-            "pub static {file_name}: &[u8] = include_bytes_align_as!(u64, \"{}\");",
-            absolute_path.to_string_lossy()
-        )?;
+        if let Some(first_static) = canonical_to_static.get(&absolute_path) {
+            writeln!(
+                userspace_programs,
+                "pub static {file_name}: &[u8] = {first_static};"
+            )?;
+        } else {
+            writeln!(
+                userspace_programs,
+                "pub static {file_name}: &[u8] = include_bytes_align_as!(u64, \"{}\");",
+                absolute_path.to_string_lossy()
+            )?;
+            canonical_to_static.insert(absolute_path, file_name);
+        }
     }
 
     writeln!(userspace_programs)?;
