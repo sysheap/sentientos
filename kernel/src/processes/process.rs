@@ -2,7 +2,7 @@ use crate::{
     debug,
     klibc::Spinlock,
     memory::{
-        PhysAddr, VirtAddr,
+        PAGE_SIZE, PhysAddr, VirtAddr,
         page::{Pages, PinnedHeapPages},
         page_tables::{RootPageTableHolder, XWRMode},
     },
@@ -303,6 +303,73 @@ impl Process {
 
     pub fn thread_tids(&self) -> Vec<Tid> {
         self.threads.keys().copied().collect()
+    }
+
+    pub fn fork_address_space(
+        &self,
+    ) -> (
+        RootPageTableHolder,
+        BTreeMap<VirtAddr, PinnedHeapPages>,
+        BTreeMap<VirtAddr, PinnedHeapPages>,
+        Brk,
+        VirtAddr,
+    ) {
+        use super::signal;
+
+        let mut child_pt = RootPageTableHolder::new_with_kernel_mapping(false);
+
+        child_pt.map_userspace(
+            signal::TRAMPOLINE_VADDR,
+            signal::trampoline_phys_addr(),
+            PAGE_SIZE,
+            XWRMode::ReadExecute,
+            "Signal trampoline".into(),
+        );
+
+        let copy_pages = |pages_map: &BTreeMap<VirtAddr, PinnedHeapPages>,
+                          pt: &mut RootPageTableHolder,
+                          parent_pt: &RootPageTableHolder|
+         -> BTreeMap<VirtAddr, PinnedHeapPages> {
+            let mut child_map = BTreeMap::new();
+            for (&va, parent_pages) in pages_map {
+                let mut child_pages = PinnedHeapPages::new(parent_pages.len());
+                for (dst, src) in child_pages.iter_mut().zip(parent_pages.iter()) {
+                    let dst_slice: &mut [u8] = &mut **dst;
+                    let src_slice: &[u8] = &**src;
+                    dst_slice.copy_from_slice(src_slice);
+                }
+                let perm = parent_pt.get_userspace_permissions(va);
+                pt.map_userspace(
+                    va,
+                    PhysAddr::new(child_pages.addr()),
+                    child_pages.size(),
+                    perm,
+                    "fork".into(),
+                );
+                child_map.insert(va, child_pages);
+            }
+            child_map
+        };
+
+        let child_allocated = copy_pages(&self.allocated_pages, &mut child_pt, &self.page_table);
+        let child_mmap = copy_pages(&self.mmap_allocations, &mut child_pt, &self.page_table);
+
+        (
+            child_pt,
+            child_allocated,
+            child_mmap,
+            self.brk.clone(),
+            self.free_mmap_address,
+        )
+    }
+
+    pub fn set_mmap_state(
+        &mut self,
+        mmap_allocations: BTreeMap<VirtAddr, PinnedHeapPages>,
+        free_mmap_address: VirtAddr,
+    ) {
+        self.mmap_allocations = mmap_allocations;
+        self.free_mmap_address = free_mmap_address;
     }
 }
 

@@ -9,6 +9,7 @@ use headers::{
 
 use crate::{
     cpu::Cpu,
+    klibc::Spinlock,
     memory::VirtAddr,
     processes::{
         brk::Brk,
@@ -99,6 +100,67 @@ impl LinuxSyscallHandler {
         process_table::THE.lock().add_thread(child_thread);
 
         VforkWait::new(vfork_state).await;
+
+        Ok(child_tid.as_isize())
+    }
+
+    pub(super) async fn clone_fork(&mut self) -> Result<isize, Errno> {
+        let parent_regs = Cpu::read_trap_frame();
+        let parent_pc = arch::cpu::read_sepc();
+
+        let parent_process = self.current_process.clone();
+        let (parent_main_tid, child_name, parent_pgid, parent_sid) =
+            parent_process.with_lock(|p| {
+                (
+                    p.main_tid(),
+                    Arc::new(String::from(p.get_name())),
+                    p.pgid(),
+                    p.sid(),
+                )
+            });
+
+        let child_tid = get_next_tid();
+
+        let (child_page_table, child_allocated, child_mmap, child_brk, child_free_mmap) =
+            parent_process.with_lock(|p| p.fork_address_space());
+
+        let child_process = Arc::new(Spinlock::new(Process::new(
+            child_name.clone(),
+            child_page_table,
+            child_allocated,
+            child_brk,
+            child_tid,
+            parent_pgid,
+            parent_sid,
+        )));
+
+        let (parent_fd_table, parent_cwd, parent_umask) =
+            parent_process.with_lock(|p| (p.fd_table().clone(), String::from(p.cwd()), p.umask()));
+        {
+            let mut child = child_process.lock();
+            child.set_fd_table(parent_fd_table);
+            child.set_cwd(parent_cwd);
+            child.set_umask(parent_umask);
+            child.set_mmap_state(child_mmap, child_free_mmap);
+        }
+
+        let mut child_regs = parent_regs;
+        child_regs[Register::a0] = 0;
+
+        let child_thread = Thread::new(
+            child_tid,
+            child_name,
+            child_regs,
+            VirtAddr::new(parent_pc + 4),
+            false,
+            child_process.clone(),
+            parent_main_tid,
+        );
+
+        child_process
+            .lock()
+            .add_thread(child_tid, Arc::downgrade(&child_thread));
+        process_table::THE.lock().add_thread(child_thread);
 
         Ok(child_tid.as_isize())
     }
