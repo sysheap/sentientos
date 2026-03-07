@@ -35,6 +35,20 @@ impl From<u8> for XWRMode {
     }
 }
 
+impl XWRMode {
+    pub fn from_prot(prot: u32) -> Result<Self, headers::errno::Errno> {
+        use headers::syscall_types::{PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
+        match prot {
+            PROT_NONE | PROT_READ => Ok(Self::ReadOnly),
+            PROT_EXEC => Ok(Self::ExecuteOnly),
+            x if x == (PROT_READ | PROT_WRITE) => Ok(Self::ReadWrite),
+            x if x == (PROT_READ | PROT_EXEC) => Ok(Self::ReadExecute),
+            x if x == (PROT_READ | PROT_WRITE | PROT_EXEC) => Ok(Self::ReadWriteExecute),
+            _ => Err(headers::errno::Errno::EINVAL),
+        }
+    }
+}
+
 impl From<elf::ProgramHeaderFlags> for XWRMode {
     fn from(value: elf::ProgramHeaderFlags) -> Self {
         match value {

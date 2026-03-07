@@ -39,9 +39,8 @@ use headers::{
         _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID,
         CLONE_SETTLS, CLONE_THREAD, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
         FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
-        O_CLOEXEC, O_CREAT, O_DIRECTORY, O_TRUNC, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
-        sigaction, sigset_t, stack_t, timespec,
+        O_CLOEXEC, O_CREAT, O_DIRECTORY, O_TRUNC, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD,
+        SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t, stack_t, timespec,
     },
 };
 
@@ -398,13 +397,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         if (flags & MAP_FIXED) > 0 && addr == 0 {
             return Err(Errno::EINVAL);
         }
-        let permission = match prot {
-            PROT_NONE => XWRMode::ReadOnly,
-            PROT_EXEC => XWRMode::ExecuteOnly,
-            PROT_READ => XWRMode::ReadOnly,
-            x if x == (PROT_READ | PROT_WRITE) => XWRMode::ReadWrite,
-            _ => return Err(Errno::EINVAL),
-        };
+        let permission = XWRMode::from_prot(prot)?;
         self.current_process.with_lock(|mut p| {
             if (flags & MAP_FIXED) > 0 {
                 // Only handles exact overlap (full range already mapped). Partial overlap
@@ -453,15 +446,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
         let prot = c_uint::try_from(prot).map_err(|_| Errno::EINVAL)?;
         let size = len.next_multiple_of(PAGE_SIZE);
-        let mode = match prot {
-            PROT_NONE => XWRMode::ReadOnly,
-            PROT_READ => XWRMode::ReadOnly,
-            PROT_EXEC => XWRMode::ExecuteOnly,
-            x if x == (PROT_READ | PROT_WRITE) => XWRMode::ReadWrite,
-            x if x == (PROT_READ | PROT_EXEC) => XWRMode::ReadExecute,
-            x if x == (PROT_READ | PROT_WRITE | PROT_EXEC) => XWRMode::ReadWriteExecute,
-            _ => return Err(Errno::EINVAL),
-        };
+        let mode = XWRMode::from_prot(prot)?;
         self.current_process.with_lock(|mut p| {
             p.get_page_table_mut()
                 .mprotect(VirtAddr::new(addr), size, mode);
