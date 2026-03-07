@@ -37,6 +37,10 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 1. Read BUILD.md for build process
 2. Check TESTING.md for system test patterns
 
+### "I need to work on the filesystem"
+1. See `kernel/src/fs/` for VFS layer (vfs.rs, tmpfs.rs, procfs.rs, open_file.rs)
+2. Check SYSCALLS.md for filesystem syscalls (openat, fstat, lseek, getdents64, etc.)
+
 ### "I need to work on networking"
 1. Read NETWORKING.md for stack architecture
 2. Check DRIVERS.md for VirtIO network device
@@ -54,6 +58,7 @@ kernel/src/
   processes/     - Process, thread, scheduler, loader
   syscalls/      - Syscall handlers and validation
   interrupts/    - Trap handler, PLIC, timer
+  fs/            - VFS layer (tmpfs, procfs, open file tracking)
   net/           - UDP network stack
   drivers/       - VirtIO drivers
   io/            - UART, stdin buffer

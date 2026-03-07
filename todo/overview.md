@@ -4,97 +4,21 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [Virtual File System (VFS)](#1-virtual-file-system-vfs)
-2. [QEMU Block Device Driver](#2-qemu-block-device-driver)
-3. [ext2 Filesystem](#3-ext2-filesystem)
-4. [Feasible Coreutils](#4-feasible-coreutils)
-5. [QEMU Framebuffer](#5-qemu-framebuffer)
-6. [Port Doom](#6-port-doom)
-7. [Async Network Reception with Interrupts](#7-async-network-reception-with-interrupts)
-8. [~~DHCP Client~~](#8-dhcp-client) (Implemented)
-9. [Minimal TCP Implementation](#9-minimal-tcp-implementation)
-10. [Dynamic Linking](#10-dynamic-linking)
-11. [QEMU Random Device Driver](#11-qemu-random-device-driver)
+1. [QEMU Block Device Driver](#1-qemu-block-device-driver)
+2. [ext2 Filesystem](#2-ext2-filesystem)
+3. [Feasible Coreutils](#3-feasible-coreutils)
+4. [QEMU Framebuffer](#4-qemu-framebuffer)
+5. [Port Doom](#5-port-doom)
+6. [Async Network Reception with Interrupts](#6-async-network-reception-with-interrupts)
+7. [~~DHCP Client~~](#7-dhcp-client) (Implemented)
+8. [Minimal TCP Implementation](#8-minimal-tcp-implementation)
+9. [Dynamic Linking](#9-dynamic-linking)
+10. [QEMU Random Device Driver](#10-qemu-random-device-driver)
 12. [Replace Unix Coreutils with Rust Coreutils](#12-replace-unix-coreutils-with-rust-coreutils-uutilscoreutils)
 
 ---
 
-## 1. Virtual File System (VFS)
-
-**Complexity:** Medium to High
-
-### Core Abstractions
-
-**Traits:**
-```rust
-trait FileSystem {
-    fn root_inode(&self) -> Result<Arc<dyn Inode>>;
-    fn superblock(&self) -> &Superblock;
-}
-
-trait Inode {
-    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize>;
-    fn write(&self, offset: usize, buf: &[u8]) -> Result<usize>;
-    fn lookup(&self, name: &str) -> Result<Arc<dyn Inode>>;
-    fn metadata(&self) -> InodeMetadata;
-    fn inode_type(&self) -> InodeType;  // File, Dir, Symlink, etc.
-}
-```
-
-### Modular Filesystem Support
-- Global filesystem type registry
-- Mount table tracks all mounted filesystems
-- Each filesystem type registers with specific operations
-
-### Basic Proc Filesystem
-
-Start with minimal procfs:
-```rust
-struct ProcFs {
-    superblock: Superblock,
-}
-
-// Single file: /proc/version
-struct ProcVersionFile;
-
-impl Inode for ProcVersionFile {
-    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize> {
-        let content = b"Solaya 0.1.0\n";
-        // Handle offset and copy
-    }
-}
-```
-
-### Integration with Syscalls
-
-**Extend FileDescriptor enum:**
-```rust
-pub enum FileDescriptor {
-    VfsFile(VfsFile),  // NEW
-    Stdin,
-    Stdout,
-    // ... existing variants
-}
-```
-
-**Add Syscalls:**
-- `openat` - Open files
-- `fstat` - File metadata
-- `lseek` - Seek position
-- `getdents64` - Read directory entries
-
-### Implementation Order
-1. Core VFS abstractions (traits, mount table, path resolution)
-2. Minimal procfs with `/proc/version`
-3. Syscall integration (`openat`, file read/write)
-4. Expand procfs (meminfo, cpuinfo, /proc/<pid>/)
-5. Additional filesystems (tmpfs, devfs)
-
-**Estimated effort:** 3-4 weeks for core + procfs; ongoing for additional filesystems
-
----
-
-## 2. QEMU Block Device Driver
+## 1. QEMU Block Device Driver
 
 **Complexity:** Medium
 
@@ -139,7 +63,7 @@ struct virtio_blk_req {
 
 ---
 
-## 3. ext2 Filesystem
+## 2. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -174,8 +98,8 @@ struct virtio_blk_req {
 - Similar traversal + update bitmaps + allocate blocks
 
 ### Integration
-- Requires VFS layer (see #1)
-- Requires block device driver (see #2)
+- Requires VFS layer (done)
+- Requires block device driver (see #1)
 
 ### Complexity Assessment
 
@@ -197,30 +121,34 @@ struct virtio_blk_req {
 
 ---
 
-## 4. Feasible Coreutils
+## 3. Feasible Coreutils
 
 **Complexity:** Varies (Low to High per utility)
 
 ### Prerequisites
-- VFS implementation (#1)
-- Block device (#2) or tmpfs
-- Core filesystem syscalls
+- VFS implementation (done)
+- Block device (#1) or tmpfs (done)
+- Core filesystem syscalls (done)
 
 ### Required Syscalls
 
 **Priority 0 (Essential):**
-- `openat` (#56) - Open files ⚠️ Missing
+- `openat` (#56) - ✅ Implemented
 - `close` (#57) - ✅ Implemented
 - `read` (#63) - ✅ Implemented
 - `write` (#64) - ✅ Implemented
-- `getdents64` (#61) - Read directories ⚠️ Missing
-- `fstatat` (#79) - File metadata ⚠️ Missing
+- `getdents64` (#61) - ✅ Implemented
+- `fstatat` (#79) - ✅ Implemented
 
 **Priority 1:**
-- `mkdirat` (#34), `unlinkat` (#35), `renameat2` (#276), `getcwd` (#17)
+- `mkdirat` (#34) - ✅ Implemented
+- `unlinkat` (#35) - ✅ Implemented
+- `getcwd` (#17) - ✅ Implemented
+- `renameat2` (#276) - ⚠️ Missing
 
 **Priority 2:**
-- `fchmodat` (#53), `fchownat` (#54), `linkat` (#37), `symlinkat` (#36), `readlinkat` (#78), `utimensat` (#88)
+- `utimensat` (#88) - ✅ Implemented (no-op stub)
+- `fchmodat` (#53), `fchownat` (#54), `linkat` (#37), `symlinkat` (#36), `readlinkat` (#78) - ⚠️ Missing
 
 ### Easy (1-2 syscalls, minimal logic)
 
@@ -276,7 +204,7 @@ find, sort, diff, ln, readlink, dd
 
 ---
 
-## 5. QEMU Framebuffer
+## 4. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -331,7 +259,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 6. Port Doom
+## 5. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -355,16 +283,16 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#5)
-- **File system** - Need `open/openat/close` for reading WAD files (#1)
+- **Framebuffer access** - Need graphics device (#4)
+- **File system** - VFS is done; need persistent storage (#1 block device + #2 ext2) for WAD files
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#5) - VirtIO-GPU or bochs-display driver
-2. **File System** (#1) - Basic VFS for reading WAD file
+1. **Framebuffer** (#4) - VirtIO-GPU or bochs-display driver
+2. **File System** - VFS with tmpfs/procfs is done. Need persistent storage for WAD files.
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
 4. **Timing** - `clock_gettime` syscall
@@ -383,13 +311,13 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #1 (VFS), #5 (framebuffer), plus keyboard driver
+**Dependencies:** Items #4 (framebuffer), plus keyboard driver. VFS is done.
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
 
 ---
 
-## 7. Async Network Reception with Interrupts
+## 6. Async Network Reception with Interrupts
 
 **Complexity:** Low to Medium
 
@@ -450,7 +378,7 @@ impl Future for RecvWait {
 
 ---
 
-## 8. DHCP Client
+## 7. DHCP Client
 
 **Complexity:** Low to Medium
 
@@ -522,7 +450,7 @@ async fn sys_solaya_set_ip(addr_u32: u32) -> Result<isize, Errno> {
 
 ---
 
-## 9. Minimal TCP Implementation
+## 8. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -593,7 +521,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 10. Dynamic Linking
+## 9. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -641,7 +569,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ✅ Already implemented: `mmap`, `munmap`, `mprotect`, `brk`
 
-❌ Missing: **Filesystem syscalls** (#1)
+✅ Implemented: **Filesystem syscalls**
 - `openat`, `close`, `read`, `fstat` - To open and read shared libraries
 
 ### Complexity Assessment
@@ -670,13 +598,13 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 - TLS support
 - Performance optimizations
 
-**Main Blocker:** Filesystem support (#1) - currently embeds all binaries
+**Main Blocker:** Persistent filesystem (ext2 + block device) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
 
 ---
 
-## 11. QEMU Random Device Driver
+## 10. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -925,23 +853,22 @@ If cross-compilation proves difficult:
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#7 - Async Network with Interrupts** (Better performance)
-2. **#11 - QEMU Random Device** (Security foundation)
+1. **#6 - Async Network with Interrupts** (Better performance)
+2. **#10 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-3. **#2 - QEMU Block Device Driver** (Prerequisite for filesystems)
-4. **#1 - Virtual File System** (Core abstraction)
-5. **#3 - ext2 Filesystem** (Persistent storage)
-6. **#4 - Coreutils** (User-facing utilities)
+3. **#1 - QEMU Block Device Driver** (Prerequisite for persistent filesystems)
+4. **#2 - ext2 Filesystem** (Persistent storage)
+5. **#3 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-7. ~~**#8 - DHCP Client**~~ (Implemented)
-8. **#9 - Minimal TCP** (Protocol expansion)
+6. ~~**#7 - DHCP Client**~~ (Implemented)
+7. **#8 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-9. **#10 - Dynamic Linking** (Shared libraries)
-10. **#5 - Framebuffer** (Graphics foundation)
-11. **#6 - Port Doom** (Showcase project)
+8. **#9 - Dynamic Linking** (Shared libraries)
+9. **#4 - Framebuffer** (Graphics foundation)
+10. **#5 - Port Doom** (Showcase project)
 
 ### Independent Improvements (Can be done anytime)
 - **#12 - Rust Coreutils** (Drop-in replacement, improved debugging, no blockers)
@@ -952,12 +879,10 @@ If cross-compilation proves difficult:
 
 Before implementation, consider:
 
-1. **Storage Strategy:** For items #1-4 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
+1. **Framebuffer Choice (#4):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-2. **Framebuffer Choice (#5):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+2. **Dynamic Linking (#9):** Should we prioritize this over other features, or wait until persistent filesystem support is ready?
 
-3. **Dynamic Linking (#10):** Should we prioritize this over other features, or wait until filesystem support is solid?
-
-4. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
+3. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 
 Let me know which items you'd like to prioritize, or if you have questions about any of the research!
