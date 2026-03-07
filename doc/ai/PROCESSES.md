@@ -17,13 +17,16 @@ pub struct Process {
     name: Arc<String>,
     page_table: RootPageTableHolder,           // Virtual address space
     allocated_pages: Vec<PinnedHeapPages>,     // Physical memory
-    free_mmap_address: usize,                  // Next mmap VA (starts 0x2000000000)
-    fd_table: FdTable,                         // File descriptor table (stdin/stdout/stderr + sockets)
+    free_mmap_address: VirtAddr,               // Next mmap VA (starts 0x2000000000)
+    fd_table: Arc<Spinlock<FdTable>>,          // File descriptor table (shared across vfork)
     threads: BTreeMap<Tid, ThreadWeakRef>,
     main_tid: Tid,
     pgid: Tid,                                 // Process group ID
     sid: Tid,                                  // Session ID
     brk: Brk,                                  // Heap break manager
+    vfork_parent: Option<ProcessRef>,          // Parent process ref during vfork
+    umask: u32,                                // File creation mask (default 0o022)
+    cwd: String,                               // Current working directory (default "/")
 }
 ```
 
@@ -43,8 +46,16 @@ impl Process {
     fn write_userspace_slice<T>(&self, ptr: &UserspacePtr<*mut T>, data: &[T]) -> Result<(), Errno>
 
     // File descriptor table
-    fn fd_table(&self) -> &FdTable
-    fn fd_table_mut(&mut self) -> &mut FdTable
+    fn fd_table(&self) -> SpinlockGuard<'_, FdTable>
+    fn set_fd_table(&mut self, fd_table: FdTable)
+
+    // Working directory
+    fn cwd(&self) -> &str
+    fn set_cwd(&mut self, cwd: String)
+
+    // File creation mask
+    fn umask(&self) -> u32
+    fn set_umask(&mut self, mask: u32)
 }
 ```
 
@@ -222,8 +233,8 @@ Each process has a **process group ID** (`pgid`) and **session ID** (`sid`), sto
 ### Initialization
 - **Init process** (`Thread::from_elf`): `pgid = tid, sid = tid` (session and group leader)
 - **Powersave thread**: `pgid = 0, sid = 0`
-- **vfork child** (`clone_vfork`): inherits parent's `pgid` and `sid`
-- **execve**: preserves the old process's `pgid` and `sid`
+- **vfork child** (`clone_vfork`): inherits parent's `pgid`, `sid`, and `cwd`
+- **execve**: preserves the old process's `pgid`, `sid`, and `cwd`
 
 ### Syscalls
 - `getpgid(pid)` — returns PGID of `pid` (0 = self)

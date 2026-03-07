@@ -30,30 +30,48 @@ fn handle_syscall() {
 |---------|------|-------------|
 | bind | fd, addr, addrlen | Bind socket to address/port |
 | brk | brk | Adjust heap break |
+| chdir | pathname | Change working directory (validates path is a directory) |
+| clock_gettime | clockid, tp | Get clock time |
 | clock_nanosleep | clockid, flags, request, remain | Sleep with clock selection |
 | clone | flags, stack, ptid, tls, ctid | Create child process (vfork) or thread (CLONE_THREAD) |
 | close | fd | Close file descriptor |
 | dup3 | oldfd, newfd, flags | Duplicate file descriptor |
-| execve | filename, argv, envp | Replace process image |
+| execve | filename, argv, envp | Replace process image (inherits CWD) |
 | exit | status | Exit calling thread |
 | exit_group | status | Exit process (stores exit status, then kills process) |
-| fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
+| faccessat | dirfd, pathname, mode | Check file accessibility (supports dirfd + CWD-relative) |
+| fadvise64 | fd, offset, len, advice | File access advice (stub, returns 0) |
+| fcntl | fd, cmd, arg | File descriptor control (F_DUPFD, F_DUPFD_CLOEXEC, F_GETFD, F_SETFD, F_GETFL, F_SETFL) |
+| fstat | fd, statbuf | Get file status by fd |
+| futex | uaddr, op, val, ... | Fast userspace mutex |
+| getcwd | buf, size | Get current working directory |
+| getdents64 | fd, dirp, count | Read directory entries |
+| getegid | | Get effective group ID (stub, returns 0) |
+| geteuid | | Get effective user ID (stub, returns 0) |
+| getgid | | Get group ID (stub, returns 0) |
 | getpgid | pid | Get process group ID |
 | getpid | | Get process ID (main thread TID) |
 | getppid | | Get parent process ID |
 | getsid | pid | Get session ID |
 | gettid | | Get thread ID |
+| getuid | | Get user ID (stub, returns 0) |
 | ioctl | fd, op, arg | Device control (+ Solaya extensions, FIONBIO for sockets) |
+| kill | pid, sig | Send signal to process |
+| llistxattr | pathname, list, size | List extended attributes (stub, returns 0) |
+| lseek | fd, offset, whence | Reposition file offset |
 | madvise | addr, length, advice | Memory advice (stub, returns 0) |
+| mkdirat | dirfd, pathname, mode | Create directory (supports CWD-relative paths) |
 | mmap | addr, len, prot, flags, fd, off | Map memory |
 | mprotect | addr, len, prot | Memory protection (stub, returns 0) |
 | munmap | addr, len | Unmap memory |
 | nanosleep | duration, rem | Sleep |
+| newfstatat | dirfd, pathname, statbuf, flags | Get file status (supports dirfd + CWD-relative) |
+| openat | dirfd, pathname, flags, mode | Open file (supports dirfd-relative paths, O_CREAT, O_DIRECTORY) |
 | pipe2 | fds, flags | Create pipe |
 | ppoll | fds, n, timeout, mask | Poll file descriptors |
 | prctl | | Process control |
-| kill | pid, sig | Send signal to process |
 | read | fd, buf, count | Read from fd |
+| readlinkat | dirfd, pathname, buf, bufsiz | Read symlink (stub, returns EINVAL) |
 | recvfrom | fd, buf, len, flags, src_addr, addrlen | Receive UDP datagram with sender address |
 | rt_sigaction | sig, act, oact, size | Set/get signal action |
 | rt_sigprocmask | how, set, oldset, size | Set/get signal mask |
@@ -65,8 +83,12 @@ fn handle_syscall() {
 | setsid | | Create new session |
 | sigaltstack | uss, uoss | Signal stack |
 | socket | domain, type, protocol | Create socket (AF_INET + SOCK_DGRAM only) |
+| statx | dirfd, pathname, flags, mask, statxbuf | Extended file status (supports dirfd + CWD-relative) |
 | tgkill | tgid, tid, sig | Send signal to thread in thread group |
 | tkill | tid, sig | Send signal to thread |
+| umask | mask | Set file creation mask (stores per-process, returns previous) |
+| unlinkat | dirfd, pathname, flags | Remove file/directory (AT_REMOVEDIR for dirs, EISDIR/ENOTEMPTY checks) |
+| utimensat | dirfd, pathname, times, flags | Set file timestamps (stub, returns 0) |
 | wait4 | pid, status, options, rusage | Wait for child process (supports WNOHANG) |
 | write | fd, buf, count | Write to fd |
 | writev | fd, iov, iovcnt | Vectored write |
