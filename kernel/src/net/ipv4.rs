@@ -75,8 +75,11 @@ impl IpV4Header {
             "We don't support fragmented packets yet."
         );
 
+        let our_ip = super::ip_addr();
         assert!(
-            ipv4_header.destination_ip == super::ip_addr(),
+            ipv4_header.destination_ip == our_ip
+                || ipv4_header.destination_ip == Ipv4Addr::BROADCAST
+                || our_ip == Ipv4Addr::UNSPECIFIED,
             "Destination ip address is not ours."
         );
 

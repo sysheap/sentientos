@@ -27,7 +27,7 @@ use crate::{
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 use common::{
-    ioctl::{SOLAYA_LIST_PROGRAMS, SOLAYA_PANIC},
+    ioctl::{ARPHRD_ETHER, Ifreq, SIOCGIFHWADDR, SIOCSIFADDR, SOLAYA_LIST_PROGRAMS, SOLAYA_PANIC},
     pid::Tid,
     syscalls::trap_frame::{Register, TrapFrame},
 };
@@ -495,6 +495,39 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                     .with_lock(|p| p.fd_table().set_flags(fd, flags))?;
                 Ok(0)
             }
+            FileDescriptor::UdpSocket(_) | FileDescriptor::UnboundUdpSocket
+                if op == SIOCGIFHWADDR =>
+            {
+                if !net::has_network_device() {
+                    return Err(Errno::ENODEV);
+                }
+                let ifreq_ptr = LinuxUserspaceArg::<*mut Ifreq>::new(arg, self.get_process());
+                let mac = net::current_mac_address();
+                let mut result = Ifreq {
+                    ifr_name: [0; 16],
+                    ifr_data: [0; 16],
+                };
+                let [lo, hi] = ARPHRD_ETHER.to_le_bytes();
+                result.ifr_data[0] = lo;
+                result.ifr_data[1] = hi;
+                result.ifr_data[2..8].copy_from_slice(&mac.as_bytes());
+                ifreq_ptr.write_slice(&[result])?;
+                Ok(0)
+            }
+            FileDescriptor::UdpSocket(_) | FileDescriptor::UnboundUdpSocket
+                if op == SIOCSIFADDR =>
+            {
+                let ifreq_ptr = LinuxUserspaceArg::<*const Ifreq>::new(arg, self.get_process());
+                let ifreq = ifreq_ptr.validate_ptr()?;
+                let ip = core::net::Ipv4Addr::new(
+                    ifreq.ifr_data[4],
+                    ifreq.ifr_data[5],
+                    ifreq.ifr_data[6],
+                    ifreq.ifr_data[7],
+                );
+                net::set_ip_addr(ip);
+                Ok(0)
+            }
             _ => Err(Errno::EINVAL),
         }
     }
@@ -813,8 +846,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let dest_ip = core::net::Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
         let dest_port = u16::from_be(sin.sin_port);
 
-        let destination_mac =
-            arp::cache_lookup(&dest_ip).expect("sendto: destination MAC must be in ARP cache");
+        if !net::has_network_device() {
+            return Err(Errno::ENETDOWN);
+        }
+
+        let destination_mac = if dest_ip == core::net::Ipv4Addr::BROADCAST {
+            net::mac::MacAddress::new([0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
+        } else {
+            arp::cache_lookup(&dest_ip).expect("sendto: destination MAC must be in ARP cache")
+        };
 
         let source_port = socket.lock().get_port().as_u16();
         let packet =
