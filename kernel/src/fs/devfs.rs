@@ -64,7 +64,7 @@ impl VfsNode for DevZero {
     }
 }
 
-pub struct DevDir {
+pub(super) struct DevDir {
     ino: u64,
     null: VfsNodeRef,
     zero: VfsNodeRef,
