@@ -14,7 +14,7 @@ use core::ffi::{c_int, c_uint, c_ulong};
 use headers::{
     errno::Errno,
     socket::sockaddr_in,
-    syscall_types::{CLONE_THREAD, SIGCHLD, iovec, pollfd, sigaction, sigset_t, stack_t, timespec},
+    syscall_types::{CLONE_THREAD, iovec, pollfd, sigaction, sigset_t, stack_t, timespec},
 };
 
 impl ByteInterpretable for sockaddr_in {}
@@ -338,10 +338,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, Errno> {
         if (flags & c_ulong::from(CLONE_THREAD)) != 0 {
             self.clone_thread(flags, stack, ptid, tls, ctid)
-        } else if flags == c_ulong::from(SIGCHLD) && stack == 0 {
-            self.clone_fork().await
         } else {
-            self.clone_vfork(flags, stack).await
+            self.clone_fork(stack).await
         }
     }
 
@@ -549,9 +547,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     // --- Stubs ---
 
     fn get_process(&self) -> ProcessRef {
-        let process = self.current_process.clone();
-        let vfork_parent = process.lock().vfork_parent().cloned();
-        vfork_parent.unwrap_or(process)
+        self.current_process.clone()
     }
 
     async fn set_robust_list(&mut self, _head: usize, _len: usize) -> Result<isize, Errno> {

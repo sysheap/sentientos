@@ -1,10 +1,8 @@
-use alloc::{collections::BTreeMap, string::String, sync::Arc};
+use alloc::{string::String, sync::Arc};
 use core::ffi::{c_int, c_ulong};
 use headers::{
     errno::Errno,
-    syscall_types::{
-        CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID, CLONE_SETTLS, CLONE_VFORK, CLONE_VM, SIGCHLD,
-    },
+    syscall_types::{CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID, CLONE_SETTLS},
 };
 
 use crate::{
@@ -12,10 +10,9 @@ use crate::{
     klibc::Spinlock,
     memory::VirtAddr,
     processes::{
-        brk::Brk,
         process::Process,
         process_table,
-        thread::{Thread, VforkState, VforkWait, get_next_tid},
+        thread::{Thread, get_next_tid},
         wait_child::{WaitChild, WaitPid},
     },
     syscalls::linux_validator::LinuxUserspaceArg,
@@ -25,86 +22,7 @@ use common::{pid::Tid, syscalls::trap_frame::Register};
 use super::linux::LinuxSyscallHandler;
 
 impl LinuxSyscallHandler {
-    pub(super) async fn clone_vfork(
-        &mut self,
-        flags: c_ulong,
-        stack: usize,
-    ) -> Result<isize, Errno> {
-        let expected = c_ulong::from(CLONE_VM | CLONE_VFORK | SIGCHLD);
-        assert!(
-            flags == expected,
-            "clone_vfork: unsupported flags {flags:#x}, expected {expected:#x}"
-        );
-
-        let parent_regs = Cpu::read_trap_frame();
-        let parent_pc = arch::cpu::read_sepc();
-
-        let parent_process = self.current_process.clone();
-        let (parent_main_tid, child_name, parent_pgid, parent_sid) =
-            parent_process.with_lock(|p| {
-                (
-                    p.main_tid(),
-                    Arc::new(String::from(p.get_name())),
-                    p.pgid(),
-                    p.sid(),
-                )
-            });
-
-        let vfork_state = VforkState::new();
-        let child_tid = get_next_tid();
-
-        let child_page_table =
-            crate::memory::page_tables::RootPageTableHolder::new_with_kernel_mapping(false);
-        let child_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
-            child_name.clone(),
-            child_page_table,
-            BTreeMap::new(),
-            Brk::empty(),
-            child_tid,
-            parent_pgid,
-            parent_sid,
-        )));
-        child_process
-            .lock()
-            .set_vfork_parent(parent_process.clone());
-
-        let (parent_fd_table, parent_cwd) =
-            parent_process.with_lock(|p| (p.fd_table().clone(), String::from(p.cwd())));
-        {
-            let mut child = child_process.lock();
-            child.set_fd_table(parent_fd_table);
-            child.set_cwd(parent_cwd);
-        }
-
-        let mut child_regs = parent_regs;
-        child_regs[Register::a0] = 0;
-        if stack != 0 {
-            child_regs[Register::sp] = stack;
-        }
-
-        let child_thread = Thread::new(
-            child_tid,
-            child_name,
-            child_regs,
-            VirtAddr::new(parent_pc + 4),
-            false,
-            child_process.clone(),
-            parent_main_tid,
-        );
-
-        child_thread.lock().set_vfork_state(vfork_state.clone());
-
-        child_process
-            .lock()
-            .add_thread(child_tid, Arc::downgrade(&child_thread));
-        process_table::THE.lock().add_thread(child_thread);
-
-        VforkWait::new(vfork_state).await;
-
-        Ok(child_tid.as_isize())
-    }
-
-    pub(super) async fn clone_fork(&mut self) -> Result<isize, Errno> {
+    pub(super) async fn clone_fork(&mut self, stack: usize) -> Result<isize, Errno> {
         let parent_regs = Cpu::read_trap_frame();
         let parent_pc = arch::cpu::read_sepc();
 
@@ -146,6 +64,9 @@ impl LinuxSyscallHandler {
 
         let mut child_regs = parent_regs;
         child_regs[Register::a0] = 0;
+        if stack != 0 {
+            child_regs[Register::sp] = stack;
+        }
 
         let child_thread = Thread::new(
             child_tid,
