@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicU32, Ordering};
+
 use crate::{
     info,
     klibc::{MMIO, Spinlock, runtime_initialized::RuntimeInitializedData},
@@ -29,7 +31,15 @@ impl Plic {
         }
     }
     fn enable(&mut self, interrupt_id: u32) {
-        self.enable_register |= 1 << interrupt_id;
+        let word_offset = interrupt_id / 32;
+        let bit = interrupt_id % 32;
+        // SAFETY: Each 32-bit word in the enable register array covers 32
+        // interrupt IDs. word_offset selects the correct word within the
+        // PLIC enable register region.
+        unsafe {
+            let mut reg = self.enable_register.add(word_offset as usize);
+            reg |= 1 << bit;
+        }
     }
 
     fn set_priority(&mut self, interrupt_id: u32, priority: u32) {
@@ -54,6 +64,7 @@ impl Plic {
         match open_interrupt {
             0 => None,
             UART_INTERRUPT_NUMBER => Some(InterruptSource::Uart),
+            id if id == VIRTIO_NET_IRQ.load(Ordering::Relaxed) => Some(InterruptSource::VirtioNet),
             id => panic!("Unknown PLIC interrupt source ID {id}"),
         }
     }
@@ -61,6 +72,7 @@ impl Plic {
     pub fn complete_interrupt(&mut self, source: InterruptSource) {
         let interrupt_id = match source {
             InterruptSource::Uart => UART_INTERRUPT_NUMBER,
+            InterruptSource::VirtioNet => VIRTIO_NET_IRQ.load(Ordering::Relaxed),
         };
         self.claim_complete_register.write(interrupt_id);
     }
@@ -69,10 +81,12 @@ impl Plic {
 pub static PLIC: RuntimeInitializedData<Spinlock<Plic>> = RuntimeInitializedData::new();
 
 const UART_INTERRUPT_NUMBER: u32 = 10;
+static VIRTIO_NET_IRQ: AtomicU32 = AtomicU32::new(0);
 
 #[derive(PartialEq, Eq)]
 pub enum InterruptSource {
     Uart,
+    VirtioNet,
 }
 
 pub fn init_uart_interrupt(cpu_id: CpuId) {
@@ -84,4 +98,12 @@ pub fn init_uart_interrupt(cpu_id: CpuId) {
     plic.set_threshold(0);
     plic.enable(UART_INTERRUPT_NUMBER);
     plic.set_priority(UART_INTERRUPT_NUMBER, 1);
+}
+
+pub fn init_virtio_net_interrupt(interrupt_id: u32) {
+    info!("Initializing plic virtio net interrupt (IRQ {interrupt_id})");
+    VIRTIO_NET_IRQ.store(interrupt_id, Ordering::Relaxed);
+    let mut plic = PLIC.lock();
+    plic.enable(interrupt_id);
+    plic.set_priority(interrupt_id, 1);
 }

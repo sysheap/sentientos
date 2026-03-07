@@ -189,6 +189,11 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         return_buffers
     }
 
+    pub fn enable_interrupts(&mut self) {
+        self.driver_area.flags = 0;
+        arch::cpu::memory_fence();
+    }
+
     pub fn notify(&mut self) {
         if let Some(notify) = &mut self.notify {
             notify.write(self.queue_index);

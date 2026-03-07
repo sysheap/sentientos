@@ -10,12 +10,9 @@ const DELETE: u8 = 127;
 
 fn main() {
     println!("Hello from the udp receiver");
-    println!("Listening on {PORT}");
 
     let socket = Arc::new(UdpSocket::bind(format!("0.0.0.0:{PORT}")).expect("bind must work"));
-    // Kernel recvfrom always returns EAGAIN when no data (blocking not implemented),
-    // so we must use non-blocking mode and poll.
-    socket.set_nonblocking(true).expect("nonblocking must work");
+    println!("Listening on {PORT}");
 
     let last_sender: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(None));
 
@@ -31,7 +28,6 @@ fn main() {
                     print!("{}", text);
                     let _ = stdout().flush();
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(e) => panic!("recv_from failed: {e}"),
             }
         }

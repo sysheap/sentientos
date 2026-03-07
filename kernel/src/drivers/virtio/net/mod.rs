@@ -3,8 +3,8 @@ use crate::{
     debug,
     drivers::virtio::{
         capability::{
-            VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG, VIRTIO_PCI_CAP_NOTIFY_CFG,
-            virtio_pci_cap,
+            VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG, VIRTIO_PCI_CAP_ISR_CFG,
+            VIRTIO_PCI_CAP_NOTIFY_CFG, virtio_pci_cap,
         },
         virtqueue::{BufferDirection, VirtQueue},
     },
@@ -59,7 +59,7 @@ impl NetworkDevice {
             && cs.subsystem_id().read() == VIRTIO_NETWORK_SUBSYSTEM_ID
     }
 
-    pub fn initialize(mut pci_device: PCIDevice) -> Result<Self, &'static str> {
+    pub fn initialize(mut pci_device: PCIDevice) -> Result<(Self, MMIO<u32>), &'static str> {
         let capabilities = pci_device.capabilities();
         let mut virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities
             .filter(|cap| cap.id().read() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
@@ -114,6 +114,8 @@ impl NetworkDevice {
         let (mut receive_queue, transmit_queue) =
             Self::setup_virtqueues(&common_cfg, &notify_cfg, &notify_bar);
 
+        receive_queue.enable_interrupts();
+
         let mut device_status = common_cfg.device_status();
         device_status |= DEVICE_STATUS_DRIVER_OK;
 
@@ -128,6 +130,16 @@ impl NetworkDevice {
         );
 
         debug!("Device initialized: {:#x?}", device_status);
+
+        // Parse ISR status capability for interrupt acknowledgment
+        let isr_cfg_cap = virtio_capabilities
+            .iter()
+            .find(|cap| cap.cfg_type().read() == VIRTIO_PCI_CAP_ISR_CFG)
+            .ok_or("ISR configuration capability not found")?;
+
+        let isr_bar = pci_device.get_or_initialize_bar(isr_cfg_cap.bar().read());
+        let isr_status: MMIO<u32> =
+            MMIO::new((isr_bar.cpu_address + isr_cfg_cap.offset().read() as usize).as_usize());
 
         // Get net configuration
         let net_cfg_cap = virtio_capabilities
@@ -149,13 +161,21 @@ impl NetworkDevice {
 
         let mac_address = net_cfg.mac().read();
 
+        // Enable Bus Master for DMA and clear Interrupt Disable for legacy INTx
+        pci_device
+            .configuration_space_mut()
+            .set_command_register_bits(crate::pci::command_register::BUS_MASTER);
+        pci_device
+            .configuration_space_mut()
+            .clear_command_register_bits(crate::pci::command_register::INTERRUPT_DISABLE);
+
         info!(
             "Successfully initialized network device at {:p} with mac {}",
             *pci_device.configuration_space(),
             mac_address
         );
 
-        Ok(Self {
+        let device = Self {
             device: pci_device,
             common_cfg,
             net_cfg,
@@ -163,7 +183,9 @@ impl NetworkDevice {
             mac_address,
             receive_queue,
             transmit_queue,
-        })
+        };
+
+        Ok((device, isr_status))
     }
 
     fn reset_and_acknowledge(common_cfg: &MMIO<virtio_pci_common_cfg>) {

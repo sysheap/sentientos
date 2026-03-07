@@ -1,4 +1,9 @@
-use core::net::Ipv4Addr;
+use core::{
+    net::Ipv4Addr,
+    pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
+    task::{Context, Poll, Waker},
+};
 
 use alloc::{
     collections::{BTreeMap, VecDeque, btree_map::Entry},
@@ -7,6 +12,56 @@ use alloc::{
 };
 
 use crate::{debug, klibc::Spinlock};
+
+static SOCKET_DATA_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SOCKET_WAITERS: Spinlock<Vec<Waker>> = Spinlock::new(Vec::new());
+
+pub fn wake_socket_waiters() {
+    SOCKET_DATA_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let wakers: Vec<Waker> = SOCKET_WAITERS.lock().drain(..).collect();
+    for waker in wakers {
+        waker.wake();
+    }
+}
+
+pub fn socket_data_counter() -> u64 {
+    SOCKET_DATA_COUNTER.load(Ordering::SeqCst)
+}
+
+pub struct SocketDataWait {
+    seen_counter: u64,
+    registered: bool,
+}
+
+impl SocketDataWait {
+    pub fn new(seen_counter: u64) -> Self {
+        Self {
+            seen_counter,
+            registered: false,
+        }
+    }
+}
+
+impl Future for SocketDataWait {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let current = SOCKET_DATA_COUNTER.load(Ordering::SeqCst);
+        if current != self.seen_counter {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            SOCKET_WAITERS.lock().push(cx.waker().clone());
+            self.registered = true;
+            // Double-check after registering to prevent lost wakeups
+            let current = SOCKET_DATA_COUNTER.load(Ordering::SeqCst);
+            if current != self.seen_counter {
+                return Poll::Ready(());
+            }
+        }
+        Poll::Pending
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Port(u16);

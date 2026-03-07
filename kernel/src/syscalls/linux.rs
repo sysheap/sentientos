@@ -790,47 +790,50 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         src_addr: LinuxUserspaceArg<Option<*mut u8>>,
         addrlen: LinuxUserspaceArg<Option<*mut c_uint>>,
     ) -> Result<isize, Errno> {
-        net::receive_and_process_packets();
-
-        let socket = self
+        let (socket, is_nonblocking) = self
             .current_process
             .with_lock(|p| {
                 p.fd_table().get(fd).and_then(|e| match &e.descriptor {
-                    FileDescriptor::UdpSocket(s) => Some(s.clone()),
+                    FileDescriptor::UdpSocket(s) => Some((s.clone(), e.flags.is_nonblocking())),
                     _ => None,
                 })
             })
             .ok_or(Errno::EBADF)?;
 
         let mut tmp_buf = alloc::vec![0u8; len];
-        let result = socket.lock().get_datagram(&mut tmp_buf);
 
-        match result {
-            // TODO: blocking recvfrom should wait for data instead of returning EAGAIN
-            None => Err(Errno::EAGAIN),
-            Some((bytes_read, from_ip, from_port)) => {
-                buf.write_slice(&tmp_buf[..bytes_read])?;
-
-                if src_addr.arg_nonzero() {
-                    let sin = sockaddr_in {
-                        sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
-                        sin_port: from_port.as_u16().to_be(),
-                        sin_addr: headers::socket::in_addr {
-                            s_addr: u32::from(from_ip).to_be(),
-                        },
-                        sin_zero: [0; 8],
-                    };
-                    let src_writer =
-                        LinuxUserspaceArg::<*mut u8>::new(src_addr.raw_arg(), self.get_process());
-                    src_writer.write_slice(sin.as_slice())?;
-                    let addrlen_val = c_uint::try_from(core::mem::size_of::<sockaddr_in>())
-                        .expect("sockaddr_in size fits in c_uint");
-                    addrlen.write_if_not_none(addrlen_val)?;
-                }
-
-                Ok(bytes_read as isize)
+        let result = loop {
+            let seen = net::sockets::socket_data_counter();
+            if let Some(result) = socket.lock().get_datagram(&mut tmp_buf) {
+                break result;
             }
+            if is_nonblocking {
+                return Err(Errno::EAGAIN);
+            }
+            net::sockets::SocketDataWait::new(seen).await;
+        };
+
+        let (bytes_read, from_ip, from_port) = result;
+        buf.write_slice(&tmp_buf[..bytes_read])?;
+
+        if src_addr.arg_nonzero() {
+            let sin = sockaddr_in {
+                sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
+                sin_port: from_port.as_u16().to_be(),
+                sin_addr: headers::socket::in_addr {
+                    s_addr: u32::from(from_ip).to_be(),
+                },
+                sin_zero: [0; 8],
+            };
+            let src_writer =
+                LinuxUserspaceArg::<*mut u8>::new(src_addr.raw_arg(), self.get_process());
+            src_writer.write_slice(sin.as_slice())?;
+            let addrlen_val = c_uint::try_from(core::mem::size_of::<sockaddr_in>())
+                .expect("sockaddr_in size fits in c_uint");
+            addrlen.write_if_not_none(addrlen_val)?;
         }
+
+        Ok(bytes_read as isize)
     }
 
     async fn wait4(
