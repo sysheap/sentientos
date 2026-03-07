@@ -81,9 +81,15 @@
         };
 
         userBins = [
-          "${coreutils}/bin/true"
-          "${coreutils}/bin/false"
+          "${coreutils}/bin/cat"
           "${coreutils}/bin/echo"
+          "${coreutils}/bin/false"
+          "${coreutils}/bin/ls"
+          "${coreutils}/bin/mkdir"
+          "${coreutils}/bin/pwd"
+          "${coreutils}/bin/rm"
+          "${coreutils}/bin/touch"
+          "${coreutils}/bin/true"
         ];
 
         hook = ''
