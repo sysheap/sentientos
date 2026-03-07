@@ -480,7 +480,7 @@ impl Future for RecvWait {
 
 ### Minimal Viable Implementation
 
-**Userspace client** (`userspace/src/bin/dhcp.rs`):
+**Userspace client** (`userspace/src/bin/dhcpd.rs`):
 ```rust
 fn main() {
     let socket = UdpSocket::bind("0.0.0.0:68")?;

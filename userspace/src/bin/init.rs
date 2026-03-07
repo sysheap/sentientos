@@ -2,7 +2,7 @@ use userspace::spawn::spawn;
 
 fn main() {
     println!("init process started");
-    if let Ok(mut child) = spawn("dhcp", &[]) {
+    if let Ok(mut child) = spawn("dhcpd", &[]) {
         let _ = child.wait();
     }
     println!("starting shell");

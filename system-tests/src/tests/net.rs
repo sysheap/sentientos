@@ -4,7 +4,7 @@ use crate::infra::qemu::{QemuInstance, QemuOptions};
 
 #[tokio::test]
 async fn dhcp() -> anyhow::Result<()> {
-    // start_with asserts "dhcp: configured ip" when network is enabled
+    // start_with asserts "dhcpd: configured ip" when network is enabled
     let _solaya = QemuInstance::start_with(QemuOptions::default().add_network_card(true)).await?;
     Ok(())
 }

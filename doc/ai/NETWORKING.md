@@ -240,11 +240,11 @@ match socket.recv_from(&mut buf) {
 
 ## DHCP
 
-**File:** `userspace/src/bin/dhcp.rs`
+**File:** `userspace/src/bin/dhcpd.rs`
 
 The DHCP client runs as a userspace program during boot (spawned by `init` before the shell). It gets the NIC MAC via `ioctl(SIOCGIFHWADDR)`, performs the standard 4-step DHCP handshake (DISCOVER, OFFER, REQUEST, ACK), then configures the kernel IP via `ioctl(SIOCSIFADDR)`.
 
-Prints `dhcp: configured ip X.X.X.X` on success. Exits cleanly with status 1 if no network device is present (boot continues regardless).
+Prints `dhcpd: configured ip X.X.X.X` on success. Exits cleanly with status 1 if no network device is present (boot continues regardless).
 
 With QEMU user-mode networking, the built-in DHCP server assigns `10.0.2.15`.
 
@@ -268,5 +268,5 @@ Default configuration (via qemu_wrapper.sh):
 | kernel/src/net/udp.rs | UDP handling |
 | kernel/src/net/mac.rs | MAC address type |
 | kernel/src/drivers/virtio/net/ | VirtIO network device |
-| userspace/src/bin/dhcp.rs | DHCP client |
+| userspace/src/bin/dhcpd.rs | DHCP client |
 | common/src/ioctl.rs | Network ioctl wrappers (MAC, IP) |

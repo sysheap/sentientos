@@ -131,7 +131,7 @@ impl QemuInstance {
         stdout.assert_read_until("kernel_init done!").await?;
         stdout.assert_read_until("init process started").await?;
         if network_port.is_some() {
-            stdout.assert_read_until("dhcp: configured ip").await?;
+            stdout.assert_read_until("dhcpd: configured ip").await?;
         }
         stdout
             .assert_read_until("### SoSH - Solaya Shell ###")
