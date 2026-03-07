@@ -49,6 +49,12 @@
 
         musl-riscv = riscv-toolchain.musl;
 
+        dash = riscv-toolchain.dash.overrideAttrs (old: {
+          hardeningDisable = [ "fortify" ];
+          separateDebugInfo = false;
+          dontStrip = true;
+        });
+
         coreutils = riscv-toolchain.coreutils.overrideAttrs (old: {
           hardeningDisable = [ "fortify" ];
           separateDebugInfo = false;
@@ -90,6 +96,7 @@
           "${coreutils}/bin/rm"
           "${coreutils}/bin/touch"
           "${coreutils}/bin/true"
+          "${dash}/bin/dash"
         ];
 
         hook = ''
@@ -105,6 +112,7 @@
             name="$(basename "$target")"
             ln -sf "$target" "./kernel/compiled_userspace_nix/$name"
           done
+          ln -sf "${dash}/bin/dash" "./kernel/compiled_userspace_nix/sh"
 
           just mcp-server
         '';
