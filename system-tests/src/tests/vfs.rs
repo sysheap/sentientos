@@ -31,6 +31,7 @@ async fn ls_root() -> anyhow::Result<()> {
     let output = solaya.run_prog("ls-test /").await?;
     assert!(output.contains("tmp"), "ls / should list tmp");
     assert!(output.contains("proc"), "ls / should list proc");
+    assert!(output.contains("dev"), "ls / should list dev");
     Ok(())
 }
 
@@ -62,5 +63,33 @@ async fn vfs_roundtrip() -> anyhow::Result<()> {
     assert!(output.contains("OK proc_version"));
     assert!(output.contains("OK remove"));
     assert!(output.contains("OK gone"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn devfs_null_and_zero() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("devfs_test").await?;
+    assert!(output.contains("OK null_write"));
+    assert!(output.contains("OK null_read"));
+    assert!(output.contains("OK zero_read"));
+    assert!(output.contains("OK zero_write"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cat_dev_null() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("cat /dev/null").await?;
+    assert_eq!(output, "");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ls_dev() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("ls-test /dev").await?;
+    assert!(output.contains("null"), "ls /dev should list null");
+    assert!(output.contains("zero"), "ls /dev should list zero");
     Ok(())
 }
