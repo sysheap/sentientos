@@ -1,7 +1,9 @@
 use core::ffi::{c_int, c_uint};
 use headers::{
     errno::Errno,
-    syscall_types::{FIONBIO, TIOCGWINSZ},
+    syscall_types::{
+        FIONBIO, TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPGRP, TIOCGWINSZ, TIOCSPGRP, termios,
+    },
 };
 
 use crate::{
@@ -79,6 +81,40 @@ impl LinuxSyscallHandler {
                     ifreq.ifr_data[7],
                 );
                 net::set_ip_addr(ip);
+                Ok(0)
+            }
+            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
+                if op == TCGETS =>
+            {
+                let ptr = LinuxUserspaceArg::<*mut termios>::new(arg, self.get_process());
+                let default_termios = termios {
+                    c_iflag: 0,
+                    c_oflag: 0,
+                    c_cflag: 0,
+                    c_lflag: 0,
+                    c_line: 0,
+                    c_cc: [0; 19],
+                };
+                ptr.write_slice(&[default_termios])?;
+                Ok(0)
+            }
+            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
+                if op == TCSETS || op == TCSETSW || op == TCSETSF =>
+            {
+                Ok(0)
+            }
+            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
+                if op == TIOCGPGRP =>
+            {
+                let pgid = self.current_process.with_lock(|p| p.pgid());
+                let ptr = LinuxUserspaceArg::<*mut c_int>::new(arg, self.get_process());
+                let pgid_val = c_int::try_from(pgid.as_isize()).expect("pgid fits in c_int");
+                ptr.write_slice(&[pgid_val])?;
+                Ok(0)
+            }
+            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
+                if op == TIOCSPGRP =>
+            {
                 Ok(0)
             }
             _ => Err(Errno::EINVAL),
