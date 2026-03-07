@@ -235,6 +235,30 @@ impl FdTable {
         Ok(entry)
     }
 
+    pub fn get_descriptor(&self, fd: RawFd) -> Result<FileDescriptor, Errno> {
+        self.table
+            .get(&fd)
+            .map(|e| e.descriptor.clone())
+            .ok_or(Errno::EBADF)
+    }
+
+    pub fn get_descriptor_and_flags(&self, fd: RawFd) -> Result<(FileDescriptor, FdFlags), Errno> {
+        self.table
+            .get(&fd)
+            .map(|e| (e.descriptor.clone(), e.flags))
+            .ok_or(Errno::EBADF)
+    }
+
+    pub fn get_vfs_file(&self, fd: RawFd) -> Result<VfsOpenFile, Errno> {
+        self.table
+            .get(&fd)
+            .and_then(|e| match &e.descriptor {
+                FileDescriptor::VfsFile(f) => Some(f.clone()),
+                _ => None,
+            })
+            .ok_or(Errno::EBADF)
+    }
+
     pub fn get_flags(&self, fd: RawFd) -> Result<FdFlags, Errno> {
         self.table.get(&fd).map(|e| e.flags).ok_or(Errno::EBADF)
     }
