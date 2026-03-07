@@ -37,7 +37,7 @@ doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 | Directory | Purpose |
 |-----------|---------|
 | kernel/src/memory/ | Page allocator, page tables, heap |
-| kernel/src/processes/ | Process, thread, scheduler |
+| kernel/src/processes/ | Process, thread, scheduler, signals |
 | kernel/src/syscalls/ | syscall handlers |
 | kernel/src/interrupts/ | Trap handling, PLIC, timer |
 | kernel/src/net/ | UDP network stack |
@@ -158,6 +158,7 @@ The `arch` crate provides no-op stubs for non-riscv64 targets so Kani can compil
 | QEMU infra | qemu-infra/src/qemu.rs |
 | MCP server | mcp-server/src/server.rs |
 | Log config | kernel/src/logging/configuration.rs |
+| Signals | kernel/src/processes/signal.rs |
 | Syscall tracer config | kernel/src/syscalls/trace_config.rs |
 
 ## Detailed Documentation

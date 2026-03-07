@@ -4,13 +4,13 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [Linux-like Signals](#1-linux-like-signals)
-2. [Virtual File System (VFS)](#2-virtual-file-system-vfs)
-3. [QEMU Block Device Driver](#3-qemu-block-device-driver)
-4. [ext2 Filesystem](#4-ext2-filesystem)
-5. [Feasible Coreutils](#5-feasible-coreutils)
-6. [QEMU Framebuffer](#6-qemu-framebuffer)
-7. [Port Doom](#7-port-doom)
+1. [Virtual File System (VFS)](#1-virtual-file-system-vfs)
+2. [QEMU Block Device Driver](#2-qemu-block-device-driver)
+3. [ext2 Filesystem](#3-ext2-filesystem)
+4. [Feasible Coreutils](#4-feasible-coreutils)
+5. [QEMU Framebuffer](#5-qemu-framebuffer)
+6. [Port Doom](#6-port-doom)
+7. [Async Network Reception with Interrupts](#7-async-network-reception-with-interrupts)
 8. [DHCP Client](#8-dhcp-client)
 9. [Minimal TCP Implementation](#9-minimal-tcp-implementation)
 10. [Dynamic Linking](#10-dynamic-linking)
@@ -18,58 +18,7 @@ This document contains research summaries for planned future enhancements. Each 
 
 ---
 
-## 1. Linux-like Signals
-
-**Complexity:** Medium
-
-### Current Signal Support ✅
-- `SignalState` struct per thread (sigaltstack, sigmask, sigaction)
-- Syscalls: `rt_sigaction`, `rt_sigprocmask`, `sigaltstack`
-- Ctrl+C handling (kills process directly, not via signal)
-
-### Missing ❌
-
-**1. Pending Signals Queue**
-- No tracking of pending signals (need bitset/queue)
-- No per-thread and per-process pending sets
-
-**2. Signal Delivery Mechanism**
-- No check for pending signals before returning to userspace
-- No handler invocation (jumping to sa_handler)
-- No signal frame construction on user stack
-- No sa_restorer trampoline for returning
-
-**3. Signal Generation Syscalls**
-- `kill(pid, sig)` - Send to process
-- `tkill(tid, sig)` - Send to thread
-- `tgkill(tgid, tid, sig)` - Send to thread in thread group
-
-**4. Special Semantics**
-- SIGCHLD generation on child exit
-- SIGKILL/SIGSTOP enforcement (cannot be caught)
-- Signal inheritance across fork/clone/execve
-
-### Implementation Approach
-
-**Files to Modify:**
-- `kernel/src/processes/thread.rs` - Add `pending_signals` bitset
-- `kernel/src/processes/process_table.rs` - Queue signals instead of direct kill
-- `kernel/src/interrupts/trap.rs` - Check signals before userspace return
-- `kernel/src/syscalls/linux.rs` - Add kill/tkill/tgkill
-- `kernel/src/processes/scheduler.rs` - Queue SIGINT instead of direct kill
-- New: `kernel/src/processes/signal.rs` - Signal delivery logic
-
-**Key Design Decisions:**
-- Standard signals (1-31): bitset (not queued)
-- Real-time signals (32-64): queue with siginfo_t
-- Check pending signals at: syscall return, interrupt return, schedule points
-- Modify user stack to insert signal frame, set PC to handler
-
-**Estimated effort:** 2-3 weeks
-
----
-
-## 2. Virtual File System (VFS)
+## 1. Virtual File System (VFS)
 
 **Complexity:** Medium to High
 
@@ -144,7 +93,7 @@ pub enum FileDescriptor {
 
 ---
 
-## 3. QEMU Block Device Driver
+## 2. QEMU Block Device Driver
 
 **Complexity:** Medium
 
@@ -189,7 +138,7 @@ struct virtio_blk_req {
 
 ---
 
-## 4. ext2 Filesystem
+## 3. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -224,8 +173,8 @@ struct virtio_blk_req {
 - Similar traversal + update bitmaps + allocate blocks
 
 ### Integration
-- Requires VFS layer (see #2)
-- Requires block device driver (see #3)
+- Requires VFS layer (see #1)
+- Requires block device driver (see #2)
 
 ### Complexity Assessment
 
@@ -247,13 +196,13 @@ struct virtio_blk_req {
 
 ---
 
-## 5. Feasible Coreutils
+## 4. Feasible Coreutils
 
 **Complexity:** Varies (Low to High per utility)
 
 ### Prerequisites
-- VFS implementation (#2)
-- Block device (#3) or tmpfs
+- VFS implementation (#1)
+- Block device (#2) or tmpfs
 - Core filesystem syscalls
 
 ### Required Syscalls
@@ -326,7 +275,7 @@ find, sort, diff, ln, readlink, dd
 
 ---
 
-## 6. QEMU Framebuffer
+## 5. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -381,7 +330,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 7. Port Doom
+## 6. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -405,16 +354,16 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#6)
-- **File system** - Need `open/openat/close` for reading WAD files (#2)
+- **Framebuffer access** - Need graphics device (#5)
+- **File system** - Need `open/openat/close` for reading WAD files (#1)
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#6) - VirtIO-GPU or bochs-display driver
-2. **File System** (#2) - Basic VFS for reading WAD file
+1. **Framebuffer** (#5) - VirtIO-GPU or bochs-display driver
+2. **File System** (#1) - Basic VFS for reading WAD file
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
 4. **Timing** - `clock_gettime` syscall
@@ -433,9 +382,70 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #2 (VFS), #6 (framebuffer), plus keyboard driver
+**Dependencies:** Items #1 (VFS), #5 (framebuffer), plus keyboard driver
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
+
+---
+
+## 7. Async Network Reception with Interrupts
+
+**Complexity:** Low to Medium
+
+### Current Polling Implementation
+`recvfrom()` actively polls network card via `net::receive_and_process_packets()`, returns `EAGAIN` if no data.
+
+**Problem:** Wasteful, prevents true async blocking.
+
+### Proposed Implementation
+
+**Model:** Follow existing timer-based sleep pattern (`kernel/src/processes/timer.rs`)
+
+**Key Components:**
+
+1. **Enable VirtIO Interrupts** (currently disabled)
+   - Clear `VIRTQ_AVAIL_F_NO_INTERRUPT` flag in virtqueue.rs:238
+   - Configure MSIX vectors in VirtIO driver
+
+2. **Create Waker Queue**
+```rust
+static RECV_WAITERS: Spinlock<BTreeMap<Port, Vec<Waker>>> = ...;
+```
+
+3. **RecvWait Future**
+```rust
+impl Future for RecvWait {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+        if packet_available(self.port) {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            RECV_WAITERS.lock().insert(self.port, cx.waker().clone());
+            self.registered = true;
+        }
+        Poll::Pending
+    }
+}
+```
+
+4. **PLIC Interrupt Handler**
+- Detect VirtIO network interrupt
+- Call `handle_network_interrupt()` which processes packets and wakes waiters
+
+### Files to Modify
+- `kernel/src/drivers/virtio/net/mod.rs` - Enable interrupts
+- `kernel/src/interrupts/plic.rs` - Add VirtIO interrupt source
+- `kernel/src/interrupts/trap.rs` - Handle network interrupts
+- `kernel/src/net/sockets.rs` - Add waker registration
+- `kernel/src/syscalls/linux.rs` - Make `recvfrom()` truly async
+
+### Benefits
+- Eliminates wasteful polling
+- Threads truly sleep waiting for network data
+- Better CPU utilization
+- Aligns with existing async infrastructure
+
+**Estimated effort:** 3-5 days
 
 ---
 
@@ -630,7 +640,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ✅ Already implemented: `mmap`, `munmap`, `mprotect`, `brk`
 
-❌ Missing: **Filesystem syscalls** (#2)
+❌ Missing: **Filesystem syscalls** (#1)
 - `openat`, `close`, `read`, `fstat` - To open and read shared libraries
 
 ### Complexity Assessment
@@ -659,7 +669,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 - TLS support
 - Performance optimizations
 
-**Main Blocker:** Filesystem support (#2) - currently embeds all binaries
+**Main Blocker:** Filesystem support (#1) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
 
@@ -746,23 +756,23 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 ## Dependencies and Recommended Order
 
 ### Phase 1: Foundation (Critical Infrastructure)
-1. **#11 - QEMU Random Device** (Security foundation)
+1. **#7 - Async Network with Interrupts** (Better performance)
+2. **#11 - QEMU Random Device** (Security foundation)
 
 ### Phase 2: Storage and Filesystems
-2. **#3 - QEMU Block Device Driver** (Prerequisite for filesystems)
-3. **#2 - Virtual File System** (Core abstraction)
-4. **#4 - ext2 Filesystem** (Persistent storage)
-5. **#5 - Coreutils** (User-facing utilities)
+3. **#2 - QEMU Block Device Driver** (Prerequisite for filesystems)
+4. **#1 - Virtual File System** (Core abstraction)
+5. **#3 - ext2 Filesystem** (Persistent storage)
+6. **#4 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-6. **#8 - DHCP Client** (Network configuration)
-7. **#9 - Minimal TCP** (Protocol expansion)
+7. **#8 - DHCP Client** (Network configuration)
+8. **#9 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
-8. **#1 - Linux Signals** (Process control)
 9. **#10 - Dynamic Linking** (Shared libraries)
-10. **#6 - Framebuffer** (Graphics foundation)
-11. **#7 - Port Doom** (Showcase project)
+10. **#5 - Framebuffer** (Graphics foundation)
+11. **#6 - Port Doom** (Showcase project)
 
 ---
 
@@ -770,14 +780,12 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 Before implementation, consider:
 
-1. **Storage Strategy:** For items #2-5 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
+1. **Storage Strategy:** For items #1-4 (VFS/filesystem), do you want to start with tmpfs (in-memory) or go directly to block device + ext2?
 
-2. **Framebuffer Choice (#6):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+2. **Framebuffer Choice (#5):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-3. **Dynamic Linking (#11):** Should we prioritize this over other features, or wait until filesystem support is solid?
+3. **Dynamic Linking (#10):** Should we prioritize this over other features, or wait until filesystem support is solid?
 
-4. **Signals (#1):** Do you want full signal support including SIGCHLD/job control, or minimal signal delivery first?
-
-5. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
+4. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 
 Let me know which items you'd like to prioritize, or if you have questions about any of the research!

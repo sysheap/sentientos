@@ -35,10 +35,13 @@ fn handle_syscall() {
 | close | fd | Close file descriptor |
 | dup3 | oldfd, newfd, flags | Duplicate file descriptor |
 | execve | filename, argv, envp | Replace process image |
+| exit | status | Exit calling thread |
 | exit_group | status | Exit process (stores exit status, then kills process) |
 | fcntl | fd, cmd, arg | File descriptor control (F_GETFL/F_SETFL, O_NONBLOCK) |
+| getpgid | pid | Get process group ID |
 | getpid | | Get process ID (main thread TID) |
 | getppid | | Get parent process ID |
+| getsid | pid | Get session ID |
 | gettid | | Get thread ID |
 | ioctl | fd, op, arg | Device control (+ Solaya extensions, FIONBIO for sockets) |
 | madvise | addr, length, advice | Memory advice (stub, returns 0) |
@@ -49,15 +52,21 @@ fn handle_syscall() {
 | pipe2 | fds, flags | Create pipe |
 | ppoll | fds, n, timeout, mask | Poll file descriptors |
 | prctl | | Process control |
+| kill | pid, sig | Send signal to process |
 | read | fd, buf, count | Read from fd |
 | recvfrom | fd, buf, len, flags, src_addr, addrlen | Receive UDP datagram with sender address |
-| rt_sigaction | sig, act, oact, size | Signal action |
-| rt_sigprocmask | how, set, oldset, size | Signal mask |
+| rt_sigaction | sig, act, oact, size | Set/get signal action |
+| rt_sigprocmask | how, set, oldset, size | Set/get signal mask |
+| rt_sigreturn | | Restore state after signal handler returns |
 | sendto | fd, buf, len, flags, dest_addr, addrlen | Send UDP datagram to destination |
 | set_robust_list | head, len | Set robust futex list (stub, returns 0) |
 | set_tid_address | tidptr | Set clear_child_tid |
+| setpgid | pid, pgid | Set process group ID |
+| setsid | | Create new session |
 | sigaltstack | uss, uoss | Signal stack |
 | socket | domain, type, protocol | Create socket (AF_INET + SOCK_DGRAM only) |
+| tgkill | tgid, tid, sig | Send signal to thread in thread group |
+| tkill | tid, sig | Send signal to thread |
 | wait4 | pid, status, options, rusage | Wait for child process (supports WNOHANG) |
 | write | fd, buf, count | Write to fd |
 | writev | fd, iov, iovcnt | Vectored write |
