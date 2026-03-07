@@ -15,6 +15,7 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 | NETWORKING.md | UDP stack, sockets, packet flow | Network features/bugs |
 | DRIVERS.md | VirtIO, PCI enumeration, device tree | Device driver work |
 | TESTING.md | Unit tests, system tests, QEMU infrastructure | Writing/debugging tests |
+| FS.md | VFS layer, tmpfs, procfs, devfs, open files | Filesystem work, adding devices/proc entries |
 | DEBUGGING.md | Logging, backtrace, GDB, dump functions | Debugging kernel issues |
 
 ## Quick Navigation by Task
@@ -38,7 +39,7 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 2. Check TESTING.md for system test patterns
 
 ### "I need to work on the filesystem"
-1. See `kernel/src/fs/` for VFS layer (vfs.rs, tmpfs.rs, procfs.rs, open_file.rs)
+1. Read FS.md for VFS architecture, mount layout, and how to add entries
 2. Check SYSCALLS.md for filesystem syscalls (openat, fstat, lseek, getdents64, etc.)
 
 ### "I need to work on networking"
@@ -58,7 +59,7 @@ kernel/src/
   processes/     - Process, thread, scheduler, loader
   syscalls/      - Syscall handlers and validation
   interrupts/    - Trap handler, PLIC, timer
-  fs/            - VFS layer (tmpfs, procfs, open file tracking)
+  fs/            - VFS layer (tmpfs, procfs, devfs, open file tracking)
   net/           - UDP network stack
   drivers/       - VirtIO drivers
   io/            - UART, stdin buffer
