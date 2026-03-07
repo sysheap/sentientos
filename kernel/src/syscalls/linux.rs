@@ -20,6 +20,7 @@ use headers::{
 impl ByteInterpretable for sockaddr_in {}
 impl ByteInterpretable for headers::fs::stat {}
 impl ByteInterpretable for headers::fs::statx {}
+impl ByteInterpretable for headers::syscall_types::termios {}
 
 linux_syscalls! {
     SYSCALL_NR_BIND => bind(fd: c_int, addr: *const u8, addrlen: c_uint);
