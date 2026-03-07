@@ -15,10 +15,11 @@ use crate::{
         process::Process,
         process_table,
         thread::{Thread, VforkState, VforkWait, get_next_tid},
+        wait_child::{WaitChild, WaitPid},
     },
     syscalls::linux_validator::LinuxUserspaceArg,
 };
-use common::syscalls::trap_frame::Register;
+use common::{pid::Tid, syscalls::trap_frame::Register};
 
 use super::linux::LinuxSyscallHandler;
 
@@ -153,6 +154,38 @@ impl LinuxSyscallHandler {
         }
 
         process_table::THE.lock().add_thread(child_thread);
+
+        Ok(child_tid.as_isize())
+    }
+
+    pub(super) async fn do_wait4(
+        &self,
+        pid: c_int,
+        status: LinuxUserspaceArg<Option<*mut c_int>>,
+        options: c_int,
+    ) -> Result<isize, Errno> {
+        let wnohang = (options & headers::syscall_types::WNOHANG as c_int) != 0;
+        assert!(
+            options & !(headers::syscall_types::WNOHANG as c_int) == 0,
+            "wait4: unsupported options {options:#x}"
+        );
+
+        let parent_main_tid = self.current_thread.lock().get_tid();
+        let target = if pid > 0 {
+            WaitPid::Specific(Tid::try_from_i32(pid).expect("pid is positive"))
+        } else if pid == -1 {
+            WaitPid::Any
+        } else if pid == 0 {
+            let own_pgid = self.current_process.with_lock(|p| p.pgid());
+            WaitPid::Pgid(own_pgid)
+        } else {
+            // pid < -1: wait for any child whose pgid == abs(pid)
+            let abs_pid = pid.checked_neg().ok_or(Errno::EINVAL)?;
+            WaitPid::Pgid(Tid::try_from_i32(abs_pid).expect("abs(pid) is positive"))
+        };
+        let (child_tid, wait_status) = WaitChild::new(parent_main_tid, target, wnohang).await?;
+
+        status.write_if_not_none(wait_status)?;
 
         Ok(child_tid.as_isize())
     }

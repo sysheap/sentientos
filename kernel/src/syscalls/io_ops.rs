@@ -1,0 +1,157 @@
+use alloc::vec::Vec;
+use core::ffi::{c_int, c_ulong};
+use headers::{
+    errno::Errno,
+    syscall_types::{F_GETFL, F_SETFL, O_CLOEXEC, iovec},
+};
+
+use crate::{
+    io::pipe,
+    klibc::util::UsizeExt,
+    processes::fd_table::{FdFlags, FileDescriptor},
+    syscalls::linux_validator::LinuxUserspaceArg,
+};
+
+use super::linux::{LinuxSyscallHandler, LinuxSyscalls};
+
+impl LinuxSyscallHandler {
+    pub(super) async fn do_read(
+        &mut self,
+        fd: c_int,
+        buf: LinuxUserspaceArg<*mut u8>,
+        count: usize,
+    ) -> Result<isize, Errno> {
+        let (descriptor, flags) = self
+            .current_process
+            .with_lock(|p| p.fd_table().get_descriptor_and_flags(fd))?;
+
+        let data = if flags.is_nonblocking() {
+            descriptor.try_read(count)?
+        } else {
+            descriptor.read(count).await?
+        };
+        assert!(data.len() <= count, "Read more than requested");
+        buf.write_slice(&data)?;
+
+        Ok(data.len() as isize)
+    }
+
+    pub(super) fn do_write(
+        &self,
+        fd: c_int,
+        buf: LinuxUserspaceArg<*const u8>,
+        count: usize,
+    ) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
+        let data = buf.validate_slice(count)?;
+        descriptor.write(&data)?;
+        Ok(count as isize)
+    }
+
+    pub(super) fn do_writev(
+        &self,
+        fd: c_int,
+        iov: LinuxUserspaceArg<*const iovec>,
+        iovcnt: c_int,
+    ) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
+
+        let iov = iov.validate_slice(usize::try_from(iovcnt).map_err(|_| Errno::EINVAL)?)?;
+        let mut data = Vec::new();
+
+        for io in iov {
+            if io.iov_len == 0 {
+                continue;
+            }
+            let buf = LinuxUserspaceArg::<*const u8>::new(io.iov_base as usize, self.get_process());
+            let mut buf = buf.validate_slice(io.iov_len.as_usize())?;
+            data.append(&mut buf);
+        }
+
+        let len = data.len();
+        descriptor.write(&data)?;
+        Ok(len as isize)
+    }
+
+    pub(super) fn do_pipe2(&self, fds: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
+        let buffer = pipe::new_pipe();
+        let (read_fd, write_fd) = self.current_process.with_lock(|p| {
+            let r = p
+                .fd_table()
+                .allocate(FileDescriptor::PipeRead(buffer.clone()))?;
+            let w = p.fd_table().allocate(FileDescriptor::PipeWrite(buffer))?;
+            Ok::<_, Errno>((r, w))
+        })?;
+        fds.write_slice(&[read_fd, write_fd])?;
+        Ok(0)
+    }
+
+    pub(super) fn do_fcntl(&self, fd: c_int, cmd: c_int, arg: c_ulong) -> Result<isize, Errno> {
+        const F_DUPFD_CMD: u32 = 0;
+        const F_GETFD_CMD: u32 = 1;
+        const F_SETFD_CMD: u32 = 2;
+        const FD_CLOEXEC_FLAG: i32 = 1;
+        const F_DUPFD_CLOEXEC_CMD: u32 = 1030;
+
+        match cmd.cast_unsigned() {
+            F_DUPFD_CMD => {
+                let min_fd = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let new_fd = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().dup_from(fd, min_fd, FdFlags::default()))?;
+                Ok(new_fd as isize)
+            }
+            F_DUPFD_CLOEXEC_CMD => {
+                let min_fd = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let new_fd = self.current_process.with_lock(|p| {
+                    p.fd_table()
+                        .dup_from(fd, min_fd, FdFlags::from_raw(O_CLOEXEC as i32))
+                })?;
+                Ok(new_fd as isize)
+            }
+            F_GETFD_CMD => {
+                let flags = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                let cloexec = if flags.is_cloexec() {
+                    FD_CLOEXEC_FLAG
+                } else {
+                    0
+                };
+                Ok(cloexec as isize)
+            }
+            F_SETFD_CMD => {
+                let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let current = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                let new_raw = if (raw & FD_CLOEXEC_FLAG) != 0 {
+                    current.as_raw() | O_CLOEXEC as i32
+                } else {
+                    current.as_raw() & !(O_CLOEXEC as i32)
+                };
+                self.current_process
+                    .with_lock(|p| p.fd_table().set_flags(fd, FdFlags::from_raw(new_raw)))?;
+                Ok(0)
+            }
+            F_GETFL => {
+                let flags = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                Ok(flags.as_raw() as isize)
+            }
+            F_SETFL => {
+                let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let flags = FdFlags::from_raw(raw);
+                self.current_process
+                    .with_lock(|p| p.fd_table().set_flags(fd, flags))?;
+                Ok(0)
+            }
+            _ => Err(Errno::EINVAL),
+        }
+    }
+}

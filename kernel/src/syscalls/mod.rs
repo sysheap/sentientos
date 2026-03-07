@@ -1,8 +1,16 @@
 mod exec_ops;
+mod fs_ops;
 mod helpers;
+mod id_ops;
+mod io_ops;
+mod ioctl_ops;
 pub mod linux;
 pub mod linux_validator;
 mod macros;
+mod mm_ops;
+mod net_ops;
 mod process_ops;
+mod signal_ops;
+mod time_ops;
 pub mod trace_config;
 pub mod tracer;
