@@ -796,6 +796,10 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             "bind: fd {fd} is not an unbound UDP socket"
         );
 
+        if !net::has_network_device() {
+            return Err(Errno::ENETDOWN);
+        }
+
         let sin_arg =
             LinuxUserspaceArg::<*const sockaddr_in>::new(addr.raw_arg(), self.get_process());
         let sin = sin_arg.validate_ptr()?;
