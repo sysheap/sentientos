@@ -88,6 +88,10 @@ pub fn resolve_path(path: &str) -> Result<VfsNodeRef, Errno> {
 }
 
 pub fn resolve_parent(path: &str) -> Result<(VfsNodeRef, &str), Errno> {
+    let path = path.trim_end_matches('/');
+    if path.is_empty() {
+        return Err(Errno::EINVAL);
+    }
     let last_slash = path.rfind('/').ok_or(Errno::EINVAL)?;
     let parent_path = if last_slash == 0 {
         "/"

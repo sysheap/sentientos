@@ -107,6 +107,7 @@ linux_syscalls! {
     SYSCALL_NR_KILL => kill(pid: c_int, sig: c_int);
     SYSCALL_NR_TGKILL => tgkill(tgid: c_int, tid: c_int, sig: c_int);
     SYSCALL_NR_TKILL => tkill(tid: c_int, sig: c_int);
+    SYSCALL_NR_UMASK => umask(mask: c_uint);
     SYSCALL_NR_UNLINKAT => unlinkat(dirfd: c_int, pathname: *const u8, flags: c_int);
     SYSCALL_NR_UTIMENSAT => utimensat(dirfd: c_int, pathname: *const u8, times: usize, flags: c_int);
     SYSCALL_NR_WAIT4 => wait4(pid: c_int, status: Option<*mut c_int>, options: c_int, rusage: usize);
@@ -1353,17 +1354,42 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(fd as isize)
     }
 
+    async fn umask(&mut self, mask: c_uint) -> Result<isize, Errno> {
+        let old = self.current_process.with_lock(|mut p| {
+            let old = p.umask();
+            p.set_umask(mask & 0o777);
+            old
+        });
+        Ok(old as isize)
+    }
+
     async fn unlinkat(
         &mut self,
         dirfd: c_int,
         pathname: LinuxUserspaceArg<*const u8>,
-        _flags: c_int,
+        flags: c_int,
     ) -> Result<isize, Errno> {
         if dirfd != headers::fs::AT_FDCWD {
             return Err(Errno::ENOSYS);
         }
         let path = self.read_cstring(&pathname)?;
         let (parent, name) = fs::resolve_parent(&path)?;
+
+        if (flags & headers::fs::AT_REMOVEDIR) != 0 {
+            let node = parent.lookup(name)?;
+            if node.node_type() != fs::vfs::NodeType::Directory {
+                return Err(Errno::ENOTDIR);
+            }
+            if !node.readdir()?.is_empty() {
+                return Err(Errno::ENOTEMPTY);
+            }
+        } else {
+            let node = parent.lookup(name)?;
+            if node.node_type() == fs::vfs::NodeType::Directory {
+                return Err(Errno::EISDIR);
+            }
+        }
+
         parent.unlink(name)?;
         Ok(0)
     }
