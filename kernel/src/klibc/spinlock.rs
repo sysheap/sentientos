@@ -32,18 +32,23 @@ impl<T> Spinlock<T> {
     }
 
     pub fn try_with_lock<'a, R>(&'a self, f: impl FnOnce(SpinlockGuard<'a, T>) -> R) -> Option<R> {
+        let interrupt_guard = arch::cpu::InterruptGuard::new();
         let value = self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed);
         if value.is_ok() {
             self.set_owner();
-            let lock = SpinlockGuard { spinlock: self };
+            let lock = SpinlockGuard {
+                spinlock: self,
+                _interrupt_guard: interrupt_guard,
+            };
             return Some(f(lock));
         }
         None
     }
 
     pub fn lock(&self) -> SpinlockGuard<'_, T> {
+        let interrupt_guard = arch::cpu::InterruptGuard::new();
         self.detect_same_cpu_deadlock();
         let mut spin_count: u64 = 0;
         while self
@@ -56,7 +61,10 @@ impl<T> Spinlock<T> {
             core::hint::spin_loop();
         }
         self.set_owner();
-        SpinlockGuard { spinlock: self }
+        SpinlockGuard {
+            spinlock: self,
+            _interrupt_guard: interrupt_guard,
+        }
     }
 
     #[cfg(all(target_arch = "riscv64", not(miri)))]
@@ -129,6 +137,7 @@ unsafe impl<T: Send> Send for Spinlock<T> {}
 
 pub struct SpinlockGuard<'a, T> {
     spinlock: &'a Spinlock<T>,
+    _interrupt_guard: arch::cpu::InterruptGuard,
 }
 
 impl<T> Drop for SpinlockGuard<'_, T> {
