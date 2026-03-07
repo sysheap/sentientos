@@ -1,4 +1,4 @@
-use alloc::{string::ToString, vec::Vec};
+use alloc::{collections::BTreeMap, string::ToString, vec::Vec};
 use common::errors::LoaderError;
 use headers::syscall_types::{AT_NULL, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM};
 
@@ -29,7 +29,7 @@ pub const STACK_END: VirtAddr = VirtAddr::new(usize::MAX - STACK_SIZE + 1);
 pub struct LoadedElf {
     pub entry_address: VirtAddr,
     pub page_tables: RootPageTableHolder,
-    pub allocated_pages: Vec<PinnedHeapPages>,
+    pub allocated_pages: BTreeMap<VirtAddr, PinnedHeapPages>,
     pub args_start: VirtAddr,
     pub brk: Brk,
 }
@@ -131,7 +131,7 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let mut page_tables = RootPageTableHolder::new_with_kernel_mapping(false);
 
     let elf_header = elf_file.get_header();
-    let mut allocated_pages = Vec::new();
+    let mut allocated_pages = BTreeMap::new();
 
     // Compute AT_PHDR: the virtual address where program headers are mapped.
     // The first LOAD segment maps from file offset 0 (containing the ELF header
@@ -158,7 +158,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let args_start = set_up_arguments(stack.as_u8_slice(), name, args, &auxv_info)?;
 
     let stack_addr = stack.addr();
-    allocated_pages.push(stack);
+    let prev = allocated_pages.insert(STACK_END, stack);
+    assert!(prev.is_none(), "duplicate allocated_pages key for stack");
 
     debug!(
         "before mapping stack: stack_start={} stack_size={STACK_SIZE:#x} stack_end={}",
@@ -219,11 +220,16 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
         pages.fill(data, offset);
 
         let pages_addr = pages.addr();
+        let mapping_va = VirtAddr::new(program_header.virtual_address.as_usize() - offset);
 
-        allocated_pages.push(pages);
+        let prev = allocated_pages.insert(mapping_va, pages);
+        assert!(
+            prev.is_none(),
+            "duplicate allocated_pages key at {mapping_va}"
+        );
 
         page_tables.map_userspace(
-            VirtAddr::new(program_header.virtual_address.as_usize() - offset),
+            mapping_va,
             PhysAddr::new(pages_addr),
             size_in_pages * PAGE_SIZE,
             program_header.access_flags.into(),
@@ -238,7 +244,8 @@ pub fn load_elf(elf_file: &ElfFile, name: &str, args: &[&str]) -> Result<LoadedE
     let brk = match bss_end {
         Some(bss_end) => {
             let (pages, brk) = Brk::new(VirtAddr::new(bss_end.as_usize()), &mut page_tables);
-            allocated_pages.push(pages);
+            let prev = allocated_pages.insert(brk.start(), pages);
+            assert!(prev.is_none(), "duplicate allocated_pages key for brk");
             brk
         }
         None => Brk::empty(),

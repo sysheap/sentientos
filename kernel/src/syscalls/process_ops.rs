@@ -1,4 +1,4 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, string::String, sync::Arc};
 use core::ffi::{c_int, c_ulong};
 use headers::{
     errno::Errno,
@@ -57,7 +57,7 @@ impl LinuxSyscallHandler {
         let child_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
             child_name.clone(),
             child_page_table,
-            Vec::new(),
+            BTreeMap::new(),
             Brk::empty(),
             child_tid,
             parent_pgid,
