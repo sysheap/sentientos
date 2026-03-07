@@ -130,12 +130,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, headers::errno::Errno> {
         let (descriptor, flags) = self
             .current_process
-            .with_lock(|p| {
-                p.fd_table()
-                    .get(fd)
-                    .map(|e| (e.descriptor.clone(), e.flags))
-            })
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_descriptor_and_flags(fd))?;
 
         let data = if flags.is_nonblocking() {
             descriptor.try_read(count)?
@@ -156,8 +151,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, Errno> {
         let descriptor = self
             .current_process
-            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
         let data = buf.validate_slice(count)?;
         descriptor.write(&data)?;
@@ -218,8 +212,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let poll_fds = fds.validate_slice(n as usize)?;
         for pfd in &poll_fds {
             self.current_process
-                .with_lock(|p| p.fd_table().get(pfd.fd).map(|e| e.descriptor.clone()))
-                .ok_or(Errno::EBADF)?;
+                .with_lock(|p| p.fd_table().get_descriptor(pfd.fd))?;
             assert_eq!(
                 pfd.events, 0,
                 "No further events are supported at the moment"
@@ -476,8 +469,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, headers::errno::Errno> {
         let descriptor = self
             .current_process
-            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
         match descriptor {
             FileDescriptor::Stdout | FileDescriptor::Stderr if op == TIOCGWINSZ => {
@@ -550,8 +542,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, headers::errno::Errno> {
         let descriptor = self
             .current_process
-            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
         let iov = iov.validate_slice(usize::try_from(iovcnt).map_err(|_| Errno::EINVAL)?)?;
         let mut data = Vec::new();
@@ -704,26 +695,21 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         fd: c_int,
         statbuf: LinuxUserspaceArg<*mut u8>,
     ) -> Result<isize, Errno> {
-        let file = self
+        let descriptor = self
             .current_process
-            .with_lock(|p| {
-                p.fd_table().get(fd).map(|e| match &e.descriptor {
-                    FileDescriptor::VfsFile(f) => Some(f.clone()),
-                    _ => None,
-                })
-            })
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
-        let st = if let Some(file) = file {
-            let node = file.lock().node().clone();
-            fs::stat_from_node(&node)
-        } else {
-            headers::fs::stat {
+        let st = match descriptor {
+            FileDescriptor::VfsFile(file) => {
+                let node = file.lock().node().clone();
+                fs::stat_from_node(&node)
+            }
+            _ => headers::fs::stat {
                 st_mode: headers::fs::S_IFCHR | 0o666,
                 st_nlink: 1,
                 st_blksize: 4096,
                 ..headers::fs::stat::default()
-            }
+            },
         };
 
         statbuf.write_slice(st.as_slice())?;
@@ -884,10 +870,6 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     }
 
     async fn kill(&mut self, pid: c_int, sig: c_int) -> Result<isize, Errno> {
-        let sig_u32 = u32::try_from(sig).map_err(|_| Errno::EINVAL)?;
-        if sig_u32 >= _NSIG {
-            return Err(Errno::EINVAL);
-        }
         let target_tid = if pid > 0 {
             Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?
         } else if pid == 0 {
@@ -895,25 +877,19 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         } else {
             return Err(Errno::ESRCH);
         };
-        if sig_u32 == 0 {
-            return Ok(0);
+        if let Some(sig) = crate::processes::signal::validate_signal(sig)? {
+            process_table::THE
+                .lock()
+                .send_signal_to_process(target_tid, sig);
         }
-        process_table::THE
-            .lock()
-            .send_signal_to_process(target_tid, sig_u32);
         Ok(0)
     }
 
     async fn tgkill(&mut self, _tgid: c_int, tid: c_int, sig: c_int) -> Result<isize, Errno> {
-        let sig_u32 = u32::try_from(sig).map_err(|_| Errno::EINVAL)?;
-        if sig_u32 >= _NSIG {
-            return Err(Errno::EINVAL);
-        }
         let target_tid = Tid::try_from_i32(tid).ok_or(Errno::ESRCH)?;
-        if sig_u32 == 0 {
-            return Ok(0);
+        if let Some(sig) = crate::processes::signal::validate_signal(sig)? {
+            process_table::THE.lock().send_signal(target_tid, sig);
         }
-        process_table::THE.lock().send_signal(target_tid, sig_u32);
         Ok(0)
     }
 
@@ -1234,13 +1210,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     async fn lseek(&mut self, fd: c_int, offset: isize, whence: c_int) -> Result<isize, Errno> {
         let file = self
             .current_process
-            .with_lock(|p| {
-                p.fd_table().get(fd).and_then(|e| match &e.descriptor {
-                    FileDescriptor::VfsFile(f) => Some(f.clone()),
-                    _ => None,
-                })
-            })
-            .ok_or(Errno::EBADF)?;
+            .with_lock(|p| p.fd_table().get_vfs_file(fd))?;
 
         let new_offset = file.lock().seek(offset, whence)?;
         Ok(new_offset as isize)

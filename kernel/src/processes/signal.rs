@@ -92,6 +92,18 @@ pub enum DefaultAction {
     Continue,
 }
 
+pub fn validate_signal(sig: i32) -> Result<Option<u32>, headers::errno::Errno> {
+    let sig_u32 = u32::try_from(sig).map_err(|_| headers::errno::Errno::EINVAL)?;
+    if sig_u32 >= headers::syscall_types::_NSIG {
+        return Err(headers::errno::Errno::EINVAL);
+    }
+    if sig_u32 == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(sig_u32))
+    }
+}
+
 pub fn default_action(sig: u32) -> DefaultAction {
     match sig {
         SIGHUP | SIGINT | SIGQUIT | SIGILL | SIGTRAP | SIGABRT | SIGBUS | SIGFPE | SIGKILL
@@ -240,4 +252,33 @@ pub fn restore_signal_frame(thread: &mut Thread) -> Result<(), headers::errno::E
     thread.set_program_counter(VirtAddr::new(frame.saved_pc));
     thread.set_sigmask_raw(frame.saved_sigmask);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test_case]
+    fn validate_signal_returns_none_for_zero() {
+        assert_eq!(validate_signal(0), Ok(None));
+    }
+
+    #[test_case]
+    fn validate_signal_returns_some_for_valid() {
+        assert_eq!(validate_signal(9), Ok(Some(9)));
+        assert_eq!(validate_signal(1), Ok(Some(1)));
+    }
+
+    #[test_case]
+    fn validate_signal_rejects_negative() {
+        assert_eq!(validate_signal(-1), Err(headers::errno::Errno::EINVAL));
+    }
+
+    #[test_case]
+    fn validate_signal_rejects_too_large() {
+        assert_eq!(
+            validate_signal(headers::syscall_types::_NSIG as i32),
+            Err(headers::errno::Errno::EINVAL)
+        );
+    }
 }
