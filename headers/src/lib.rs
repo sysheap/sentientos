@@ -63,4 +63,53 @@ pub mod fs {
         pub d_type: u8,
         // d_name follows (flexible array)
     }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct statx_timestamp {
+        pub tv_sec: i64,
+        pub tv_nsec: u32,
+        pub __reserved: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct statx {
+        pub stx_mask: u32,
+        pub stx_blksize: u32,
+        pub stx_attributes: u64,
+        pub stx_nlink: u32,
+        pub stx_uid: u32,
+        pub stx_gid: u32,
+        pub stx_mode: u16,
+        pub __spare0: [u16; 1],
+        pub stx_ino: u64,
+        pub stx_size: u64,
+        pub stx_blocks: u64,
+        pub stx_attributes_mask: u64,
+        pub stx_atime: statx_timestamp,
+        pub stx_btime: statx_timestamp,
+        pub stx_ctime: statx_timestamp,
+        pub stx_mtime: statx_timestamp,
+        pub stx_rdev_major: u32,
+        pub stx_rdev_minor: u32,
+        pub stx_dev_major: u32,
+        pub stx_dev_minor: u32,
+        pub stx_mnt_id: u64,
+        pub stx_dio_mem_align: u32,
+        pub stx_dio_offset_align: u32,
+        pub stx_subvol: u64,
+        pub stx_atomic_write_unit_min: u32,
+        pub stx_atomic_write_unit_max: u32,
+        pub stx_atomic_write_segments_max: u32,
+        pub __spare1: [u32; 1],
+        pub __spare3: [u64; 9],
+    }
+
+    impl Default for statx {
+        fn default() -> Self {
+            // Safety: statx is a plain C struct where all-zeros is valid
+            unsafe { core::mem::zeroed() }
+        }
+    }
 }

@@ -112,9 +112,55 @@ fn find_mount<'a>(
     Ok((mp, node.clone()))
 }
 
+pub fn resolve_relative(base: VfsNodeRef, path: &str) -> Result<VfsNodeRef, Errno> {
+    walk(base, path)
+}
+
 fn walk(mut node: VfsNodeRef, path: &str) -> Result<VfsNodeRef, Errno> {
     for component in path.split('/').filter(|c| !c.is_empty()) {
         node = node.lookup(component)?;
     }
     Ok(node)
+}
+
+pub(super) struct RootDir {
+    ino: u64,
+}
+
+impl RootDir {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self { ino: alloc_ino() })
+    }
+}
+
+impl VfsNode for RootDir {
+    fn node_type(&self) -> NodeType {
+        NodeType::Directory
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn lookup(&self, name: &str) -> Result<VfsNodeRef, Errno> {
+        let path = alloc::format!("/{name}");
+        MOUNT_TABLE.lock().get(&path).cloned().ok_or(Errno::ENOENT)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
+        let table = MOUNT_TABLE.lock();
+        Ok(table
+            .iter()
+            .filter(|(path, _)| *path != "/")
+            .map(|(path, node)| DirEntry {
+                name: String::from(&path[1..]),
+                ino: node.ino(),
+                node_type: node.node_type(),
+            })
+            .collect())
+    }
 }

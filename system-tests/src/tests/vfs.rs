@@ -26,6 +26,34 @@ async fn rm_file() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn ls_root() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("ls-test /").await?;
+    assert!(output.contains("tmp"), "ls / should list tmp");
+    assert!(output.contains("proc"), "ls / should list proc");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ls_proc() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    let output = solaya.run_prog("ls-test /proc").await?;
+    assert!(output.contains("version"), "ls /proc should list version");
+    Ok(())
+}
+
+#[tokio::test]
+async fn rm_nonexistent() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+    // Should not panic the kernel - rm should exit with an error
+    solaya.run_prog("rm /tmp/nonexistent-file").await?;
+    // Verify kernel is still alive
+    let output = solaya.run_prog("cat /proc/version").await?;
+    assert_eq!(output.trim(), "Solaya 0.1.0");
+    Ok(())
+}
+
+#[tokio::test]
 async fn vfs_roundtrip() -> anyhow::Result<()> {
     let mut solaya = QemuInstance::start().await?;
     let output = solaya.run_prog("vfs-test").await?;
