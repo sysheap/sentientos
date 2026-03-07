@@ -34,7 +34,7 @@ pub fn init() {
     let mut process_table = ProcessTable::new();
 
     let elf = ElfFile::parse(INIT).expect("Cannot parse ELF file");
-    let default_env = ["PATH=/", "HOME=/", "TERM=dumb"];
+    let default_env = ["PATH=/", "HOME=/", "TERM=dumb", "PS1=$ "];
     let thread =
         Thread::from_elf(&elf, "init", &[], &default_env, Tid::new(0)).expect("init must succeed");
     process_table.add_thread(thread);

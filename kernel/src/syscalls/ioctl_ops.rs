@@ -25,8 +25,13 @@ impl LinuxSyscallHandler {
             .with_lock(|p| p.fd_table().get_descriptor(fd))?;
 
         match descriptor {
-            FileDescriptor::Stdout | FileDescriptor::Stderr if op == TIOCGWINSZ => {
-                Err(Errno::ENOTTY)
+            FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
+                if op == TIOCGWINSZ =>
+            {
+                let ptr = LinuxUserspaceArg::<*mut [u16; 4]>::new(arg, self.get_process());
+                // rows, cols, xpixel, ypixel
+                ptr.write_slice(&[[24, 80, 0, 0]])?;
+                Ok(0)
             }
             FileDescriptor::Stdout if op == SOLAYA_LIST_PROGRAMS => {
                 for (name, _) in PROGRAMS {
@@ -87,20 +92,16 @@ impl LinuxSyscallHandler {
                 if op == TCGETS =>
             {
                 let ptr = LinuxUserspaceArg::<*mut termios>::new(arg, self.get_process());
-                let default_termios = termios {
-                    c_iflag: 0,
-                    c_oflag: 0,
-                    c_cflag: 0,
-                    c_lflag: 0,
-                    c_line: 0,
-                    c_cc: [0; 19],
-                };
-                ptr.write_slice(&[default_termios])?;
+                let current = crate::io::tty::TTY.lock().get_termios();
+                ptr.write_slice(&[current])?;
                 Ok(0)
             }
             FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr
                 if op == TCSETS || op == TCSETSW || op == TCSETSF =>
             {
+                let ptr = LinuxUserspaceArg::<*const termios>::new(arg, self.get_process());
+                let new_settings = ptr.validate_ptr()?;
+                crate::io::tty::TTY.lock().set_termios(new_settings);
                 Ok(0)
             }
             FileDescriptor::Stdin | FileDescriptor::Stdout | FileDescriptor::Stderr

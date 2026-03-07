@@ -2,7 +2,7 @@ use crate::{
     cpu::Cpu,
     debug, info,
     interrupts::plic::{InterruptSource, PLIC},
-    io::{stdin_buf::STDIN_BUFFER, uart::QEMU_UART},
+    io::uart::QEMU_UART,
     memory::VirtAddr,
     processes::{task::Task, thread::ThreadState, timer, waker::ThreadWaker},
     syscalls::linux::LinuxSyscallHandler,
@@ -68,29 +68,35 @@ fn handle_external_interrupt() {
 
     match plic_interrupt {
         InterruptSource::Uart => {
-            let mut ctrl_c = false;
-            let mut ctrl_d = false;
+            let mut raw_bytes = crate::klibc::array_vec::ArrayVec::<u8, 64>::new();
             {
                 let uart = QEMU_UART.lock();
                 while let Some(input) = uart.read() {
-                    match input {
-                        3 => ctrl_c = true,
-                        4 => ctrl_d = true,
-                        _ => STDIN_BUFFER.lock().push(input),
-                    }
+                    let _ = raw_bytes.push(input);
                 }
             }
 
             plic.complete_interrupt(plic_interrupt);
             drop(plic);
 
-            if ctrl_c {
+            let mut send_signal = false;
+            for &byte in &raw_bytes {
+                let result = crate::io::tty::TTY.lock().process_input_byte(byte);
+                if !result.echo.is_empty() {
+                    let mut uart = QEMU_UART.lock();
+                    for &echo_byte in &result.echo {
+                        uart.write_byte(echo_byte);
+                    }
+                }
+                if let crate::io::tty::InputAction::Signal = result.action {
+                    send_signal = true;
+                }
+            }
+
+            if send_signal {
                 Cpu::with_scheduler(|mut s| {
                     s.send_ctrl_c();
                 });
-            }
-            if ctrl_d {
-                crate::debugging::dump_current_state();
             }
         }
         InterruptSource::VirtioNet => {

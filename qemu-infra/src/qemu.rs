@@ -133,9 +133,7 @@ impl QemuInstance {
         if network_port.is_some() {
             stdout.assert_read_until("dhcpd: configured ip").await?;
         }
-        stdout
-            .assert_read_until("### SoSH - Solaya Shell ###")
-            .await?;
+        stdout.assert_read_until("starting shell").await?;
         stdout.assert_read_until(PROMPT).await?;
 
         let gdb_port = if gdb_enabled {

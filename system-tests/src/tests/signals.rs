@@ -1,3 +1,4 @@
+use qemu_infra::PROMPT;
 use tokio::io::AsyncWriteExt;
 
 use crate::infra::qemu::{QemuInstance, QemuOptions};
@@ -41,11 +42,16 @@ async fn should_rerun_udp_after_ctrl_c() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn should_not_exit_sosh() -> anyhow::Result<()> {
+async fn should_not_exit_shell() -> anyhow::Result<()> {
     let mut solaya = QemuInstance::start().await?;
 
+    // Send Ctrl-C when no foreground process is running.
+    // TTY echoes ^C and clears line buffer, but dash keeps waiting for input.
     solaya.stdin().write_all(&[0x03]).await?;
     solaya.stdin().flush().await?;
+
+    // Send a newline so dash processes the empty line and prints a new prompt.
+    solaya.write_and_wait_for("\n", PROMPT).await?;
 
     let output = solaya.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
