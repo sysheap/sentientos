@@ -208,6 +208,8 @@ Already configured in `.mcp.json` at the project root. Claude Code picks it up a
 - `ByteInterpretable::as_slice()` (kernel/src/klibc/util.rs) - Convert any struct to &[u8]
 - `is_power_of_2_or_zero()`, `is_aligned()` (kernel/src/klibc/util.rs) - Common checks
 
+**Reuse Linux/musl header definitions.** Constants and structs from Linux UAPI or musl libc headers must be auto-generated via bindgen in the `headers` crate, not defined manually. Only define types manually when they are not available in any header (e.g., kernel-internal structs like `linux_dirent64`).
+
 **Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:
 - Run `just clippy` to ensure no warnings
 - Remove any dead or unused code introduced by your changes

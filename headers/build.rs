@@ -65,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     generate_syscall_types(&out_path)?;
     generate_error_types(&out_path)?;
     generate_socket_types(&out_path)?;
+    generate_fs_types(&out_path)?;
     Ok(())
 }
 
@@ -195,6 +196,84 @@ fn generate_socket_types(out_path: &Path) -> Result<(), Box<dyn std::error::Erro
         .generate()?;
     let socket_path = out_path.join("socket_types.rs");
     bindings.write_to_file(socket_path)?;
+    Ok(())
+}
+
+#[derive(Debug, Default)]
+struct FsConstantCallback;
+
+impl ParseCallbacks for FsConstantCallback {
+    fn int_macro(&self, name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
+        if name.starts_with("S_I") {
+            Some(bindgen::callbacks::IntKind::U32)
+        } else {
+            Some(bindgen::callbacks::IntKind::I32)
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct DtConstantCallback;
+
+impl ParseCallbacks for DtConstantCallback {
+    fn int_macro(&self, _name: &str, _value: i64) -> Option<bindgen::callbacks::IntKind> {
+        Some(bindgen::callbacks::IntKind::U8)
+    }
+}
+
+fn generate_fs_types(out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let fs_path = out_path.join("fs_types.rs");
+
+    // Invocation 1: Linux kernel headers for stat, statx, S_IF*, AT_*, SEEK_*
+    let bindings = default_bindgen_builder()
+        .header("linux_headers/include/asm-generic/stat.h")
+        .header("linux_headers/include/linux/stat.h")
+        .header("linux_headers/include/linux/fcntl.h")
+        .header("linux_headers/include/linux/fs.h")
+        .parse_callbacks(Box::new(FsConstantCallback))
+        .allowlist_type("^stat$")
+        .allowlist_type("statx$")
+        .allowlist_type("statx_timestamp")
+        .allowlist_var("S_IF.*")
+        .allowlist_var("AT_FDCWD")
+        .allowlist_var("AT_REMOVEDIR")
+        .allowlist_var("AT_EMPTY_PATH")
+        .allowlist_var("SEEK_SET")
+        .allowlist_var("SEEK_CUR")
+        .allowlist_var("SEEK_END")
+        .derive_copy(true)
+        .derive_default(true)
+        .generate()?;
+    bindings.write_to_file(fs_path.clone())?;
+
+    // Invocation 2: musl headers for DT_* constants
+    let dt_bindings = bindgen::Builder::default()
+        .clang_arg("-Imusl_headers")
+        .header("musl_headers/dirent.h")
+        .clang_arg("-D_GNU_SOURCE")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .parse_callbacks(Box::new(DtConstantCallback))
+        .use_core()
+        .allowlist_var("DT_.*")
+        .generate()?;
+
+    // Append DT_* to the same file
+    let mut fs_file = File::options().append(true).open(fs_path.clone())?;
+    write!(fs_file, "{dt_bindings}")?;
+
+    // Manually append linux_dirent64 (kernel-internal, not in any UAPI header)
+    writeln!(fs_file)?;
+    writeln!(fs_file, "#[repr(C)]")?;
+    writeln!(fs_file, "pub struct linux_dirent64 {{")?;
+    writeln!(fs_file, "    pub d_ino: u64,")?;
+    writeln!(fs_file, "    pub d_off: i64,")?;
+    writeln!(fs_file, "    pub d_reclen: u16,")?;
+    writeln!(fs_file, "    pub d_type: u8,")?;
+    writeln!(fs_file, "}}")?;
+
+    drop(fs_file);
+    format_file(fs_path)?;
+
     Ok(())
 }
 
