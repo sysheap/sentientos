@@ -65,18 +65,24 @@ linux_syscalls! {
     SYSCALL_NR_FUTEX => futex(uaddr: usize, op: c_int, val: c_uint, timeout: usize, uaddr2: usize, val3: c_uint);
     SYSCALL_NR_GETCWD => getcwd(buf: *mut u8, size: usize);
     SYSCALL_NR_GETDENTS64 => getdents64(fd: c_int, dirp: *mut u8, count: usize);
+    SYSCALL_NR_GETEGID => getegid();
+    SYSCALL_NR_GETEUID => geteuid();
+    SYSCALL_NR_GETGID => getgid();
     SYSCALL_NR_GETPGID => getpgid(pid: c_int);
     SYSCALL_NR_GETPID => getpid();
     SYSCALL_NR_GETPPID => getppid();
     SYSCALL_NR_GETSID => getsid(pid: c_int);
     SYSCALL_NR_GETTID => gettid();
+    SYSCALL_NR_GETUID => getuid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint, arg: usize);
+    SYSCALL_NR_LLISTXATTR => llistxattr(pathname: *const u8, list: *mut u8, size: usize);
     SYSCALL_NR_LSEEK => lseek(fd: c_int, offset: isize, whence: c_int);
     SYSCALL_NR_MADVISE => madvise(addr: usize, length: usize, advice: c_int);
     SYSCALL_NR_MKDIRAT => mkdirat(dirfd: c_int, pathname: *const u8, mode: c_uint);
     SYSCALL_NR_MMAP => mmap(addr: usize, length: usize, prot: c_uint, flags: c_uint, fd: c_int, offset: isize);
     SYSCALL_NR_MPROTECT => mprotect(addr: usize, len: usize, prot: c_int);
     SYSCALL_NR_MUNMAP => munmap(addr: usize, length: usize);
+    SYSCALL_NR_CLOCK_GETTIME => clock_gettime(clockid: c_int, tp: *mut timespec);
     SYSCALL_NR_CLOCK_NANOSLEEP => clock_nanosleep(clockid: c_int, flags: c_int, request: *const timespec, remain: Option<*mut timespec>);
     SYSCALL_NR_NANOSLEEP => nanosleep(duration: *const timespec, rem: Option<*const timespec>);
     SYSCALL_NR_NEWFSTATAT => newfstatat(dirfd: c_int, pathname: *const u8, statbuf: *mut u8, flags: c_int);
@@ -85,6 +91,7 @@ linux_syscalls! {
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_PRCTL => prctl();
     SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
+    SYSCALL_NR_READLINKAT => readlinkat(dirfd: c_int, pathname: *const u8, buf: *mut u8, bufsiz: usize);
     SYSCALL_NR_RECVFROM => recvfrom(fd: c_int, buf: *mut u8, len: usize, flags: c_int, src_addr: Option<*mut u8>, addrlen: Option<*mut c_uint>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
     SYSCALL_NR_RT_SIGPROCMASK => rt_sigprocmask(how: c_uint, set: Option<*const sigset_t>, oldset: Option<*mut sigset_t>, sigsetsize: usize);
@@ -563,6 +570,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         let mut data = Vec::new();
 
         for io in iov {
+            if io.iov_len == 0 {
+                continue;
+            }
             let buf = LinuxUserspaceArg::<*const u8>::new(io.iov_base as usize, self.get_process());
             let mut buf = buf.validate_slice(io.iov_len.as_usize())?;
             data.append(&mut buf);
@@ -686,6 +696,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             }
         } else {
             headers::fs::stat {
+                st_mode: headers::fs::S_IFCHR | 0o666,
                 st_nlink: 1,
                 st_blksize: 4096,
                 ..headers::fs::stat::default()
@@ -719,6 +730,54 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             }
             _ => Err(Errno::ENOSYS),
         }
+    }
+
+    async fn clock_gettime(
+        &mut self,
+        _clockid: c_int,
+        tp: LinuxUserspaceArg<*mut timespec>,
+    ) -> Result<isize, Errno> {
+        let ts = timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        tp.write_slice(&[ts])?;
+        Ok(0)
+    }
+
+    async fn llistxattr(
+        &mut self,
+        _pathname: LinuxUserspaceArg<*const u8>,
+        _list: LinuxUserspaceArg<*mut u8>,
+        _size: usize,
+    ) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn getuid(&mut self) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn geteuid(&mut self) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn getgid(&mut self) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn getegid(&mut self) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn readlinkat(
+        &mut self,
+        _dirfd: c_int,
+        _pathname: LinuxUserspaceArg<*const u8>,
+        _buf: LinuxUserspaceArg<*mut u8>,
+        _bufsiz: usize,
+    ) -> Result<isize, Errno> {
+        Err(Errno::EINVAL)
     }
 
     async fn getpid(&mut self) -> Result<isize, headers::errno::Errno> {
