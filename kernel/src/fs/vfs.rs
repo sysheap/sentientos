@@ -71,6 +71,15 @@ pub fn mount(path: &str, root: VfsNodeRef) {
 }
 
 pub fn resolve_path(path: &str) -> Result<VfsNodeRef, Errno> {
+    if path == "." || path == "/" {
+        let table = MOUNT_TABLE.lock();
+        let (_, node) = find_mount(&table, "/")?;
+        return Ok(node);
+    }
+    if !path.starts_with('/') {
+        let abs = alloc::format!("/{path}");
+        return resolve_path(&abs);
+    }
     let table = MOUNT_TABLE.lock();
     let (mount_path, node) = find_mount(&table, path)?;
     let remainder = &path[mount_path.len()..];
@@ -100,7 +109,8 @@ fn find_mount<'a>(
     let mut best: Option<(&str, &VfsNodeRef)> = None;
     for (mount_path, node) in table.iter() {
         let matches = path == mount_path
-            || (path.starts_with(mount_path)
+            || (mount_path == "/" && path.starts_with('/'))
+            || (path.starts_with(mount_path.as_str())
                 && path.as_bytes().get(mount_path.len()) == Some(&b'/'));
         if matches
             && (best.is_none() || mount_path.len() > best.as_ref().map(|b| b.0.len()).unwrap_or(0))
@@ -117,7 +127,7 @@ pub fn resolve_relative(base: VfsNodeRef, path: &str) -> Result<VfsNodeRef, Errn
 }
 
 fn walk(mut node: VfsNodeRef, path: &str) -> Result<VfsNodeRef, Errno> {
-    for component in path.split('/').filter(|c| !c.is_empty()) {
+    for component in path.split('/').filter(|c| !c.is_empty() && *c != ".") {
         node = node.lookup(component)?;
     }
     Ok(node)
