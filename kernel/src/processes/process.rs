@@ -38,6 +38,7 @@ pub struct Process {
     brk: Brk,
     vfork_parent: Option<ProcessRef>,
     umask: u32,
+    cwd: String,
 }
 
 impl Debug for Process {
@@ -80,6 +81,7 @@ impl Process {
             sid,
             vfork_parent: None,
             umask: 0o022,
+            cwd: String::from("/"),
         }
     }
 
@@ -252,6 +254,14 @@ impl Process {
 
     pub fn set_umask(&mut self, mask: u32) {
         self.umask = mask;
+    }
+
+    pub fn cwd(&self) -> &str {
+        &self.cwd
+    }
+
+    pub fn set_cwd(&mut self, cwd: String) {
+        self.cwd = cwd;
     }
 
     pub fn fd_table(&self) -> crate::klibc::SpinlockGuard<'_, FdTable> {

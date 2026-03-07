@@ -38,10 +38,10 @@ use headers::{
     syscall_types::{
         _NSIG, CLOCK_MONOTONIC, CLOCK_REALTIME, CLONE_CHILD_CLEARTID, CLONE_PARENT_SETTID,
         CLONE_SETTLS, CLONE_THREAD, CLONE_VFORK, CLONE_VM, F_GETFL, F_SETFL, FIONBIO,
-        FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, O_CREAT,
-        O_DIRECTORY, O_TRUNC, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SIG_BLOCK, SIG_SETMASK,
-        SIG_UNBLOCK, SIGCHLD, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd, sigaction, sigset_t,
-        stack_t, timespec,
+        FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
+        O_CLOEXEC, O_CREAT, O_DIRECTORY, O_TRUNC, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+        SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD, SIGKILL, SIGSTOP, TIOCGWINSZ, iovec, pollfd,
+        sigaction, sigset_t, stack_t, timespec,
     },
 };
 
@@ -52,6 +52,7 @@ impl ByteInterpretable for headers::fs::statx {}
 linux_syscalls! {
     SYSCALL_NR_BIND => bind(fd: c_int, addr: *const u8, addrlen: c_uint);
     SYSCALL_NR_BRK => brk(brk: c_ulong);
+    SYSCALL_NR_CHDIR => chdir(pathname: *const u8);
     SYSCALL_NR_CLONE => clone(flags: c_ulong, stack: usize, ptid: Option<*mut c_int>, tls: c_ulong, ctid: Option<*mut c_int>);
     SYSCALL_NR_CLOSE => close(fd: c_int);
     SYSCALL_NR_DUP3 => dup3(oldfd: c_int, newfd: c_int, flags: c_int);
@@ -623,7 +624,53 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         cmd: c_int,
         arg: c_ulong,
     ) -> Result<isize, headers::errno::Errno> {
+        const F_DUPFD_CMD: u32 = 0;
+        const F_GETFD_CMD: u32 = 1;
+        const F_SETFD_CMD: u32 = 2;
+        const FD_CLOEXEC_FLAG: i32 = 1;
+        const F_DUPFD_CLOEXEC_CMD: u32 = 1030;
+
         match cmd.cast_unsigned() {
+            F_DUPFD_CMD => {
+                let min_fd = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let new_fd = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().dup_from(fd, min_fd, FdFlags::default()))?;
+                Ok(new_fd as isize)
+            }
+            F_DUPFD_CLOEXEC_CMD => {
+                let min_fd = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let new_fd = self.current_process.with_lock(|p| {
+                    p.fd_table()
+                        .dup_from(fd, min_fd, FdFlags::from_raw(O_CLOEXEC as i32))
+                })?;
+                Ok(new_fd as isize)
+            }
+            F_GETFD_CMD => {
+                let flags = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                let cloexec = if flags.is_cloexec() {
+                    FD_CLOEXEC_FLAG
+                } else {
+                    0
+                };
+                Ok(cloexec as isize)
+            }
+            F_SETFD_CMD => {
+                let raw = i32::try_from(arg).map_err(|_| Errno::EINVAL)?;
+                let current = self
+                    .current_process
+                    .with_lock(|p| p.fd_table().get_flags(fd))?;
+                let new_raw = if (raw & FD_CLOEXEC_FLAG) != 0 {
+                    current.as_raw() | O_CLOEXEC as i32
+                } else {
+                    current.as_raw() & !(O_CLOEXEC as i32)
+                };
+                self.current_process
+                    .with_lock(|p| p.fd_table().set_flags(fd, FdFlags::from_raw(new_raw)))?;
+                Ok(0)
+            }
             F_GETFL => {
                 let flags = self
                     .current_process
@@ -657,10 +704,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         pathname: LinuxUserspaceArg<*const u8>,
         _mode: c_int,
     ) -> Result<isize, Errno> {
-        let path = self.read_cstring(&pathname)?;
         let _node = if dirfd == headers::fs::AT_FDCWD {
+            let path = self.read_path(&pathname)?;
             fs::resolve_path(&path)?
         } else {
+            let path = self.read_cstring(&pathname)?;
             fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
         };
         Ok(0)
@@ -1113,16 +1161,30 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         }
     }
 
+    async fn chdir(&mut self, pathname: LinuxUserspaceArg<*const u8>) -> Result<isize, Errno> {
+        let path = self.read_path(&pathname)?;
+        let node = fs::resolve_path(&path)?;
+        if node.node_type() != fs::vfs::NodeType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        self.current_process.with_lock(|mut p| p.set_cwd(path));
+        Ok(0)
+    }
+
     async fn getcwd(
         &mut self,
         buf: LinuxUserspaceArg<*mut u8>,
         size: usize,
     ) -> Result<isize, Errno> {
-        if size < 2 {
+        let cwd = self.current_process.with_lock(|p| String::from(p.cwd()));
+        let needed = cwd.len() + 1;
+        if size < needed {
             return Err(Errno::ERANGE);
         }
-        buf.write_slice(&[b'/', 0])?;
-        Ok(2)
+        let mut bytes: Vec<u8> = cwd.into_bytes();
+        bytes.push(0);
+        buf.write_slice(&bytes)?;
+        Ok(needed as isize)
     }
 
     async fn getdents64(
@@ -1219,7 +1281,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         if dirfd != headers::fs::AT_FDCWD {
             return Err(Errno::ENOSYS);
         }
-        let path = self.read_cstring(&pathname)?;
+        let path = self.read_path(&pathname)?;
         let (parent, name) = fs::resolve_parent(&path)?;
         parent.create(name, fs::vfs::NodeType::Directory)?;
         Ok(0)
@@ -1244,7 +1306,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 .ok_or(Errno::EBADF)?;
             file.lock().node().clone()
         } else if dirfd == headers::fs::AT_FDCWD {
-            let path = self.read_cstring(&pathname)?;
+            let path = self.read_path(&pathname)?;
             fs::resolve_path(&path)?
         } else {
             let path = self.read_cstring(&pathname)?;
@@ -1289,7 +1351,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 .ok_or(Errno::EBADF)?;
             file.lock().node().clone()
         } else if dirfd == headers::fs::AT_FDCWD {
-            let path = self.read_cstring(&pathname)?;
+            let path = self.read_path(&pathname)?;
             fs::resolve_path(&path)?
         } else {
             let path = self.read_cstring(&pathname)?;
@@ -1323,13 +1385,19 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         flags: c_int,
         _mode: c_uint,
     ) -> Result<isize, Errno> {
-        if dirfd != headers::fs::AT_FDCWD {
-            return Err(Errno::ENOSYS);
-        }
-        let path = self.read_cstring(&pathname)?;
+        let raw_path = self.read_cstring(&pathname)?;
         let flags_u32 = flags.cast_unsigned();
 
-        let node = match fs::resolve_path(&path) {
+        let resolve = |path: &str| -> Result<fs::vfs::VfsNodeRef, Errno> {
+            if dirfd == headers::fs::AT_FDCWD {
+                let abs = self.make_absolute(path);
+                fs::resolve_path(&abs)
+            } else {
+                fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, path)
+            }
+        };
+
+        let node = match resolve(&raw_path) {
             Ok(n) => {
                 if (flags_u32 & O_TRUNC) != 0 {
                     n.truncate()?;
@@ -1337,8 +1405,23 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 n
             }
             Err(Errno::ENOENT) if (flags_u32 & O_CREAT) != 0 => {
-                let (parent, name) = fs::resolve_parent(&path)?;
-                parent.create(name, fs::vfs::NodeType::File)?
+                if dirfd == headers::fs::AT_FDCWD {
+                    let abs = self.make_absolute(&raw_path);
+                    let (parent, name) = fs::resolve_parent(&abs)?;
+                    parent.create(name, fs::vfs::NodeType::File)?
+                } else {
+                    let trimmed = raw_path.trim_end_matches('/');
+                    let (base, name) = if let Some(slash) = trimmed.rfind('/') {
+                        let dir_node = fs::resolve_relative(
+                            self.resolve_dirfd_node(dirfd)?,
+                            &trimmed[..slash],
+                        )?;
+                        (dir_node, &trimmed[slash + 1..])
+                    } else {
+                        (self.resolve_dirfd_node(dirfd)?, trimmed)
+                    };
+                    base.create(name, fs::vfs::NodeType::File)?
+                }
             }
             Err(e) => return Err(e),
         };
@@ -1369,14 +1452,24 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         pathname: LinuxUserspaceArg<*const u8>,
         flags: c_int,
     ) -> Result<isize, Errno> {
-        if dirfd != headers::fs::AT_FDCWD {
-            return Err(Errno::ENOSYS);
-        }
         let path = self.read_cstring(&pathname)?;
-        let (parent, name) = fs::resolve_parent(&path)?;
+        let path = path.trim_end_matches('/');
+
+        let (parent, name) = if dirfd == headers::fs::AT_FDCWD {
+            let abs = self.read_path(&pathname)?;
+            let (p, n) = fs::resolve_parent(&abs)?;
+            (p, String::from(n))
+        } else if let Some(slash) = path.rfind('/') {
+            let parent_path = &path[..slash];
+            let name = &path[slash + 1..];
+            let base = self.resolve_dirfd_node(dirfd)?;
+            (fs::resolve_relative(base, parent_path)?, String::from(name))
+        } else {
+            (self.resolve_dirfd_node(dirfd)?, String::from(path))
+        };
 
         if (flags & headers::fs::AT_REMOVEDIR) != 0 {
-            let node = parent.lookup(name)?;
+            let node = parent.lookup(&name)?;
             if node.node_type() != fs::vfs::NodeType::Directory {
                 return Err(Errno::ENOTDIR);
             }
@@ -1384,13 +1477,13 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 return Err(Errno::ENOTEMPTY);
             }
         } else {
-            let node = parent.lookup(name)?;
+            let node = parent.lookup(&name)?;
             if node.node_type() == fs::vfs::NodeType::Directory {
                 return Err(Errno::EISDIR);
             }
         }
 
-        parent.unlink(name)?;
+        parent.unlink(&name)?;
         Ok(0)
     }
 
@@ -1456,7 +1549,8 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         let process_name = Arc::new(String::from(name));
         let old_process = self.get_process();
-        let (old_pgid, old_sid) = old_process.with_lock(|p| (p.pgid(), p.sid()));
+        let (old_pgid, old_sid, old_cwd) =
+            old_process.with_lock(|p| (p.pgid(), p.sid(), String::from(p.cwd())));
         let new_process = Arc::new(crate::klibc::Spinlock::new(Process::new(
             process_name.clone(),
             loaded.page_tables,
@@ -1469,7 +1563,11 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         let mut inherited_fd_table = self.get_process().with_lock(|p| p.fd_table().clone());
         inherited_fd_table.close_cloexec_fds();
-        new_process.lock().set_fd_table(inherited_fd_table);
+        {
+            let mut np = new_process.lock();
+            np.set_fd_table(inherited_fd_table);
+            np.set_cwd(old_cwd);
+        }
 
         let current_thread = self.current_thread.clone();
         let old_process = current_thread.lock().process();
@@ -1561,8 +1659,13 @@ impl LinuxSyscallHandler {
             .lock()
             .set_vfork_parent(parent_process.clone());
 
-        let parent_fd_table = parent_process.with_lock(|p| p.fd_table().clone());
-        child_process.lock().set_fd_table(parent_fd_table);
+        let (parent_fd_table, parent_cwd) =
+            parent_process.with_lock(|p| (p.fd_table().clone(), String::from(p.cwd())));
+        {
+            let mut child = child_process.lock();
+            child.set_fd_table(parent_fd_table);
+            child.set_cwd(parent_cwd);
+        }
 
         let mut child_regs = parent_regs;
         child_regs[Register::a0] = 0;
@@ -1645,6 +1748,23 @@ impl LinuxSyscallHandler {
         process_table::THE.lock().add_thread(child_thread);
 
         Ok(child_tid.as_isize())
+    }
+
+    fn read_path(&self, arg: &LinuxUserspaceArg<*const u8>) -> Result<String, Errno> {
+        let path = self.read_cstring(arg)?;
+        Ok(self.make_absolute(&path))
+    }
+
+    fn make_absolute(&self, path: &str) -> String {
+        if path.starts_with('/') {
+            return String::from(path);
+        }
+        let cwd = self.current_process.with_lock(|p| String::from(p.cwd()));
+        if cwd == "/" {
+            alloc::format!("/{path}")
+        } else {
+            alloc::format!("{cwd}/{path}")
+        }
     }
 
     fn read_cstring(&self, arg: &LinuxUserspaceArg<*const u8>) -> Result<String, Errno> {
