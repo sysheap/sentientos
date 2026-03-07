@@ -173,6 +173,8 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         processes::kernel_tasks::spawn(net::network_rx_task());
     }
 
+    processes::kernel_tasks::create_worker_thread();
+
     info!("kernel_init done! Starting other harts");
 
     start_other_harts(hart_id, num_cpus);
