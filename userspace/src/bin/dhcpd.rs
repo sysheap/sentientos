@@ -147,7 +147,7 @@ fn main() {
     let socket = match UdpSocket::bind(format!("0.0.0.0:{DHCP_CLIENT_PORT}")) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("dhcp: bind failed: {e}");
+            eprintln!("dhcpd: bind failed: {e}");
             std::process::exit(1);
         }
     };
@@ -155,7 +155,7 @@ fn main() {
     let mac = match get_mac_address(socket.as_raw_fd()) {
         Some(m) => m,
         None => {
-            eprintln!("dhcp: no network device");
+            eprintln!("dhcpd: no network device");
             std::process::exit(1);
         }
     };
@@ -164,33 +164,35 @@ fn main() {
     // Send DISCOVER
     let discover = build_discover(&mac, xid);
     if let Err(e) = socket.send_to(&discover, format!("255.255.255.255:{DHCP_SERVER_PORT}")) {
-        eprintln!("dhcp: send failed: {e}");
+        eprintln!("dhcpd: send failed: {e}");
         std::process::exit(1);
     }
 
     // Receive OFFER
     let mut buf = [0u8; 1024];
-    let (n, _) = socket.recv_from(&mut buf).expect("dhcp: recv offer failed");
-    let offer = parse_response(&buf[..n], xid).expect("dhcp: invalid offer");
-    assert!(offer.msg_type == DHCPOFFER, "dhcp: expected OFFER");
+    let (n, _) = socket
+        .recv_from(&mut buf)
+        .expect("dhcpd: recv offer failed");
+    let offer = parse_response(&buf[..n], xid).expect("dhcpd: invalid offer");
+    assert!(offer.msg_type == DHCPOFFER, "dhcpd: expected OFFER");
 
     // Send REQUEST
     let request = build_request(&mac, xid, offer.yiaddr, offer.server_id);
     socket
         .send_to(&request, format!("255.255.255.255:{DHCP_SERVER_PORT}"))
-        .expect("dhcp: send request failed");
+        .expect("dhcpd: send request failed");
 
     // Receive ACK
-    let (n, _) = socket.recv_from(&mut buf).expect("dhcp: recv ack failed");
-    let ack = parse_response(&buf[..n], xid).expect("dhcp: invalid ack");
-    assert!(ack.msg_type == DHCPACK, "dhcp: expected ACK");
+    let (n, _) = socket.recv_from(&mut buf).expect("dhcpd: recv ack failed");
+    let ack = parse_response(&buf[..n], xid).expect("dhcpd: invalid ack");
+    assert!(ack.msg_type == DHCPACK, "dhcpd: expected ACK");
 
     // Configure IP
     set_ip_address(socket.as_raw_fd(), ack.yiaddr);
 
     let ip = ack.yiaddr;
     println!(
-        "dhcp: configured ip {}.{}.{}.{}",
+        "dhcpd: configured ip {}.{}.{}.{}",
         ip[0], ip[1], ip[2], ip[3]
     );
 }
