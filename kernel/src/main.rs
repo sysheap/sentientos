@@ -165,10 +165,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
     if let Some(index) = virtio_net {
         let device = pci_devices.swap_remove(index);
         let plic_irq = device.plic_interrupt_id();
-        let (network_device, isr_status) = drivers::virtio::net::NetworkDevice::initialize(device)
+        let init = drivers::virtio::net::NetworkDevice::initialize(device)
             .expect("Initialization must work.");
-        net::assign_network_device(network_device);
-        net::init_isr_status(isr_status);
+        net::assign_network_device(init.device);
+        net::init_isr_status(init.interrupt_status);
         plic::init_virtio_net_interrupt(plic_irq);
         processes::kernel_tasks::spawn(net::network_rx_task());
     }
