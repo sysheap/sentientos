@@ -70,7 +70,7 @@ impl Uart {
         self.is_init = true;
     }
 
-    fn write(&mut self, character: u8) {
+    pub fn write_byte(&mut self, character: u8) {
         self.regs.thr_rbr().write(character);
     }
 
@@ -88,7 +88,7 @@ impl Write for Uart {
             return Ok(());
         }
         for c in s.bytes() {
-            self.write(c);
+            self.write_byte(c);
         }
         Ok(())
     }

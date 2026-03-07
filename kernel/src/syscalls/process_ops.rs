@@ -148,8 +148,10 @@ impl LinuxSyscallHandler {
         options: c_int,
     ) -> Result<isize, Errno> {
         let wnohang = (options & headers::syscall_types::WNOHANG as c_int) != 0;
+        let known_flags =
+            (headers::syscall_types::WNOHANG | headers::syscall_types::WUNTRACED) as c_int;
         assert!(
-            options & !(headers::syscall_types::WNOHANG as c_int) == 0,
+            options & !known_flags == 0,
             "wait4: unsupported options {options:#x}"
         );
 

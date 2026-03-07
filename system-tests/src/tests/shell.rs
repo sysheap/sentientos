@@ -12,17 +12,10 @@ async fn background_execution() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn help_lists_programs() -> anyhow::Result<()> {
-    let mut solaya = QemuInstance::start().await?;
-    solaya.write_and_wait_for("help\n", "sosh").await?;
-    Ok(())
-}
-
-#[tokio::test]
 async fn execute_nonexistent_program() -> anyhow::Result<()> {
     let mut solaya = QemuInstance::start().await?;
     let output = solaya.run_prog("nonexistent").await?;
-    assert!(output.contains("Error executing program"));
+    assert!(output.contains("not found"));
     let output = solaya.run_prog("prog1").await?;
     assert_eq!(output, "Hello from Prog1\n");
     Ok(())

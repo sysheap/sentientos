@@ -23,8 +23,5 @@ fn main() {
     let sid2 = unsafe { getsid(pid) };
     assert_eq!(sid2, sid, "getsid(pid) should match getsid(0)");
 
-    // pgid and sid should be inherited from the chain (same value)
-    assert_eq!(pgid, sid, "pgid and sid should match (inherited from init)");
-
     println!("OK");
 }

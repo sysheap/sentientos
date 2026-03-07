@@ -159,7 +159,7 @@ impl CpuScheduler {
 
     pub fn send_ctrl_c(&mut self) {
         process_table::THE.with_lock(|mut pt| {
-            let highest_tid = pt.get_highest_tid_without(&["sosh"]);
+            let highest_tid = pt.get_highest_tid_without(&["dash", "sh", "init"]);
             if let Some(tid) = highest_tid {
                 pt.send_signal_to_process(tid, SIGINT);
             }
