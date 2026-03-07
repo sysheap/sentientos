@@ -5,7 +5,7 @@ mod tmpfs;
 pub mod vfs;
 
 pub use open_file::VfsOpenFile;
-pub use vfs::{resolve_parent, resolve_path, resolve_relative};
+pub use vfs::{resolve_parent, resolve_path, resolve_relative, stat_from_node, statx_from_node};
 
 pub fn init() {
     vfs::mount("/", vfs::RootDir::new());

@@ -731,18 +731,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
         let st = if let Some(file) = file {
             let node = file.lock().node().clone();
-            let mode = match node.node_type() {
-                fs::vfs::NodeType::File => headers::fs::S_IFREG | 0o644,
-                fs::vfs::NodeType::Directory => headers::fs::S_IFDIR | 0o755,
-            };
-            headers::fs::stat {
-                st_ino: node.ino(),
-                st_mode: mode,
-                st_nlink: 1,
-                st_size: node.size() as i64,
-                st_blksize: 4096,
-                ..headers::fs::stat::default()
-            }
+            fs::stat_from_node(&node)
         } else {
             headers::fs::stat {
                 st_mode: headers::fs::S_IFCHR | 0o666,
@@ -1313,21 +1302,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
         };
 
-        let mode = match node.node_type() {
-            fs::vfs::NodeType::File => headers::fs::S_IFREG | 0o644,
-            fs::vfs::NodeType::Directory => headers::fs::S_IFDIR | 0o755,
-        };
-
-        let st = headers::fs::stat {
-            st_ino: node.ino(),
-            st_mode: mode,
-            st_nlink: 1,
-            st_size: node.size() as i64,
-            st_blksize: 4096,
-            ..headers::fs::stat::default()
-        };
-
-        statbuf.write_slice(st.as_slice())?;
+        statbuf.write_slice(fs::stat_from_node(&node).as_slice())?;
         Ok(0)
     }
 
@@ -1358,23 +1333,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
             fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
         };
 
-        #[allow(clippy::cast_possible_truncation)]
-        let mode: u16 = match node.node_type() {
-            fs::vfs::NodeType::File => (headers::fs::S_IFREG | 0o644) as u16,
-            fs::vfs::NodeType::Directory => (headers::fs::S_IFDIR | 0o755) as u16,
-        };
-
-        let st = headers::fs::statx {
-            stx_mask: 0x7ff,
-            stx_blksize: 4096,
-            stx_nlink: 1,
-            stx_mode: mode,
-            stx_ino: node.ino(),
-            stx_size: node.size() as u64,
-            ..headers::fs::statx::default()
-        };
-
-        statxbuf.write_slice(st.as_slice())?;
+        statxbuf.write_slice(fs::statx_from_node(&node).as_slice())?;
         Ok(0)
     }
 
