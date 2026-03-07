@@ -21,6 +21,40 @@ pub enum NodeType {
     Directory,
 }
 
+impl NodeType {
+    pub fn stat_mode(self) -> u32 {
+        match self {
+            NodeType::File => headers::fs::S_IFREG | 0o644,
+            NodeType::Directory => headers::fs::S_IFDIR | 0o755,
+        }
+    }
+}
+
+pub fn stat_from_node(node: &VfsNodeRef) -> headers::fs::stat {
+    headers::fs::stat {
+        st_ino: node.ino(),
+        st_mode: node.node_type().stat_mode(),
+        st_nlink: 1,
+        st_size: node.size() as i64,
+        st_blksize: 4096,
+        ..headers::fs::stat::default()
+    }
+}
+
+pub fn statx_from_node(node: &VfsNodeRef) -> headers::fs::statx {
+    #[allow(clippy::cast_possible_truncation)]
+    let mode = node.node_type().stat_mode() as u16;
+    headers::fs::statx {
+        stx_mask: 0x7ff,
+        stx_blksize: 4096,
+        stx_nlink: 1,
+        stx_mode: mode,
+        stx_ino: node.ino(),
+        stx_size: node.size() as u64,
+        ..headers::fs::statx::default()
+    }
+}
+
 #[derive(Clone)]
 pub struct DirEntry {
     pub name: String,
