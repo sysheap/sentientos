@@ -10,3 +10,4 @@ mod sleep;
 mod sosh;
 mod stress;
 mod syscall_tracer;
+mod vfs;

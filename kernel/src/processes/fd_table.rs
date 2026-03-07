@@ -6,6 +6,7 @@ use headers::{
 };
 
 use crate::{
+    fs::VfsOpenFile,
     io::{
         pipe::{ReadPipe, SharedPipeBuffer},
         stdin_buf::ReadStdin,
@@ -46,6 +47,7 @@ pub enum FileDescriptor {
     UdpSocket(SharedAssignedSocket),
     PipeRead(SharedPipeBuffer),
     PipeWrite(SharedPipeBuffer),
+    VfsFile(VfsOpenFile),
 }
 
 impl fmt::Debug for FileDescriptor {
@@ -58,6 +60,7 @@ impl fmt::Debug for FileDescriptor {
             FileDescriptor::UdpSocket(_) => write!(f, "UdpSocket(..)"),
             FileDescriptor::PipeRead(_) => write!(f, "PipeRead(..)"),
             FileDescriptor::PipeWrite(_) => write!(f, "PipeWrite(..)"),
+            FileDescriptor::VfsFile(_) => write!(f, "VfsFile(..)"),
         }
     }
 }
@@ -67,6 +70,12 @@ impl FileDescriptor {
         match self {
             FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
             FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.clone(), count).await),
+            FileDescriptor::VfsFile(file) => {
+                let mut tmp = alloc::vec![0u8; count];
+                let n = file.lock().read(&mut tmp)?;
+                tmp.truncate(n);
+                Ok(tmp)
+            }
             _ => Err(Errno::EBADF),
         }
     }
@@ -83,6 +92,12 @@ impl FileDescriptor {
                 }
             }
             FileDescriptor::PipeRead(buf) => buf.lock().try_read(count),
+            FileDescriptor::VfsFile(file) => {
+                let mut tmp = alloc::vec![0u8; count];
+                let n = file.lock().read(&mut tmp)?;
+                tmp.truncate(n);
+                Ok(tmp)
+            }
             _ => Err(Errno::EBADF),
         }
     }
@@ -95,6 +110,7 @@ impl FileDescriptor {
                 Ok(data.len())
             }
             FileDescriptor::PipeWrite(buf) => buf.lock().write(data),
+            FileDescriptor::VfsFile(file) => file.lock().write(data),
             _ => Err(Errno::EBADF),
         }
     }
