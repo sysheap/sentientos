@@ -112,6 +112,10 @@ impl EthernetHeader {
     pub fn ether_type(&self) -> EtherTypes {
         EtherTypes::try_from(self.ether_type).expect("Must be already parsed.")
     }
+
+    pub fn source_mac(&self) -> MacAddress {
+        self.source_mac
+    }
 }
 
 impl Display for EthernetHeader {

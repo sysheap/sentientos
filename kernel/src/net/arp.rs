@@ -21,6 +21,10 @@ pub fn cache_lookup(ip: &Ipv4Addr) -> Option<MacAddress> {
     ARP_CACHE.lock().get(ip).copied()
 }
 
+pub fn cache_insert(ip: Ipv4Addr, mac: MacAddress) {
+    ARP_CACHE.lock().insert(ip, mac);
+}
+
 const ARP_REQUEST: u16 = 1;
 const ARP_RESPONSE: u16 = 2;
 

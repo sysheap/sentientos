@@ -113,17 +113,11 @@ impl UdpHeader {
         let data_length = udp_header.length.get() as usize - Self::UDP_HEADER_SIZE;
         let rest = &rest[..data_length];
 
-        // Check checksum
-        assert!(
-            udp_header.checksum.get() != 0,
-            "we test impl for checksum not zero"
-        );
-
-        debug!("Got checksum: {:#x}", udp_header.checksum.get());
-
-        let computed_checksum = Self::compute_checksum(rest, udp_header, ip_header);
-
-        assert_eq!(computed_checksum, 0, "must be zero for a valid packet.");
+        if udp_header.checksum.get() != 0 {
+            debug!("Got checksum: {:#x}", udp_header.checksum.get());
+            let computed_checksum = Self::compute_checksum(rest, udp_header, ip_header);
+            assert_eq!(computed_checksum, 0, "must be zero for a valid packet.");
+        }
 
         Ok((udp_header, rest))
     }

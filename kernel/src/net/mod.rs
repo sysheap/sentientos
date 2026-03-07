@@ -27,13 +27,13 @@ pub mod udp;
 
 struct NetworkStack {
     device: Spinlock<Option<NetworkDevice>>,
-    ip_addr: Ipv4Addr,
+    ip_addr: Spinlock<Ipv4Addr>,
     open_sockets: Spinlock<LazyCell<OpenSockets>>,
 }
 
 static NETWORK_STACK: NetworkStack = NetworkStack {
     device: Spinlock::new(None),
-    ip_addr: Ipv4Addr::new(10, 0, 2, 15),
+    ip_addr: Spinlock::new(Ipv4Addr::new(0, 0, 0, 0)),
     open_sockets: Spinlock::new(LazyCell::new(OpenSockets::new)),
 };
 
@@ -102,7 +102,15 @@ pub async fn network_rx_task() {
 }
 
 pub fn ip_addr() -> Ipv4Addr {
-    NETWORK_STACK.ip_addr
+    *NETWORK_STACK.ip_addr.lock()
+}
+
+pub fn set_ip_addr(addr: Ipv4Addr) {
+    *NETWORK_STACK.ip_addr.lock() = addr;
+}
+
+pub fn has_network_device() -> bool {
+    NETWORK_STACK.device.lock().is_some()
 }
 
 pub fn open_sockets() -> &'static Spinlock<LazyCell<OpenSockets>> {
@@ -162,12 +170,13 @@ fn process_packet(packet: Vec<u8>) {
 
     match ether_type {
         ethernet::EtherTypes::Arp => arp::process_and_respond(rest),
-        ethernet::EtherTypes::IPv4 => process_ipv4_packet(rest),
+        ethernet::EtherTypes::IPv4 => process_ipv4_packet(rest, ethernet_header.source_mac()),
     }
 }
 
-fn process_ipv4_packet(data: &[u8]) {
+fn process_ipv4_packet(data: &[u8], source_mac: MacAddress) {
     let (ipv4_header, rest) = IpV4Header::process(data).expect("IPv4 packet must be processed.");
+    arp::cache_insert(ipv4_header.source_ip, source_mac);
     let (udp_header, data) =
         UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
     open_sockets().lock().put_data(

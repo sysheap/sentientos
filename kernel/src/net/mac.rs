@@ -8,6 +8,10 @@ impl MacAddress {
     pub const fn new(address: [u8; 6]) -> Self {
         Self(address)
     }
+
+    pub fn as_bytes(&self) -> [u8; 6] {
+        self.0
+    }
 }
 
 impl Display for MacAddress {
