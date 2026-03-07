@@ -47,6 +47,7 @@ use headers::{
 
 impl ByteInterpretable for sockaddr_in {}
 impl ByteInterpretable for headers::fs::stat {}
+impl ByteInterpretable for headers::fs::statx {}
 
 linux_syscalls! {
     SYSCALL_NR_BIND => bind(fd: c_int, addr: *const u8, addrlen: c_uint);
@@ -57,6 +58,7 @@ linux_syscalls! {
     SYSCALL_NR_EXECVE => execve(filename: usize, argv: usize, envp: usize);
     SYSCALL_NR_EXIT => exit(status: c_int);
     SYSCALL_NR_EXIT_GROUP => exit_group(status: c_int);
+    SYSCALL_NR_FACCESSAT => faccessat(dirfd: c_int, pathname: *const u8, mode: c_int);
     SYSCALL_NR_FADVISE64 => fadvise64(fd: c_int, offset: isize, len: isize, advice: c_int);
     SYSCALL_NR_FCNTL => fcntl(fd: c_int, cmd: c_int, arg: c_ulong);
     SYSCALL_NR_FSTAT => fstat(fd: c_int, statbuf: *mut u8);
@@ -94,6 +96,7 @@ linux_syscalls! {
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
     SYSCALL_NR_SOCKET => socket(domain: c_int, typ: c_int, protocol: c_int);
+    SYSCALL_NR_STATX => statx(dirfd: c_int, pathname: *const u8, flags: c_int, mask: c_uint, statxbuf: *mut u8);
     SYSCALL_NR_KILL => kill(pid: c_int, sig: c_int);
     SYSCALL_NR_TGKILL => tgkill(tgid: c_int, tid: c_int, sig: c_int);
     SYSCALL_NR_TKILL => tkill(tid: c_int, sig: c_int);
@@ -395,10 +398,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         };
         self.current_process.with_lock(|mut p| {
             if (flags & MAP_FIXED) > 0 {
+                // Only handles exact overlap (full range already mapped). Partial overlap
+                // is not handled -- the real MAP_FIXED semantic would unmap existing pages
+                // first. Sufficient for musl, which only re-maps exact prior allocations.
                 if p.get_page_table()
                     .is_mapped(VirtAddr::new(addr)..VirtAddr::new(addr + length))
                 {
-                    return Err(Errno::EEXIST);
+                    p.get_page_table_mut()
+                        .mprotect(VirtAddr::new(addr), length, permission);
+                    return Ok(addr as isize);
                 }
                 let ptr = p.mmap_pages_with_address(
                     Pages::new(length / PAGE_SIZE),
@@ -629,6 +637,21 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _len: isize,
         _advice: c_int,
     ) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn faccessat(
+        &mut self,
+        dirfd: c_int,
+        pathname: LinuxUserspaceArg<*const u8>,
+        _mode: c_int,
+    ) -> Result<isize, Errno> {
+        let path = self.read_cstring(&pathname)?;
+        let _node = if dirfd == headers::fs::AT_FDCWD {
+            fs::resolve_path(&path)?
+        } else {
+            fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
+        };
         Ok(0)
     }
 
@@ -1133,10 +1156,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         pathname: LinuxUserspaceArg<*const u8>,
         _mode: c_uint,
     ) -> Result<isize, Errno> {
-        assert!(
-            dirfd == headers::fs::AT_FDCWD,
-            "mkdirat: only AT_FDCWD supported"
-        );
+        if dirfd != headers::fs::AT_FDCWD {
+            return Err(Errno::ENOSYS);
+        }
         let path = self.read_cstring(&pathname)?;
         let (parent, name) = fs::resolve_parent(&path)?;
         parent.create(name, fs::vfs::NodeType::Directory)?;
@@ -1161,13 +1183,12 @@ impl LinuxSyscalls for LinuxSyscallHandler {
                 })
                 .ok_or(Errno::EBADF)?;
             file.lock().node().clone()
-        } else {
-            assert!(
-                dirfd == headers::fs::AT_FDCWD,
-                "newfstatat: only AT_FDCWD supported"
-            );
+        } else if dirfd == headers::fs::AT_FDCWD {
             let path = self.read_cstring(&pathname)?;
             fs::resolve_path(&path)?
+        } else {
+            let path = self.read_cstring(&pathname)?;
+            fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
         };
 
         let mode = match node.node_type() {
@@ -1188,6 +1209,53 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         Ok(0)
     }
 
+    async fn statx(
+        &mut self,
+        dirfd: c_int,
+        pathname: LinuxUserspaceArg<*const u8>,
+        flags: c_int,
+        _mask: c_uint,
+        statxbuf: LinuxUserspaceArg<*mut u8>,
+    ) -> Result<isize, Errno> {
+        let node = if (flags & headers::fs::AT_EMPTY_PATH) != 0 && !pathname.arg_nonzero() {
+            let file = self
+                .current_process
+                .with_lock(|p| {
+                    p.fd_table().get(dirfd).and_then(|e| match &e.descriptor {
+                        FileDescriptor::VfsFile(f) => Some(f.clone()),
+                        _ => None,
+                    })
+                })
+                .ok_or(Errno::EBADF)?;
+            file.lock().node().clone()
+        } else if dirfd == headers::fs::AT_FDCWD {
+            let path = self.read_cstring(&pathname)?;
+            fs::resolve_path(&path)?
+        } else {
+            let path = self.read_cstring(&pathname)?;
+            fs::resolve_relative(self.resolve_dirfd_node(dirfd)?, &path)?
+        };
+
+        #[allow(clippy::cast_possible_truncation)]
+        let mode: u16 = match node.node_type() {
+            fs::vfs::NodeType::File => (headers::fs::S_IFREG | 0o644) as u16,
+            fs::vfs::NodeType::Directory => (headers::fs::S_IFDIR | 0o755) as u16,
+        };
+
+        let st = headers::fs::statx {
+            stx_mask: 0x7ff,
+            stx_blksize: 4096,
+            stx_nlink: 1,
+            stx_mode: mode,
+            stx_ino: node.ino(),
+            stx_size: node.size() as u64,
+            ..headers::fs::statx::default()
+        };
+
+        statxbuf.write_slice(st.as_slice())?;
+        Ok(0)
+    }
+
     async fn openat(
         &mut self,
         dirfd: c_int,
@@ -1195,10 +1263,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         flags: c_int,
         _mode: c_uint,
     ) -> Result<isize, Errno> {
-        assert!(
-            dirfd == headers::fs::AT_FDCWD,
-            "openat: only AT_FDCWD supported"
-        );
+        if dirfd != headers::fs::AT_FDCWD {
+            return Err(Errno::ENOSYS);
+        }
         let path = self.read_cstring(&pathname)?;
         let flags_u32 = flags.cast_unsigned();
 
@@ -1233,10 +1300,9 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         pathname: LinuxUserspaceArg<*const u8>,
         _flags: c_int,
     ) -> Result<isize, Errno> {
-        assert!(
-            dirfd == headers::fs::AT_FDCWD,
-            "unlinkat: only AT_FDCWD supported"
-        );
+        if dirfd != headers::fs::AT_FDCWD {
+            return Err(Errno::ENOSYS);
+        }
         let path = self.read_cstring(&pathname)?;
         let (parent, name) = fs::resolve_parent(&path)?;
         parent.unlink(name)?;
@@ -1358,6 +1424,17 @@ impl LinuxSyscallHandler {
             current_thread,
             current_tid,
         }
+    }
+
+    fn resolve_dirfd_node(&self, dirfd: c_int) -> Result<fs::vfs::VfsNodeRef, Errno> {
+        self.current_process
+            .with_lock(|p| {
+                p.fd_table().get(dirfd).and_then(|e| match &e.descriptor {
+                    FileDescriptor::VfsFile(f) => Some(f.lock().node().clone()),
+                    _ => None,
+                })
+            })
+            .ok_or(Errno::EBADF)
     }
 
     async fn clone_vfork(&mut self, flags: c_ulong, stack: usize) -> Result<isize, Errno> {
