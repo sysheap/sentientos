@@ -527,9 +527,20 @@ impl RootPageTableHolder {
         writable: bool,
     ) -> bool {
         let start = ptr.as_raw();
-        let end = start + (core::mem::size_of::<PTR::Pointee>() * len);
+        let Some(byte_len) = core::mem::size_of::<PTR::Pointee>().checked_mul(len) else {
+            return false;
+        };
+        if byte_len == 0 {
+            return true;
+        }
+        let Some(last) = start.checked_add(byte_len - 1) else {
+            return false;
+        };
+        let first_page = start & !(PAGE_SIZE - 1);
+        let last_page = last & !(PAGE_SIZE - 1);
         // We only need to check for each PAGE_SIZE step if it is mapped
-        for addr in (start..end).step_by(PAGE_SIZE) {
+        let mut addr = first_page;
+        loop {
             let entry = unwrap_or_return!(
                 self.get_page_table_entry_for_address(VirtAddr::new(addr)),
                 false
@@ -547,6 +558,10 @@ impl RootPageTableHolder {
             if writable && !matches!(xwr, XWRMode::ReadWrite) {
                 return false;
             }
+            if addr == last_page {
+                break;
+            }
+            addr += PAGE_SIZE;
         }
         true
     }
