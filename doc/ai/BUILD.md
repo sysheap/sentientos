@@ -101,7 +101,7 @@ target-userspace/
 
 kernel/compiled_userspace/
   init                    # Copied userspace binaries
-  sosh
+  dash
   prog1
   ...
 

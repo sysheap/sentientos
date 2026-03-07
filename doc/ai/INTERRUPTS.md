@@ -83,7 +83,7 @@ Called on external interrupt (UART or VirtIO network):
 fn handle_external_interrupt() {
     let plic_interrupt = PLIC.lock().get_next_pending()?;
     match plic_interrupt {
-        Uart => { /* read input, handle Ctrl+C/D */ }
+        Uart => { /* read bytes, route through TTY line discipline, echo to UART */ }
         VirtioNet => {
             net::on_network_interrupt();  // Wakes network task wakers
             // Worker thread polls ready tasks (not done in interrupt context)

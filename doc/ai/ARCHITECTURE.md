@@ -31,14 +31,14 @@ kernel/src/
   interrupts/          # Trap handling, PLIC
   net/                 # UDP network stack
   drivers/virtio/      # VirtIO drivers
-  io/                  # UART, stdin buffer
+  io/                  # UART, TTY line discipline, stdin buffer
   pci/                 # PCI enumeration
   klibc/               # Kernel utilities
   debugging/           # Backtrace, symbols
   logging/             # Log macros
 
 userspace/src/
-  bin/                 # User programs (init, sosh, etc.)
+  bin/                 # User programs (init, etc.)
   lib.rs               # Syscall wrappers
 ```
 

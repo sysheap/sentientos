@@ -103,7 +103,7 @@ QemuInstance::start() automatically waits for:
 1. "Hello World from Solaya!"
 2. "kernel_init done!"
 3. "init process started"
-4. "### SoSH - Solaya Shell ###"
+4. "starting shell"
 5. Shell prompt ("$ ")
 
 ### Example Tests
@@ -313,6 +313,7 @@ just stress-system-test  # Run all tests 5x
 | Lock | File |
 |------|------|
 | `QEMU_UART` | `kernel/src/io/uart.rs` |
+| `TTY` | `kernel/src/io/tty.rs` |
 | `STDIN_BUFFER` | `kernel/src/io/stdin_buf.rs` |
 | `PLIC` | `kernel/src/interrupts/plic.rs` |
 | `WAKEUP_QUEUE` | `kernel/src/processes/timer.rs` |
