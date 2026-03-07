@@ -7,6 +7,7 @@ Network stack implementing:
 - ARP (Address Resolution Protocol)
 - IPv4 packet handling
 - UDP sockets
+- DHCP client (dynamic IP configuration)
 
 Currently UDP only - no TCP support.
 
@@ -44,10 +45,12 @@ Currently UDP only - no TCP support.
 
 ```rust
 static NETWORK_DEVICE: Spinlock<Option<NetworkDevice>> = Spinlock::new(None);
-static IP_ADDR: Ipv4Addr = Ipv4Addr::new(10, 0, 2, 15);  // QEMU default
+static IP_ADDR: Spinlock<Ipv4Addr> = Spinlock::new(Ipv4Addr::new(0, 0, 0, 0)); // Set by DHCP
 pub static ARP_CACHE: Spinlock<BTreeMap<Ipv4Addr, MacAddress>> = Spinlock::new(BTreeMap::new());
 pub static OPEN_UDP_SOCKETS: Spinlock<LazyCell<OpenSockets>> = ...;
 ```
+
+IP address starts as `0.0.0.0` and is configured dynamically by the DHCP client at boot.
 
 ## Packet Reception Flow
 
@@ -66,13 +69,10 @@ fn process_packet(packet: Vec<u8>) {
         EtherTypes::Arp => arp::process_and_respond(rest),
         EtherTypes::IPv4 => {
             let (ipv4_header, rest) = IpV4Header::process(rest)?;
+            // Opportunistically cache source MAC from Ethernet header
+            arp::cache_insert(ipv4_header.source_ip, ethernet_header.source_mac());
             let (udp_header, data) = UdpHeader::process(rest, ipv4_header)?;
-            OPEN_UDP_SOCKETS.lock().put_data(
-                ipv4_header.source_ip,
-                udp_header.source_port(),
-                udp_header.destination_port(),
-                data,
-            );
+            OPEN_UDP_SOCKETS.lock().put_data(...);
         }
     }
 }
@@ -148,6 +148,7 @@ pub enum EtherTypes {
 Handles ARP requests/responses:
 - Responds to ARP requests for our IP
 - Caches sender's MAC in ARP_CACHE
+- MAC addresses are also learned opportunistically from incoming IPv4 packets' Ethernet headers via `cache_insert()`
 
 ### IPv4
 
@@ -161,7 +162,7 @@ pub struct IpV4Header {
 }
 ```
 
-Currently only processes UDP protocol (17).
+Currently only processes UDP protocol (17). Accepts packets destined for our IP, broadcast (`255.255.255.255`), or any IP when our address is `0.0.0.0` (pre-DHCP).
 
 ### UDP
 
@@ -205,13 +206,19 @@ Creates an unbound UDP socket fd. `SOCK_CLOEXEC` flag is masked out (no exec to 
 Binds the socket to a port. Acquires a socket from the global socket table.
 
 ### sendto(fd, buf, len, flags, dest_addr, addrlen)
-Sends a UDP packet. Looks up destination MAC via ARP cache, constructs the full UDP/IP/Ethernet packet, and sends via VirtIO.
+Sends a UDP packet. Returns `ENETDOWN` if no network device. For broadcast destination (`255.255.255.255`), uses broadcast MAC `ff:ff:ff:ff:ff:ff`. Otherwise looks up destination MAC via ARP cache. Constructs the full UDP/IP/Ethernet packet and sends via VirtIO.
 
 ### recvfrom(fd, buf, len, flags, src_addr, addrlen)
 Calls `receive_and_process_packets()` to poll the NIC, then pops the first datagram from the socket's queue. Returns sender address in `src_addr`. Returns `EAGAIN` if no data and `O_NONBLOCK` is set.
 
 ### ioctl(fd, FIONBIO, &value)
 Sets/clears `O_NONBLOCK` on a socket fd. Used by `std::net::UdpSocket::set_nonblocking()`.
+
+### ioctl(fd, SIOCGIFHWADDR, &ifreq)
+Returns the NIC's MAC address in `ifreq.ifr_data` as `sockaddr` with `sa_family = ARPHRD_ETHER(1)` and MAC in `sa_data[0..6]`. Returns `ENODEV` if no network device.
+
+### ioctl(fd, SIOCSIFADDR, &ifreq)
+Sets the kernel's IP address from `sockaddr_in` in `ifreq.ifr_data`. Used by the DHCP client after receiving an address.
 
 ## Userspace Example
 
@@ -230,6 +237,16 @@ match socket.recv_from(&mut buf) {
     Err(e) => panic!("{e}"),
 }
 ```
+
+## DHCP
+
+**File:** `userspace/src/bin/dhcp.rs`
+
+The DHCP client runs as a userspace program during boot (spawned by `init` before the shell). It gets the NIC MAC via `ioctl(SIOCGIFHWADDR)`, performs the standard 4-step DHCP handshake (DISCOVER, OFFER, REQUEST, ACK), then configures the kernel IP via `ioctl(SIOCSIFADDR)`.
+
+Prints `dhcp: configured ip X.X.X.X` on success. Exits cleanly with status 1 if no network device is present (boot continues regardless).
+
+With QEMU user-mode networking, the built-in DHCP server assigns `10.0.2.15`.
 
 ## QEMU Network Setup
 
@@ -251,3 +268,5 @@ Default configuration (via qemu_wrapper.sh):
 | kernel/src/net/udp.rs | UDP handling |
 | kernel/src/net/mac.rs | MAC address type |
 | kernel/src/drivers/virtio/net/ | VirtIO network device |
+| userspace/src/bin/dhcp.rs | DHCP client |
+| common/src/ioctl.rs | Network ioctl wrappers (MAC, IP) |

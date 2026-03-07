@@ -11,7 +11,7 @@ This document contains research summaries for planned future enhancements. Each 
 5. [QEMU Framebuffer](#5-qemu-framebuffer)
 6. [Port Doom](#6-port-doom)
 7. [Async Network Reception with Interrupts](#7-async-network-reception-with-interrupts)
-8. [DHCP Client](#8-dhcp-client)
+8. [~~DHCP Client~~](#8-dhcp-client) (Implemented)
 9. [Minimal TCP Implementation](#9-minimal-tcp-implementation)
 10. [Dynamic Linking](#10-dynamic-linking)
 11. [QEMU Random Device Driver](#11-qemu-random-device-driver)
@@ -935,7 +935,7 @@ If cross-compilation proves difficult:
 6. **#4 - Coreutils** (User-facing utilities)
 
 ### Phase 3: Networking Enhancements
-7. **#8 - DHCP Client** (Network configuration)
+7. ~~**#8 - DHCP Client**~~ (Implemented)
 8. **#9 - Minimal TCP** (Protocol expansion)
 
 ### Phase 4: Advanced Features
