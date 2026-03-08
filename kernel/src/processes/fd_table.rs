@@ -164,7 +164,10 @@ impl FileDescriptor {
             }
             FileDescriptor::PipeWrite(buf) => buf.shared_buffer().lock().write(data),
             FileDescriptor::TcpStream(conn) => {
-                conn.lock().queue_send_data(data);
+                let waker = conn.lock().queue_send_data(data);
+                if let Some(w) = waker {
+                    w.wake();
+                }
                 Ok(data.len())
             }
             FileDescriptor::VfsFile(file) => {

@@ -1,4 +1,4 @@
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::infra::qemu::{QemuInstance, QemuOptions};
 
@@ -40,6 +40,35 @@ async fn udp() -> anyhow::Result<()> {
 
     socket.send("Finalize test\n".as_bytes()).await?;
     solaya.stdout().assert_read_until("Finalize test\n").await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tcp_echo() -> anyhow::Result<()> {
+    let mut solaya =
+        QemuInstance::start_with(QemuOptions::default().add_network_card(true)).await?;
+
+    solaya
+        .run_prog_waiting_for("tcp_echo", "TCP listening on 1234\n")
+        .await
+        .expect("tcp_echo program must succeed to start");
+
+    let port = solaya.network_port().expect("Network must be enabled");
+    let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await?;
+
+    solaya.stdout().assert_read_until("Connection from").await?;
+
+    stream.write_all(b"Hello TCP!").await?;
+    let mut buf = [0u8; 64];
+    let n = stream.read(&mut buf).await?;
+    assert_eq!(&buf[..n], b"Hello TCP!");
+
+    stream.write_all(b"Second message").await?;
+    let n = stream.read(&mut buf).await?;
+    assert_eq!(&buf[..n], b"Second message");
+
+    drop(stream);
 
     Ok(())
 }

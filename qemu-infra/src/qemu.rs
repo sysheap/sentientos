@@ -1,5 +1,5 @@
 use std::{
-    net::UdpSocket,
+    net::TcpListener,
     path::PathBuf,
     process::{ExitStatus, Stdio},
     time::Duration,
@@ -14,8 +14,8 @@ use tokio::{
 use crate::{PROMPT, read_asserter::ReadAsserter};
 
 fn find_available_port() -> anyhow::Result<u16> {
-    let socket = UdpSocket::bind("127.0.0.1:0")?;
-    Ok(socket.local_addr()?.port())
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    Ok(listener.local_addr()?.port())
 }
 
 pub fn project_root() -> anyhow::Result<PathBuf> {
