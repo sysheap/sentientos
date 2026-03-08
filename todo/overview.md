@@ -9,8 +9,6 @@ This document contains research summaries for planned future enhancements. Each 
 3. [Port Doom](#3-port-doom)
 4. [Minimal TCP Implementation](#4-minimal-tcp-implementation)
 5. [Dynamic Linking](#5-dynamic-linking)
-6. [QEMU Random Device Driver](#6-qemu-random-device-driver)
-
 ---
 
 ## 1. ext2 Filesystem
@@ -335,84 +333,6 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 **Main Blocker:** Persistent filesystem (ext2 + block device) - currently embeds all binaries
 
 **Estimated effort:** 2-4 weeks once filesystem exists
-
----
-
-## 6. QEMU Random Device Driver
-
-**Complexity:** Low to Medium
-
-### Device Specification
-- VirtIO Device ID: **4**
-- PCI Subsystem ID: **4** (differs from network = 1)
-- Single virtqueue for entropy requests
-- Simpler than network device (no config registers like MAC address)
-
-### Driver Implementation
-**Based on existing virtio-net driver:**
-
-**Detection:**
-```rust
-pub fn is_virtio_rng(device: &PCIDevice) -> bool {
-    device.subsystem_id().read() == 4  // RNG subsystem ID
-}
-```
-
-**Operation:**
-1. Reuse virtqueue infrastructure
-2. Follow network device initialization pattern
-3. Single receive queue with `BufferDirection::DeviceWritable`
-4. No transmit queue needed (read-only device)
-5. Device writes random bytes into guest buffers
-
-**Simpler than network:**
-- No device-specific configuration
-- No MAC address or status registers
-- Single queue
-- No packet headers (raw bytes)
-
-### Linux Auxiliary Vector (auxv)
-
-**AT_RANDOM:**
-- Provides pointer to **16 random bytes**
-- Constant for process lifetime
-- Used for ASLR and runtime security
-
-**Current auxv** (`kernel/src/processes/loader.rs:37-65`):
-- `AT_PAGESZ`, `AT_PHDR`, `AT_PHENT`, `AT_PHNUM`, `AT_NULL`
-
-**Required changes:**
-1. Allocate 16-byte buffer
-2. Fill from virtio-rng during kernel init
-3. Add `AT_RANDOM` entry to auxv:
-   ```rust
-   AT_RANDOM as usize,
-   random_bytes_ptr as usize,
-   ```
-
-### Integration Points
-
-**Kernel init** (`kernel/src/main.rs:140-150`):
-- Enumerate PCI devices
-- Detect virtio-rng alongside virtio-net
-- Initialize driver, generate entropy pool
-- Store in global accessible to loader
-
-**Process creation** (`kernel/src/processes/loader.rs:130`):
-- Modify `set_up_arguments()` to include AT_RANDOM
-- Generate 16 bytes per process (or use pool)
-
-**Headers:**
-- Add `AT_RANDOM` constant to `headers/syscall_types`
-
-### Implementation Order
-1. Implement virtio-rng driver
-2. Add kernel storage for random bytes
-3. Add `AT_RANDOM` constant
-4. Modify auxv construction
-5. System test to verify `getauxval(AT_RANDOM)` works
-
-**Estimated effort:** 1-2 weeks
 
 ## Clarifying Questions
 

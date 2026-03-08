@@ -11,7 +11,8 @@ QEMU_CMD="qemu-system-riscv64 \
     -cpu rv64 \
     -m 512M \
     -nographic \
-    -serial mon:stdio"
+    -serial mon:stdio \
+    -device virtio-rng-pci"
 
 # Process options
 while [[ $# -gt 0 ]]; do

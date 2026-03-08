@@ -91,6 +91,7 @@ async fn ls_dev() -> anyhow::Result<()> {
     let output = solaya.run_prog("ls-test /dev").await?;
     assert!(output.contains("null"), "ls /dev should list null");
     assert!(output.contains("zero"), "ls /dev should list zero");
+    assert!(output.contains("random"), "ls /dev should list random");
     assert!(
         !output.contains("vda"),
         "/dev/vda should not appear without --block"

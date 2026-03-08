@@ -7,6 +7,7 @@ mod mutex;
 mod net;
 mod panic;
 mod process_relation;
+mod rng;
 mod shell;
 mod signals;
 mod sleep;
