@@ -13,6 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          clean: false
-      - uses: ./.github/actions/setup
-      - run: just clean
+          clean: true
