@@ -200,6 +200,7 @@ impl CpuScheduler {
             pt.send_signal(parent_tid, headers::syscall_types::SIGCHLD);
             pt.wake_wait_wakers();
         });
+        Cpu::current().ipi_to_all_but_me();
     }
 
     pub fn send_tty_signal(&mut self, sig: u32, fg_pgid: common::pid::Tid) {

@@ -18,14 +18,16 @@ pub struct WaitChild {
     parent_main_tid: Tid,
     target: WaitPid,
     wnohang: bool,
+    wuntraced: bool,
 }
 
 impl WaitChild {
-    pub fn new(parent_main_tid: Tid, target: WaitPid, wnohang: bool) -> Self {
+    pub fn new(parent_main_tid: Tid, target: WaitPid, wnohang: bool, wuntraced: bool) -> Self {
         Self {
             parent_main_tid,
             target,
             wnohang,
+            wuntraced,
         }
     }
 }
@@ -36,6 +38,12 @@ impl Future for WaitChild {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         process_table::THE.with_lock(|mut pt| {
             if let Some((tid, status)) = pt.take_zombie(self.parent_main_tid, &self.target) {
+                return Poll::Ready(Ok((tid, status)));
+            }
+
+            if self.wuntraced
+                && let Some((tid, status)) = pt.take_stopped(self.parent_main_tid, &self.target)
+            {
                 return Poll::Ready(Ok((tid, status)));
             }
 
