@@ -1,7 +1,7 @@
 use core::ffi::{c_int, c_uint};
 use headers::{
     errno::Errno,
-    socket::{AF_INET, SOCK_CLOEXEC, SOCK_DGRAM, sockaddr_in},
+    socket::{AF_INET, SOCK_CLOEXEC, SOCK_DGRAM, SOCK_STREAM, sockaddr_in},
 };
 
 use crate::{
@@ -20,15 +20,19 @@ impl LinuxSyscallHandler {
         typ: c_int,
         _protocol: c_int,
     ) -> Result<isize, Errno> {
-        let masked_type = typ & !SOCK_CLOEXEC;
         assert!(
-            domain == AF_INET && masked_type == SOCK_DGRAM,
-            "socket: only AF_INET + SOCK_DGRAM supported (got domain={domain}, type={typ:#x})"
+            domain == AF_INET,
+            "socket: only AF_INET supported (got domain={domain})"
         );
-
+        let masked_type = typ & !SOCK_CLOEXEC;
+        let descriptor = match masked_type {
+            SOCK_DGRAM => FileDescriptor::UnboundUdpSocket,
+            SOCK_STREAM => FileDescriptor::UnboundTcpSocket,
+            _ => panic!("socket: unsupported type {typ:#x}"),
+        };
         let fd = self
             .current_process
-            .with_lock(|p| p.fd_table().allocate(FileDescriptor::UnboundUdpSocket))?;
+            .with_lock(|p| p.fd_table().allocate(descriptor))?;
         Ok(fd as isize)
     }
 

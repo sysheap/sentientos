@@ -190,6 +190,7 @@ fn generate_socket_types(out_path: &Path) -> Result<(), Box<dyn std::error::Erro
         .use_core()
         .allowlist_var("AF_INET")
         .allowlist_var("SOCK_DGRAM")
+        .allowlist_var("SOCK_STREAM")
         .allowlist_var("SOCK_CLOEXEC")
         .allowlist_type("sockaddr_in")
         .allowlist_type("in_addr")
