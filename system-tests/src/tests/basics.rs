@@ -69,3 +69,28 @@ async fn execute_different_programs() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn unimplemented_syscall_kills_process_not_kernel() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+
+    let output = solaya.run_prog("bad-syscall").await?;
+    assert!(
+        output.contains("[UNIMPLEMENTED SYSCALL]"),
+        "Expected unimplemented syscall diagnostic, got: {output}"
+    );
+    assert!(
+        output.contains("[BACKTRACE]"),
+        "Expected backtrace, got: {output}"
+    );
+    assert!(
+        !output.contains("BUG"),
+        "Process should have been killed, got: {output}"
+    );
+
+    // Kernel should still be alive — run another program
+    let output = solaya.run_prog("prog1").await?;
+    assert_eq!(output, "Hello from Prog1\n");
+
+    Ok(())
+}

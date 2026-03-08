@@ -96,13 +96,9 @@ macro_rules! linux_syscalls {
                 ];
                 match nr {
                     $(headers::syscalls::$number => self.$name($(<$arg_ty as $crate::syscalls::macros::NeedsUserSpaceWrapper>::wrap_arg(args[${index()}], self.get_process())?),*).await),*,
-                    syscall_nr => {
-                        let pc = arch::cpu::read_sepc();
-                        let name = headers::syscalls::SYSCALL_NAMES
-                            .iter()
-                            .find_map(|(nr, name)| if *nr == syscall_nr { Some(*name) } else { None })
-                            .unwrap_or("");
-                        panic!("Syscall {name} {syscall_nr} not implemented (pc={pc:#x})");
+                    _ => {
+                        $crate::syscalls::tracer::log_unimplemented_and_kill(trap_frame);
+                        Err(headers::errno::Errno::ENOSYS)
                     }
                 }
             }
