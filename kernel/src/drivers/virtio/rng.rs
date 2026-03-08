@@ -16,7 +16,7 @@ use crate::{
     pci::PCIDevice,
 };
 
-const QUEUE_SIZE: usize = 0x100;
+const QUEUE_SIZE: usize = 0x10;
 const VIRTIO_RNG_SUBSYSTEM_ID: u16 = 4;
 const SPIN_LIMIT: usize = 1_000_000;
 
