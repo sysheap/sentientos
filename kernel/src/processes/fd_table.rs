@@ -11,7 +11,10 @@ use crate::{
         pipe::{PipeReader, PipeWriter, ReadPipe},
         stdin_buf::ReadStdin,
     },
-    net::sockets::SharedAssignedSocket,
+    net::{
+        sockets::SharedAssignedSocket,
+        tcp_connection::{SharedTcpConnection, SharedTcpListener},
+    },
     print,
 };
 
@@ -44,6 +47,9 @@ pub enum FileDescriptor {
     Stderr,
     UnboundUdpSocket,
     UdpSocket(SharedAssignedSocket),
+    UnboundTcpSocket,
+    TcpStream(SharedTcpConnection),
+    TcpListener(SharedTcpListener),
     PipeRead(PipeReader),
     PipeWrite(PipeWriter),
     VfsFile(VfsOpenFile),
@@ -59,6 +65,9 @@ impl Clone for FileDescriptor {
             Self::Stderr => Self::Stderr,
             Self::UnboundUdpSocket => Self::UnboundUdpSocket,
             Self::UdpSocket(s) => Self::UdpSocket(s.clone()),
+            Self::UnboundTcpSocket => Self::UnboundTcpSocket,
+            Self::TcpStream(s) => Self::TcpStream(s.clone()),
+            Self::TcpListener(l) => Self::TcpListener(l.clone()),
             Self::VfsFile(f) => Self::VfsFile(f.clone()),
         }
     }
@@ -72,6 +81,9 @@ impl fmt::Debug for FileDescriptor {
             FileDescriptor::Stderr => write!(f, "Stderr"),
             FileDescriptor::UnboundUdpSocket => write!(f, "UnboundUdpSocket"),
             FileDescriptor::UdpSocket(_) => write!(f, "UdpSocket(..)"),
+            FileDescriptor::UnboundTcpSocket => write!(f, "UnboundTcpSocket"),
+            FileDescriptor::TcpStream(_) => write!(f, "TcpStream(..)"),
+            FileDescriptor::TcpListener(_) => write!(f, "TcpListener(..)"),
             FileDescriptor::PipeRead(_) => write!(f, "PipeRead(..)"),
             FileDescriptor::PipeWrite(_) => write!(f, "PipeWrite(..)"),
             FileDescriptor::VfsFile(_) => write!(f, "VfsFile(..)"),
@@ -84,6 +96,10 @@ impl FileDescriptor {
         match self {
             FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
             FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.shared_buffer(), count).await),
+            FileDescriptor::TcpStream(conn) => {
+                use crate::net::tcp_connection::wait_for_recv_data;
+                Ok(wait_for_recv_data(conn, count).await)
+            }
             FileDescriptor::VfsFile(file) => {
                 let block_info = {
                     let inner = file.lock();
@@ -121,6 +137,14 @@ impl FileDescriptor {
                 }
             }
             FileDescriptor::PipeRead(buf) => buf.shared_buffer().lock().try_read(count),
+            FileDescriptor::TcpStream(conn) => {
+                let mut c = conn.lock();
+                if c.has_recv_data() {
+                    Ok(c.recv_data(count))
+                } else {
+                    Err(Errno::EAGAIN)
+                }
+            }
             FileDescriptor::VfsFile(file) => {
                 let mut tmp = alloc::vec![0u8; count];
                 let n = file.lock().read(&mut tmp)?;
@@ -139,6 +163,10 @@ impl FileDescriptor {
                 Ok(data.len())
             }
             FileDescriptor::PipeWrite(buf) => buf.shared_buffer().lock().write(data),
+            FileDescriptor::TcpStream(conn) => {
+                conn.lock().queue_send_data(data);
+                Ok(data.len())
+            }
             FileDescriptor::VfsFile(file) => {
                 let block_info = {
                     let mut inner = file.lock();
