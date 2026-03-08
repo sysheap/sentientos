@@ -4,62 +4,16 @@ This document contains research summaries for planned future enhancements. Each 
 
 ## Table of Contents
 
-1. [QEMU Block Device Driver](#1-qemu-block-device-driver)
-2. [ext2 Filesystem](#2-ext2-filesystem)
-4. [QEMU Framebuffer](#4-qemu-framebuffer)
-5. [Port Doom](#5-port-doom)
-6. [Minimal TCP Implementation](#6-minimal-tcp-implementation)
-7. [Dynamic Linking](#7-dynamic-linking)
-8. [QEMU Random Device Driver](#8-qemu-random-device-driver)
+1. [ext2 Filesystem](#1-ext2-filesystem)
+2. [QEMU Framebuffer](#2-qemu-framebuffer)
+3. [Port Doom](#3-port-doom)
+4. [Minimal TCP Implementation](#4-minimal-tcp-implementation)
+5. [Dynamic Linking](#5-dynamic-linking)
+6. [QEMU Random Device Driver](#6-qemu-random-device-driver)
 
 ---
 
-## 1. QEMU Block Device Driver
-
-**Complexity:** Medium
-
-### Device Specification
-- VirtIO Subsystem ID: **2** (vs network = 1)
-- Single virtqueue (simpler than network's 2 queues)
-- Request structure: 3-descriptor chain (header → data → status)
-
-**Request Format:**
-```rust
-struct virtio_blk_req {
-    type: u32,      // 0=read, 1=write
-    reserved: u32,
-    sector: u64,    // 512-byte sector offset
-    data: [u8],     // Data buffer
-    status: u8,     // Device writes: 0=OK, 1=IOERR
-}
-```
-
-### QEMU Setup
-```bash
--drive if=none,file=disk.img,format=raw,id=hd0 \
--device virtio-blk-device,drive=hd0
-```
-
-### Implementation Strategy
-- **80% code reuse** from existing VirtIO net driver
-- Main difference: 3-descriptor chains vs simple buffers
-- Sector addressing (512-byte units)
-- No need for multiple queues
-
-**Files:**
-- `kernel/src/drivers/virtio/block/mod.rs` - New driver
-- Reuse: `virtqueue.rs`, `capability.rs`
-
-### DMA and Memory
-- Current VirtQueue approach works (direct physical addresses)
-- QEMU identity mapping: CPU addresses = DMA addresses
-- Memory barriers already handled
-
-**Estimated effort:** 1-2 weeks
-
----
-
-## 2. ext2 Filesystem
+## 1. ext2 Filesystem
 
 **Complexity:** Medium to High
 
@@ -95,7 +49,7 @@ struct virtio_blk_req {
 
 ### Integration
 - Requires VFS layer (done)
-- Requires block device driver (see #1)
+- Requires block device driver (done - virtio-blk via `/dev/vda`)
 
 ### Complexity Assessment
 
@@ -117,7 +71,7 @@ struct virtio_blk_req {
 
 ---
 
-## 4. QEMU Framebuffer
+## 2. QEMU Framebuffer
 
 **Complexity:** Medium
 
@@ -172,7 +126,7 @@ Start with **bochs-display** - reuses PCI infrastructure, simpler than virtio-gp
 
 ---
 
-## 5. Port Doom
+## 3. Port Doom
 
 **Complexity:** High (several weeks)
 
@@ -197,7 +151,7 @@ No sound support.
 
 ❌ Missing:
 - **Framebuffer access** - Need graphics device (#4)
-- **File system** - VFS is done; need persistent storage (#1 block device + #2 ext2) for WAD files
+- **File system** - VFS is done; need persistent storage (block device done + #1 ext2) for WAD files
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
 
@@ -224,13 +178,13 @@ qemu-system-riscv64 \
 - All pieces must work together
 - Debugging rendering issues
 
-**Dependencies:** Items #4 (framebuffer), plus keyboard driver. VFS is done.
+**Dependencies:** Items #2 (framebuffer), plus keyboard driver. VFS is done.
 
 **Estimated effort:** 2-4 weeks once dependencies are complete
 
 ---
 
-## 6. Minimal TCP Implementation
+## 4. Minimal TCP Implementation
 
 **Complexity:** Medium to High
 
@@ -301,7 +255,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 7. Dynamic Linking
+## 5. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -384,7 +338,7 @@ Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
 
 ---
 
-## 8. QEMU Random Device Driver
+## 6. QEMU Random Device Driver
 
 **Complexity:** Low to Medium
 
@@ -464,9 +418,9 @@ pub fn is_virtio_rng(device: &PCIDevice) -> bool {
 
 Before implementation, consider:
 
-1. **Framebuffer Choice (#4):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
+1. **Framebuffer Choice (#2):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-2. **Dynamic Linking (#9):** Should we prioritize this over other features, or wait until persistent filesystem support is ready?
+2. **Dynamic Linking (#5):** Should we prioritize this over other features, or wait until persistent filesystem support is ready?
 
 3. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 

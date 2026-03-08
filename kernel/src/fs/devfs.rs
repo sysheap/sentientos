@@ -88,8 +88,8 @@ impl VfsNode for DevVda {
         block::read(offset, buf)
     }
 
-    fn write(&self, _offset: usize, data: &[u8]) -> Result<usize, Errno> {
-        block::write(_offset, data)
+    fn write(&self, offset: usize, data: &[u8]) -> Result<usize, Errno> {
+        block::write(offset, data)
     }
 
     fn truncate(&self) -> Result<(), Errno> {

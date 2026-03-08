@@ -1,4 +1,5 @@
 mod basics;
+mod block;
 mod connect4;
 mod coreutils;
 mod fork;
