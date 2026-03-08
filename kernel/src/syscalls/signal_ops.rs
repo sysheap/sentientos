@@ -89,17 +89,27 @@ impl LinuxSyscallHandler {
     }
 
     pub(super) fn do_kill(&self, pid: c_int, sig: c_int) -> Result<isize, Errno> {
-        let target_tid = if pid > 0 {
-            Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?
+        let sig = crate::processes::signal::validate_signal(sig)?;
+        if pid > 0 {
+            let target_tid = Tid::try_from_i32(pid).ok_or(Errno::ESRCH)?;
+            if let Some(sig) = sig {
+                process_table::THE
+                    .lock()
+                    .send_signal_to_process(target_tid, sig);
+            }
         } else if pid == 0 {
-            self.current_process.with_lock(|p| p.main_tid())
-        } else {
+            let pgid = self.current_process.with_lock(|p| p.pgid());
+            if let Some(sig) = sig {
+                process_table::THE.lock().send_signal_to_pgid(pgid, sig);
+            }
+        } else if pid == -1 {
             return Err(Errno::ESRCH);
-        };
-        if let Some(sig) = crate::processes::signal::validate_signal(sig)? {
-            process_table::THE
-                .lock()
-                .send_signal_to_process(target_tid, sig);
+        } else {
+            // pid < -1: send to process group abs(pid)
+            let pgid = Tid::try_from_i32(-pid).ok_or(Errno::ESRCH)?;
+            if let Some(sig) = sig {
+                process_table::THE.lock().send_signal_to_pgid(pgid, sig);
+            }
         }
         Ok(0)
     }

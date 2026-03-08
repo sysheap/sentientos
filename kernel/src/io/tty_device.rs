@@ -249,16 +249,11 @@ impl TtyDeviceInner {
 pub struct ReadTty {
     device: TtyDevice,
     max_count: usize,
-    is_registered: bool,
 }
 
 impl ReadTty {
     pub fn new(device: TtyDevice, max_count: usize) -> Self {
-        Self {
-            device,
-            max_count,
-            is_registered: false,
-        }
+        Self { device, max_count }
     }
 }
 
@@ -287,11 +282,7 @@ impl Future for ReadTty {
             return Poll::Ready(dev.get_input(this.max_count));
         }
 
-        if !this.is_registered {
-            let waker = cx.waker().clone();
-            dev.register_wakeup(waker);
-            this.is_registered = true;
-        }
+        dev.register_wakeup(cx.waker().clone());
         Poll::Pending
     }
 }

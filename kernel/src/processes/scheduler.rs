@@ -106,8 +106,8 @@ impl CpuScheduler {
                         self.kill_current_process(exit_status);
                         return false;
                     }
-                    super::signal::SignalDeliveryResult::Stop => {
-                        self.stop_current_process();
+                    super::signal::SignalDeliveryResult::Stop(sig) => {
+                        self.stop_current_process(sig);
                         return false;
                     }
                     super::signal::SignalDeliveryResult::Continue => {}
@@ -125,7 +125,7 @@ impl CpuScheduler {
             enum BlockedAction {
                 None,
                 Terminate(super::signal::ExitStatus),
-                Stop,
+                Stop(u32),
             }
             let action = self.current_thread.with_lock(|mut t| {
                 let Some(sig) = t.peek_first_unblocked_signal() else {
@@ -142,9 +142,11 @@ impl CpuScheduler {
                         }
                         super::signal::DefaultAction::Stop => {
                             t.take_next_pending_signal();
-                            return BlockedAction::Stop;
+                            return BlockedAction::Stop(sig);
                         }
-                        _ => {}
+                        _ => {
+                            t.take_next_pending_signal();
+                        }
                     }
                 }
                 BlockedAction::None
@@ -154,10 +156,10 @@ impl CpuScheduler {
                     self.kill_current_process(exit_status);
                     return false;
                 }
-                BlockedAction::Stop => {
+                BlockedAction::Stop(sig) => {
                     // Store the task back so it can be resumed when SIGCONT arrives
                     self.current_thread.lock().store_syscall_task(task);
-                    self.stop_current_process();
+                    self.stop_current_process(sig);
                     return false;
                 }
                 BlockedAction::None => {}
@@ -182,10 +184,11 @@ impl CpuScheduler {
         }
     }
 
-    pub fn stop_current_process(&mut self) {
+    pub fn stop_current_process(&mut self, stop_sig: u32) {
         let (parent_tid, all_tids) = self
             .current_thread
             .with_lock(|t| (t.parent_tid(), t.process().lock().thread_tids()));
+        debug!("stop_current_process: sig={stop_sig} parent={parent_tid} tids={all_tids:?}");
         process_table::THE.with_lock(|mut pt| {
             for &tid in &all_tids {
                 if let Some(thread) = pt.get_thread(tid) {
@@ -193,6 +196,7 @@ impl CpuScheduler {
                         if !matches!(t.get_state(), ThreadState::Zombie(_)) {
                             t.set_state(ThreadState::Stopped);
                             t.stopped_notified = false;
+                            t.stop_signal = stop_sig;
                         }
                     });
                 }
@@ -204,6 +208,7 @@ impl CpuScheduler {
     }
 
     pub fn send_tty_signal(&mut self, sig: u32, fg_pgid: common::pid::Tid) {
+        debug!("send_tty_signal: sig={sig} fg_pgid={fg_pgid}");
         process_table::THE.with_lock(|mut pt| {
             pt.send_signal_to_pgid(fg_pgid, sig);
         });
@@ -282,7 +287,7 @@ impl CpuScheduler {
             enum PrepareResult {
                 Mode(ProcessMode),
                 Terminate(super::signal::ExitStatus),
-                Stop,
+                Stop(u32),
                 Dead,
             }
             let result = self.current_thread.with_lock(|mut t| {
@@ -297,8 +302,8 @@ impl CpuScheduler {
                     super::signal::SignalDeliveryResult::Terminate(exit_status) => {
                         return PrepareResult::Terminate(exit_status);
                     }
-                    super::signal::SignalDeliveryResult::Stop => {
-                        return PrepareResult::Stop;
+                    super::signal::SignalDeliveryResult::Stop(sig) => {
+                        return PrepareResult::Stop(sig);
                     }
                     super::signal::SignalDeliveryResult::Continue => {}
                 }
@@ -322,8 +327,8 @@ impl CpuScheduler {
                     let tid = self.current_thread.lock().get_tid();
                     process_table::THE.lock().kill_process_of(tid, exit_status);
                 }
-                PrepareResult::Stop => {
-                    self.stop_current_process();
+                PrepareResult::Stop(sig) => {
+                    self.stop_current_process(sig);
                 }
                 PrepareResult::Dead => {}
             }
