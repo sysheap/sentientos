@@ -13,9 +13,14 @@ just kani         # Run Kani model checking proofs
 just system-test  # Run only system tests
 just unit-test    # Run only unit tests
 just clippy       # Run linter
+just miri         # Run miri (detects undefined behavior)
 just mcp-server   # Build MCP server
 just disassm      # Disassemble kernel
 just addr2line 0x1234  # Get source line for kernel address
+just attach       # Attach GDB to running QEMU
+just stress-system-test       # Run system tests 5x in a row
+just loop-system-test TEST    # Run one system test in a loop until failure
+just deadlock-hunt            # Run system tests in loop with GDB enabled
 ```
 
 ## Project Structure
