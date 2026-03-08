@@ -108,6 +108,10 @@ impl<'a> Unwinder<'a> {
                     current_row.cfa_offset =
                         i64::try_from(*offset).expect("DWARF CFA offset fits in i64");
                 }
+                Instruction::DefCfaRegister { register } => {
+                    debug!("DefCfaRegister(register={})", *register);
+                    current_row.cfa_register = u64::from(*register);
+                }
                 Instruction::DefCfaOffset { offset } => {
                     debug!("DefCfaOffset(offset={})", *offset);
                     current_row.cfa_offset =
