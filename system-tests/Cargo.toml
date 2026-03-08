@@ -6,5 +6,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = { version = "1.0.94", features = ["backtrace"] }
+tempfile = "3"
 tokio = { version = "1.43.1", features = ["full"] }
 qemu-infra = { path = "../qemu-infra" }

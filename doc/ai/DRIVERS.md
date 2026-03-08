@@ -4,7 +4,7 @@
 
 Device driver subsystems:
 1. **PCI** - PCI device enumeration and configuration
-2. **VirtIO** - VirtIO device framework (network)
+2. **VirtIO** - VirtIO device framework (network, block)
 
 ## PCI Subsystem
 
@@ -167,22 +167,48 @@ Ring buffer for device communication:
 
 ```rust
 pub struct VirtQueue<const SIZE: usize> {
-    descriptors: &'static mut [VirtQueueDescriptor; SIZE],
-    available_ring: &'static mut VirtQueueAvailableRing<SIZE>,
-    used_ring: &'static mut VirtQueueUsedRing<SIZE>,
+    descriptor_area: Box<[virtq_desc; SIZE]>,
+    driver_area: Box<virtq_avail<SIZE>>,
+    device_area: Box<virtq_used<SIZE>>,
     // ...
 }
 
 impl<const SIZE: usize> VirtQueue<SIZE> {
-    pub fn new(queue_index: u16, notify_offset: usize) -> Self
-    pub fn add_buffer(&mut self, buffer: &[u8], direction: BufferDirection)
-    pub fn get_used_buffers(&mut self) -> impl Iterator<Item = Vec<u8>>
+    pub fn new(queue_size: u16, queue_index: u16) -> Self
+    pub fn put_buffer(&mut self, buffer: Vec<u8>, direction: BufferDirection) -> Result<u16, QueueError>
+    pub fn put_buffer_chain(&mut self, buffers: Vec<(Vec<u8>, BufferDirection)>) -> Result<u16, QueueError>
+    pub fn receive_buffer(&mut self) -> Vec<UsedBuffer>  // UsedBuffer has Vec<Vec<u8>> for chains
 }
 ```
+
+### VirtIO Block Device
+
+**File:** `kernel/src/drivers/virtio/block.rs`
+
+Polling-based block device driver using 3-descriptor chains (header, data, status):
+
+```rust
+pub struct BlockDevice {
+    device: PCIDevice,
+    common_cfg: MMIO<virtio_pci_common_cfg>,
+    blk_cfg: MMIO<virtio_blk_config>,
+    request_queue: VirtQueue<EXPECTED_QUEUE_SIZE>,
+    capacity_sectors: u64,
+}
+```
+
+- Subsystem ID: 2
+- Single virtqueue (index 0)
+- Read/write via `read_sectors()`/`write_sectors()` with spin-wait completion
+- Global `BLOCK_DEVICE: Spinlock<Option<BlockDevice>>` with `read()`/`write()` byte-level API
+- Exposed as `/dev/vda` in devfs
+- QEMU: `--block disk.img` flag in `qemu_wrapper.sh`
 
 ### VirtIO Capabilities
 
 **File:** `kernel/src/drivers/virtio/capability.rs`
+
+Shared VirtIO constants and MMIO structs used by both net and block drivers:
 
 ```rust
 pub const VIRTIO_PCI_CAP_COMMON_CFG: u8 = 1;
@@ -190,6 +216,8 @@ pub const VIRTIO_PCI_CAP_NOTIFY_CFG: u8 = 2;
 pub const VIRTIO_PCI_CAP_ISR_CFG: u8 = 3;
 pub const VIRTIO_PCI_CAP_DEVICE_CFG: u8 = 4;
 pub const VIRTIO_PCI_CAP_PCI_CFG: u8 = 5;
+// Also: device status constants, VIRTIO_F_VERSION_1,
+// virtio_pci_common_cfg, virtio_pci_notify_cap
 ```
 
 ## MMIO Utilities
@@ -238,8 +266,9 @@ impl MMIO<GeneralDevicePciHeader> {
 | kernel/src/pci/lookup.rs | Device ID lookup |
 | kernel/src/drivers/virtio/mod.rs | VirtIO module |
 | kernel/src/drivers/virtio/net/mod.rs | VirtIO network driver |
-| kernel/src/drivers/virtio/virtqueue.rs | VirtQueue implementation |
-| kernel/src/drivers/virtio/capability.rs | VirtIO capability parsing |
+| kernel/src/drivers/virtio/block.rs | VirtIO block driver |
+| kernel/src/drivers/virtio/virtqueue.rs | VirtQueue implementation (with descriptor chaining) |
+| kernel/src/drivers/virtio/capability.rs | Shared VirtIO constants and MMIO structs |
 | kernel/src/klibc/mmio.rs | MMIO utilities |
 
 ## Adding a New VirtIO Driver

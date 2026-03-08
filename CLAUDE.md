@@ -42,7 +42,7 @@ doc/ai/           # Detailed AI documentation (see OVERVIEW.md)
 | kernel/src/interrupts/ | Trap handling, PLIC, timer |
 | kernel/src/fs/ | VFS layer (tmpfs, procfs, devfs) |
 | kernel/src/net/ | UDP network stack |
-| kernel/src/drivers/virtio/ | VirtIO network driver |
+| kernel/src/drivers/virtio/ | VirtIO drivers (network, block) |
 | kernel/src/io/ | UART, TTY line discipline, stdin buffer |
 
 ## Debugging
