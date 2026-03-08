@@ -12,7 +12,7 @@ Quick reference to find detailed documentation. Each file covers a specific subs
 | PROCESSES.md | Process/thread lifecycle, scheduler, ELF loading | Process management, scheduling |
 | INTERRUPTS.md | Trap handling, PLIC, timer interrupts | Interrupt issues, timer bugs |
 | SYSCALLS.md | Syscall dispatch, async syscalls, validation | Adding/modifying syscalls |
-| NETWORKING.md | UDP stack, sockets, packet flow | Network features/bugs |
+| NETWORKING.md | Network stack (UDP, TCP), sockets, packet flow | Network features/bugs |
 | DRIVERS.md | VirtIO, PCI enumeration, device tree | Device driver work |
 | TESTING.md | Unit tests, system tests, QEMU infrastructure | Writing/debugging tests |
 | FS.md | VFS layer, tmpfs, procfs, devfs, open files | Filesystem work, adding devices/proc entries |
@@ -60,7 +60,7 @@ kernel/src/
   syscalls/      - Syscall handlers and validation
   interrupts/    - Trap handler, PLIC, timer
   fs/            - VFS layer (tmpfs, procfs, devfs, open file tracking)
-  net/           - UDP network stack
+  net/           - Network stack (UDP, TCP)
   drivers/       - VirtIO drivers
   io/            - UART, stdin buffer
   pci/           - PCI enumeration
