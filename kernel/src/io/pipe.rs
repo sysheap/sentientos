@@ -13,8 +13,6 @@ pub type SharedPipeBuffer = Arc<Spinlock<PipeInner>>;
 pub struct PipeInner {
     data: VecDeque<u8>,
     read_wakers: Vec<Waker>,
-    write_closed: bool,
-    read_closed: bool,
     reader_count: usize,
     writer_count: usize,
 }
@@ -24,15 +22,13 @@ impl PipeInner {
         Self {
             data: VecDeque::new(),
             read_wakers: Vec::new(),
-            write_closed: false,
-            read_closed: false,
             reader_count: 1,
             writer_count: 1,
         }
     }
 
     pub fn write(&mut self, data: &[u8]) -> Result<usize, Errno> {
-        if self.read_closed {
+        if self.reader_count == 0 {
             return Err(Errno::EPIPE);
         }
         self.data.extend(data);
@@ -45,7 +41,7 @@ impl PipeInner {
             let actual = min(self.data.len(), count);
             return Ok(self.data.drain(..actual).collect());
         }
-        if self.write_closed {
+        if self.writer_count == 0 {
             return Ok(Vec::new());
         }
         Err(Errno::EAGAIN)
@@ -67,21 +63,17 @@ impl PipeInner {
         self.writer_count += 1;
     }
 
-    pub fn close_write(&mut self) {
-        assert!(self.writer_count > 0);
+    fn close_write(&mut self) {
+        assert!(!self.write_closed());
         self.writer_count -= 1;
         if self.write_closed() {
-            self.write_closed = true;
             self.wake_readers();
         }
     }
 
-    pub fn close_read(&mut self) {
-        assert!(self.reader_count > 0);
+    fn close_read(&mut self) {
+        assert!(!self.read_closed());
         self.reader_count -= 1;
-        if self.reader_count == 0 {
-            self.read_closed = true;
-        }
     }
 
     fn wake_readers(&mut self) {
@@ -165,7 +157,7 @@ impl Future for ReadPipe {
             let actual = min(pipe.data.len(), max_count);
             return Poll::Ready(pipe.data.drain(..actual).collect());
         }
-        if pipe.write_closed {
+        if pipe.writer_count == 0 {
             return Poll::Ready(Vec::new());
         }
         if !self.is_registered {
