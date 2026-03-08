@@ -16,3 +16,4 @@ mcp-server/target/
 /headers/musl_headers
 
 __pycache__/
+disk.img

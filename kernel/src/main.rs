@@ -175,14 +175,20 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         processes::kernel_tasks::spawn(net::network_rx_task());
     }
 
-    let virtio_blk = pci_devices
-        .iter()
-        .position(drivers::virtio::block::BlockDevice::is_virtio_block);
-    if let Some(index) = virtio_blk {
-        let device = pci_devices.swap_remove(index);
-        let blk = drivers::virtio::block::BlockDevice::initialize(device)
-            .expect("Block device initialization must work.");
-        drivers::virtio::block::assign_block_device(blk);
+    loop {
+        let pos = pci_devices
+            .iter()
+            .position(drivers::virtio::block::BlockDevice::is_virtio_block);
+        match pos {
+            Some(i) => {
+                let device = pci_devices.swap_remove(i);
+                let blk = drivers::virtio::block::BlockDevice::initialize(device)
+                    .expect("Block device initialization must work.");
+                let idx = drivers::virtio::block::assign_block_device(blk);
+                fs::devfs::register_block_device(idx);
+            }
+            None => break,
+        }
     }
 
     processes::kernel_tasks::create_worker_thread();

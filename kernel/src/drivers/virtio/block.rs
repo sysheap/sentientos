@@ -54,22 +54,25 @@ pub struct BlockDevice {
     capacity_sectors: u64,
 }
 
-static BLOCK_DEVICE: Spinlock<Option<BlockDevice>> = Spinlock::new(None);
+static BLOCK_DEVICES: Spinlock<Vec<BlockDevice>> = Spinlock::new(Vec::new());
 
-pub fn assign_block_device(device: BlockDevice) {
-    *BLOCK_DEVICE.lock() = Some(device);
+pub fn assign_block_device(device: BlockDevice) -> usize {
+    let mut devices = BLOCK_DEVICES.lock();
+    let index = devices.len();
+    devices.push(device);
+    index
 }
 
-pub fn capacity() -> u64 {
-    BLOCK_DEVICE
+pub fn capacity(index: usize) -> u64 {
+    BLOCK_DEVICES
         .lock()
-        .as_ref()
+        .get(index)
         .map_or(0, |d| d.capacity_bytes())
 }
 
-pub fn read(offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
-    let mut guard = BLOCK_DEVICE.lock();
-    let dev = guard.as_mut().ok_or(Errno::ENODEV)?;
+pub fn read(index: usize, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+    let mut guard = BLOCK_DEVICES.lock();
+    let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
 
     #[allow(clippy::cast_possible_truncation)]
     let cap = dev.capacity_bytes() as usize;
@@ -98,9 +101,9 @@ pub fn read(offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
     Ok(read_len)
 }
 
-pub fn write(offset: usize, data: &[u8]) -> Result<usize, Errno> {
-    let mut guard = BLOCK_DEVICE.lock();
-    let dev = guard.as_mut().ok_or(Errno::ENODEV)?;
+pub fn write(index: usize, offset: usize, data: &[u8]) -> Result<usize, Errno> {
+    let mut guard = BLOCK_DEVICES.lock();
+    let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
 
     #[allow(clippy::cast_possible_truncation)]
     let cap = dev.capacity_bytes() as usize;
