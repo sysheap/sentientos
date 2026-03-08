@@ -93,7 +93,7 @@ impl CpuScheduler {
                     Ok(ret) => ret,
                     Err(errno) => -(errno as isize),
                 };
-                let signal_kill = self.current_thread.with_lock(|mut t| {
+                let signal_result = self.current_thread.with_lock(|mut t| {
                     t.clear_wakeup_pending();
                     let trap_frame = t.get_register_state_mut();
                     trap_frame[Register::a0] = ret.cast_unsigned();
@@ -101,9 +101,16 @@ impl CpuScheduler {
                     t.set_program_counter(pc + 4); // Skip the ecall instruction
                     super::signal::deliver_signal(&mut t)
                 });
-                if let Some(exit_status) = signal_kill {
-                    self.kill_current_process(exit_status);
-                    return false;
+                match signal_result {
+                    super::signal::SignalDeliveryResult::Terminate(exit_status) => {
+                        self.kill_current_process(exit_status);
+                        return false;
+                    }
+                    super::signal::SignalDeliveryResult::Stop => {
+                        self.stop_current_process();
+                        return false;
+                    }
+                    super::signal::SignalDeliveryResult::Continue => {}
                 }
                 if !self.set_cpu_reg_for_current_thread() {
                     return false;
@@ -111,29 +118,49 @@ impl CpuScheduler {
             }
             true
         } else {
-            // Still pending — check if a terminating signal arrived while we
-            // were blocked. We intentionally avoid deliver_signal() here because
+            // Still pending — check if a terminating or stop signal arrived while
+            // we were blocked. We intentionally avoid deliver_signal() here because
             // it may set up a handler frame (modifying PC/SP), which would
             // corrupt state if we then stored the task back.
-            let exit_status = self.current_thread.with_lock(|mut t| {
-                let sig = t.peek_first_unblocked_signal()?;
-                let action = t.get_sigaction_raw(sig);
-                if action.sa_handler.is_none()
-                    && matches!(
-                        super::signal::default_action(sig),
-                        super::signal::DefaultAction::Terminate
-                    )
-                {
-                    t.take_next_pending_signal();
-                    return Some(super::signal::ExitStatus::Signaled(
-                        u8::try_from(sig).expect("signal number fits in u8"),
-                    ));
+            enum BlockedAction {
+                None,
+                Terminate(super::signal::ExitStatus),
+                Stop,
+            }
+            let action = self.current_thread.with_lock(|mut t| {
+                let Some(sig) = t.peek_first_unblocked_signal() else {
+                    return BlockedAction::None;
+                };
+                let sa = t.get_sigaction_raw(sig);
+                if sa.sa_handler.is_none() {
+                    match super::signal::default_action(sig) {
+                        super::signal::DefaultAction::Terminate => {
+                            t.take_next_pending_signal();
+                            return BlockedAction::Terminate(super::signal::ExitStatus::Signaled(
+                                u8::try_from(sig).expect("signal number fits in u8"),
+                            ));
+                        }
+                        super::signal::DefaultAction::Stop => {
+                            t.take_next_pending_signal();
+                            return BlockedAction::Stop;
+                        }
+                        _ => {}
+                    }
                 }
-                None
+                BlockedAction::None
             });
-            if let Some(exit_status) = exit_status {
-                self.kill_current_process(exit_status);
-                return false;
+            match action {
+                BlockedAction::Terminate(exit_status) => {
+                    self.kill_current_process(exit_status);
+                    return false;
+                }
+                BlockedAction::Stop => {
+                    // Store the task back so it can be resumed when SIGCONT arrives
+                    self.current_thread.lock().store_syscall_task(task);
+                    self.stop_current_process();
+                    return false;
+                }
+                BlockedAction::None => {}
             }
             self.current_thread
                 .lock()
@@ -153,6 +180,26 @@ impl CpuScheduler {
         for tid in all_tids {
             pt.kill(tid, exit_status);
         }
+    }
+
+    pub fn stop_current_process(&mut self) {
+        let (parent_tid, all_tids) = self
+            .current_thread
+            .with_lock(|t| (t.parent_tid(), t.process().lock().thread_tids()));
+        process_table::THE.with_lock(|mut pt| {
+            for &tid in &all_tids {
+                if let Some(thread) = pt.get_thread(tid) {
+                    thread.with_lock(|mut t| {
+                        if !matches!(t.get_state(), ThreadState::Zombie(_)) {
+                            t.set_state(ThreadState::Stopped);
+                            t.stopped_notified = false;
+                        }
+                    });
+                }
+            }
+            pt.send_signal(parent_tid, headers::syscall_types::SIGCHLD);
+            pt.wake_wait_wakers();
+        });
     }
 
     pub fn send_tty_signal(&mut self, sig: u32, fg_pgid: common::pid::Tid) {
@@ -231,39 +278,53 @@ impl CpuScheduler {
 
             // Acquire the thread lock once for both task check and register load,
             // eliminating the gap where a thread could be killed between the two.
-            let result: Option<Result<ProcessMode, super::signal::ExitStatus>> =
-                self.current_thread.with_lock(|mut t| {
-                    if let Some(task) = t.take_syscall_task() {
-                        return Some(Ok(ProcessMode::KernelSyscallTask(task)));
+            enum PrepareResult {
+                Mode(ProcessMode),
+                Terminate(super::signal::ExitStatus),
+                Stop,
+                Dead,
+            }
+            let result = self.current_thread.with_lock(|mut t| {
+                if let Some(task) = t.take_syscall_task() {
+                    return PrepareResult::Mode(ProcessMode::KernelSyscallTask(task));
+                }
+                if matches!(t.get_state(), ThreadState::Zombie(_) | ThreadState::Stopped) {
+                    return PrepareResult::Dead;
+                }
+                // Deliver pending signals before returning to userspace
+                match super::signal::deliver_signal(&mut t) {
+                    super::signal::SignalDeliveryResult::Terminate(exit_status) => {
+                        return PrepareResult::Terminate(exit_status);
                     }
-                    if matches!(t.get_state(), ThreadState::Zombie(_)) {
-                        return None;
+                    super::signal::SignalDeliveryResult::Stop => {
+                        return PrepareResult::Stop;
                     }
-                    // Deliver pending signals before returning to userspace
-                    if let Some(exit_status) = super::signal::deliver_signal(&mut t) {
-                        return Some(Err(exit_status));
-                    }
-                    let cpu_id = Cpu::cpu_id();
-                    assert!(
-                        t.get_state() == ThreadState::Running { cpu_id },
-                        "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
-                        t.get_tid(),
-                        t.get_state(),
-                        cpu_id
-                    );
-                    let pc = t.get_program_counter();
-                    Cpu::write_trap_frame(t.get_register_state().clone());
-                    arch::cpu::write_sepc(pc.as_usize());
-                    arch::cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
-                    Some(Ok(ProcessMode::Userspace))
-                });
+                    super::signal::SignalDeliveryResult::Continue => {}
+                }
+                let cpu_id = Cpu::cpu_id();
+                assert!(
+                    t.get_state() == ThreadState::Running { cpu_id },
+                    "Thread {} not assigned to this CPU (state: {:?}, expected cpu: {})",
+                    t.get_tid(),
+                    t.get_state(),
+                    cpu_id
+                );
+                let pc = t.get_program_counter();
+                Cpu::write_trap_frame(t.get_register_state().clone());
+                arch::cpu::write_sepc(pc.as_usize());
+                arch::cpu::set_ret_to_kernel_mode(t.get_in_kernel_mode());
+                PrepareResult::Mode(ProcessMode::Userspace)
+            });
             match result {
-                Some(Ok(mode)) => return mode,
-                Some(Err(exit_status)) => {
+                PrepareResult::Mode(mode) => return mode,
+                PrepareResult::Terminate(exit_status) => {
                     let tid = self.current_thread.lock().get_tid();
                     process_table::THE.lock().kill_process_of(tid, exit_status);
                 }
-                None => {} // Thread was killed — retry
+                PrepareResult::Stop => {
+                    self.stop_current_process();
+                }
+                PrepareResult::Dead => {}
             }
         }
     }
@@ -271,9 +332,9 @@ impl CpuScheduler {
     pub fn set_cpu_reg_for_current_thread(&self) -> bool {
         self.current_thread.with_lock(|t| {
             let cpu_id = Cpu::cpu_id();
-            if matches!(t.get_state(), ThreadState::Zombie(_)) {
+            if matches!(t.get_state(), ThreadState::Zombie(_) | ThreadState::Stopped) {
                 debug!(
-                    "Thread {} was killed during scheduling, rescheduling",
+                    "Thread {} was killed/stopped during scheduling, rescheduling",
                     t.get_tid()
                 );
                 return false;

@@ -128,12 +128,20 @@ const SIGNAL_FRAME_SIZE: usize = core::mem::size_of::<SignalFrame>();
 
 impl ByteInterpretable for SignalFrame {}
 
-/// Check for pending signals and either set up a signal handler frame or return
-/// an ExitStatus if the default action is to terminate. Called before returning
-/// to userspace.
-pub fn deliver_signal(thread: &mut Thread) -> Option<ExitStatus> {
+pub enum SignalDeliveryResult {
+    Continue,
+    Terminate(ExitStatus),
+    Stop,
+}
+
+/// Check for pending signals and either set up a signal handler frame, return
+/// an ExitStatus if the default action is to terminate, or return Stop if the
+/// process should be stopped. Called before returning to userspace.
+pub fn deliver_signal(thread: &mut Thread) -> SignalDeliveryResult {
     loop {
-        let sig = thread.take_next_pending_signal()?;
+        let Some(sig) = thread.take_next_pending_signal() else {
+            return SignalDeliveryResult::Continue;
+        };
         let action = *thread.get_sigaction_raw(sig);
         let handler = action.sa_handler;
 
@@ -142,11 +150,14 @@ pub fn deliver_signal(thread: &mut Thread) -> Option<ExitStatus> {
                 // SIG_DFL
                 match default_action(sig) {
                     DefaultAction::Terminate => {
-                        return Some(ExitStatus::Signaled(
+                        return SignalDeliveryResult::Terminate(ExitStatus::Signaled(
                             u8::try_from(sig).expect("signal number fits in u8"),
                         ));
                     }
-                    DefaultAction::Ignore | DefaultAction::Stop | DefaultAction::Continue => {
+                    DefaultAction::Stop => {
+                        return SignalDeliveryResult::Stop;
+                    }
+                    DefaultAction::Ignore | DefaultAction::Continue => {
                         continue;
                     }
                 }
@@ -157,12 +168,12 @@ pub fn deliver_signal(thread: &mut Thread) -> Option<ExitStatus> {
             }
             Some(handler_fn) => {
                 if setup_signal_frame(thread, sig, handler_fn, &action) {
-                    return None;
+                    return SignalDeliveryResult::Continue;
                 }
                 // Frame write failed — force-kill if this was already SIGSEGV
                 // to avoid infinite loop, otherwise raise SIGSEGV and retry.
                 if sig == SIGSEGV {
-                    return Some(ExitStatus::Signaled(
+                    return SignalDeliveryResult::Terminate(ExitStatus::Signaled(
                         u8::try_from(SIGSEGV).expect("signal number fits in u8"),
                     ));
                 }
