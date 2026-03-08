@@ -138,8 +138,8 @@ fn check_thread_ownership_and_reschedule_if_needed(trap_frame: TrapFrame) -> boo
                         cpu_id
                     );
                 }
-                ThreadState::Waiting | ThreadState::Runnable => {
-                    // Syscall put us in Waiting (and possibly got woken to Runnable).
+                ThreadState::Waiting | ThreadState::Runnable | ThreadState::Stopped => {
+                    // Syscall put us in Waiting/Stopped (and possibly got woken to Runnable).
                     // Save state before rescheduling.
                     let sepc = arch::cpu::read_sepc() + 4; // Skip ecall
                     t.set_register_state(trap_frame);
@@ -213,24 +213,34 @@ fn handle_syscall() {
                 // Read sepc from hardware — the thread's stored PC is stale for
                 // the synchronous path (only updated on reschedule).
                 let sepc = arch::cpu::read_sepc();
-                let signal_kill = Cpu::with_scheduler(|s| {
+                let signal_result = Cpu::with_scheduler(|s| {
                     s.get_current_thread().with_lock(|mut t| {
                         t.set_register_state(trap_frame);
                         t.set_program_counter(VirtAddr::new(sepc + 4)); // Skip ecall
                         crate::processes::signal::deliver_signal(&mut t)
                     })
                 });
-                if let Some(exit_status) = signal_kill {
-                    Cpu::with_scheduler(|mut s| {
-                        s.kill_current_process(exit_status);
-                        s.schedule();
-                    });
-                } else {
-                    Cpu::with_scheduler(|mut s| {
-                        if !s.set_cpu_reg_for_current_thread() {
+                use crate::processes::signal::SignalDeliveryResult;
+                match signal_result {
+                    SignalDeliveryResult::Terminate(exit_status) => {
+                        Cpu::with_scheduler(|mut s| {
+                            s.kill_current_process(exit_status);
                             s.schedule();
-                        }
-                    });
+                        });
+                    }
+                    SignalDeliveryResult::Stop => {
+                        Cpu::with_scheduler(|mut s| {
+                            s.stop_current_process();
+                            s.schedule();
+                        });
+                    }
+                    SignalDeliveryResult::Continue => {
+                        Cpu::with_scheduler(|mut s| {
+                            if !s.set_cpu_reg_for_current_thread() {
+                                s.schedule();
+                            }
+                        });
+                    }
                 }
             }
         }

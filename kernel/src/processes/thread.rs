@@ -53,6 +53,7 @@ pub enum ThreadState {
     Running { cpu_id: crate::cpu::CpuId },
     Runnable,
     Waiting,
+    Stopped,
     Zombie(super::signal::ExitStatus),
 }
 
@@ -102,6 +103,7 @@ pub struct Thread {
     // program's entry state. Signals the syscall return path to skip writing a
     // return value to a0 and skip advancing PC past ecall.
     registers_replaced: bool,
+    pub stopped_notified: bool,
 }
 
 impl core::fmt::Display for Thread {
@@ -249,6 +251,7 @@ impl Thread {
             signal_state: SignalState::new(),
             syscall_task: None,
             registers_replaced: false,
+            stopped_notified: false,
         }))
     }
 
@@ -355,6 +358,10 @@ impl Thread {
         self.syscall_task.take()
     }
 
+    pub fn store_syscall_task(&mut self, task: SyscallTask) {
+        self.syscall_task = Some(task);
+    }
+
     pub fn set_clear_child_tid(&mut self, clear_child_tid: UserspacePtr<*mut c_int>) {
         self.clear_child_tid = Some(clear_child_tid);
     }
@@ -412,11 +419,25 @@ impl Thread {
         self.registers_replaced = value;
     }
 
+    pub fn clear_pending_stop_signals(&mut self) {
+        use headers::syscall_types::{SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU};
+        for sig in [SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU] {
+            self.signal_state.pending.clear(sig);
+        }
+    }
+
     pub fn raise_signal(&mut self, sig: u32) {
         use super::signal::{DefaultAction, default_action};
-        use headers::syscall_types::{SIGKILL, SIGSTOP};
+        use headers::syscall_types::{SIGCONT, SIGKILL, SIGSTOP};
 
         assert!((1..=31).contains(&sig), "signal {sig} out of range 1..=31");
+
+        // SIGCONT cancels pending stop signals; stop signals cancel pending SIGCONT
+        match default_action(sig) {
+            DefaultAction::Continue => self.clear_pending_stop_signals(),
+            DefaultAction::Stop => self.signal_state.pending.clear(SIGCONT),
+            _ => {}
+        }
 
         // SIGKILL and SIGSTOP cannot be caught, blocked, or ignored
         if sig == SIGKILL || sig == SIGSTOP {

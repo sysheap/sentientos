@@ -164,7 +164,11 @@ impl ProcessTable {
         self.wait_wakers.push(waker);
     }
 
-    fn wake_wait_wakers(&mut self) {
+    pub fn get_thread(&self, tid: Tid) -> Option<&ThreadRef> {
+        self.threads.get(&tid)
+    }
+
+    pub fn wake_wait_wakers(&mut self) {
         for waker in self.wait_wakers.drain(..) {
             waker.wake();
         }
@@ -177,6 +181,12 @@ impl ProcessTable {
                     return false;
                 }
                 t.raise_signal(sig);
+                // SIGCONT resumes stopped threads
+                if sig == headers::syscall_types::SIGCONT && t.get_state() == ThreadState::Stopped {
+                    t.clear_pending_stop_signals();
+                    t.set_state(ThreadState::Runnable);
+                    return true;
+                }
                 if t.has_pending_unblocked_signal() && t.get_state() == ThreadState::Waiting {
                     t.set_state(ThreadState::Runnable);
                     return true;
