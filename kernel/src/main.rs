@@ -150,6 +150,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     memory::initialize_runtime_mappings(&runtime_mapping);
 
+    io::tty_device::CONSOLE_TTY.initialize(alloc::sync::Arc::new(klibc::Spinlock::new(
+        io::tty_device::TtyDeviceInner::new(),
+    )));
+
     process_table::init();
     fs::init();
 

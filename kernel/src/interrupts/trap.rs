@@ -79,23 +79,25 @@ fn handle_external_interrupt() {
             plic.complete_interrupt(plic_interrupt);
             drop(plic);
 
-            let mut send_signal = false;
+            let mut signal_to_send: Option<u32> = None;
+            let tty = crate::io::tty_device::console_tty();
             for &byte in &raw_bytes {
-                let result = crate::io::tty::TTY.lock().process_input_byte(byte);
+                let result = tty.lock().process_input_byte(byte);
                 if !result.echo.is_empty() {
                     let mut uart = QEMU_UART.lock();
                     for &echo_byte in &result.echo {
                         uart.write_byte(echo_byte);
                     }
                 }
-                if let crate::io::tty::InputAction::Signal = result.action {
-                    send_signal = true;
+                if let crate::io::tty_device::InputAction::Signal(sig) = result.action {
+                    signal_to_send = Some(sig);
                 }
             }
 
-            if send_signal {
+            if let Some(sig) = signal_to_send {
+                let fg_pgid = tty.lock().fg_pgid();
                 Cpu::with_scheduler(|mut s| {
-                    s.send_ctrl_c();
+                    s.send_tty_signal(sig, fg_pgid);
                 });
             }
         }

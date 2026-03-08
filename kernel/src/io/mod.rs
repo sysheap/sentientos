@@ -1,6 +1,5 @@
 pub mod pipe;
-pub mod stdin_buf;
-pub mod tty;
+pub mod tty_device;
 pub mod uart;
 
 pub const TEST_DEVICE_ADDRESS: usize = 0x100000;
