@@ -180,10 +180,13 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         .position(drivers::virtio::block::BlockDevice::is_virtio_block)
     {
         let device = pci_devices.swap_remove(i);
-        let blk = drivers::virtio::block::BlockDevice::initialize(device)
+        let plic_irq = device.plic_interrupt_id();
+        let init = drivers::virtio::block::BlockDevice::initialize(device)
             .expect("Block device initialization must work.");
-        let idx = drivers::virtio::block::assign_block_device(blk);
+        drivers::virtio::block::register_isr_status(init.interrupt_status);
+        let idx = drivers::virtio::block::assign_block_device(init.device);
         fs::devfs::register_block_device(idx);
+        plic::init_virtio_block_interrupt(plic_irq);
     }
 
     processes::kernel_tasks::create_worker_thread();

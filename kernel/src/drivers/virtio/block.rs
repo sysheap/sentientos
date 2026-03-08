@@ -1,4 +1,9 @@
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, vec::Vec};
+use core::{
+    pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
+    task::{Context, Poll, Waker},
+};
 use headers::errno::Errno;
 
 use crate::{
@@ -6,11 +11,11 @@ use crate::{
         capability::{
             DEVICE_STATUS_ACKNOWLEDGE, DEVICE_STATUS_DRIVER, DEVICE_STATUS_DRIVER_OK,
             DEVICE_STATUS_FAILED, DEVICE_STATUS_FEATURES_OK, VIRTIO_DEVICE_ID, VIRTIO_F_VERSION_1,
-            VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG, VIRTIO_PCI_CAP_NOTIFY_CFG,
-            VIRTIO_VENDOR_ID, VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID, virtio_pci_cap,
-            virtio_pci_common_cfg, virtio_pci_notify_cap,
+            VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG, VIRTIO_PCI_CAP_ISR_CFG,
+            VIRTIO_PCI_CAP_NOTIFY_CFG, VIRTIO_VENDOR_ID, VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID,
+            virtio_pci_cap, virtio_pci_common_cfg, virtio_pci_notify_cap,
         },
-        virtqueue::{BufferDirection, VirtQueue},
+        virtqueue::{BufferDirection, UsedBuffer, VirtQueue},
     },
     info,
     klibc::{
@@ -55,7 +60,92 @@ pub struct BlockDevice {
     capacity_sectors: u64,
 }
 
+pub struct InitializedBlockDevice {
+    pub device: BlockDevice,
+    pub interrupt_status: MMIO<u32>,
+}
+
 static BLOCK_DEVICES: Spinlock<Vec<BlockDevice>> = Spinlock::new(Vec::new());
+static BLOCK_ISR_STATUSES: Spinlock<Vec<MMIO<u32>>> = Spinlock::new(Vec::new());
+static BLOCK_INTERRUPT_COUNTER: AtomicU64 = AtomicU64::new(0);
+static BLOCK_INTERRUPT_WAKERS: Spinlock<Vec<Waker>> = Spinlock::new(Vec::new());
+static BLOCK_COMPLETIONS: Spinlock<BTreeMap<u16, UsedBuffer>> = Spinlock::new(BTreeMap::new());
+
+pub fn register_isr_status(isr: MMIO<u32>) {
+    BLOCK_ISR_STATUSES.lock().push(isr);
+}
+
+pub fn on_block_interrupt() {
+    for isr in BLOCK_ISR_STATUSES.lock().iter() {
+        let _status = isr.read();
+    }
+    BLOCK_INTERRUPT_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let wakers: Vec<Waker> = BLOCK_INTERRUPT_WAKERS.lock().drain(..).collect();
+    for waker in wakers {
+        waker.wake();
+    }
+}
+
+struct BlockInterruptWait {
+    seen_counter: u64,
+    registered: bool,
+}
+
+impl BlockInterruptWait {
+    fn new(seen_counter: u64) -> Self {
+        Self {
+            seen_counter,
+            registered: false,
+        }
+    }
+}
+
+impl Future for BlockInterruptWait {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let current = BLOCK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+        if current != self.seen_counter {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            BLOCK_INTERRUPT_WAKERS.lock().push(cx.waker().clone());
+            self.registered = true;
+            let current = BLOCK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+            if current != self.seen_counter {
+                return Poll::Ready(());
+            }
+        }
+        Poll::Pending
+    }
+}
+
+fn harvest_completions(device_index: usize) {
+    let received = {
+        let mut guard = BLOCK_DEVICES.lock();
+        guard
+            .get_mut(device_index)
+            .map(|dev| dev.request_queue.receive_buffer())
+            .unwrap_or_default()
+    };
+    if !received.is_empty() {
+        let mut completions = BLOCK_COMPLETIONS.lock();
+        for buf in received {
+            completions.insert(buf.index, buf);
+        }
+    }
+}
+
+async fn wait_for_completion(device_index: usize, head_index: u16) -> UsedBuffer {
+    loop {
+        let seen = BLOCK_INTERRUPT_COUNTER.load(Ordering::SeqCst);
+        harvest_completions(device_index);
+        if let Some(result) = BLOCK_COMPLETIONS.lock().remove(&head_index) {
+            return result;
+        }
+        BlockInterruptWait::new(seen).await;
+    }
+}
 
 pub fn assign_block_device(device: BlockDevice) -> usize {
     let mut devices = BLOCK_DEVICES.lock();
@@ -71,12 +161,15 @@ pub fn capacity(index: usize) -> u64 {
         .map_or(0, |d| d.capacity_bytes())
 }
 
-pub fn read(index: usize, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
-    let mut guard = BLOCK_DEVICES.lock();
-    let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
+pub async fn read(index: usize, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+    let cap = {
+        let guard = BLOCK_DEVICES.lock();
+        let dev = guard.get(index).ok_or(Errno::ENODEV)?;
+        #[allow(clippy::cast_possible_truncation)]
+        let cap = dev.capacity_bytes() as usize;
+        cap
+    };
 
-    #[allow(clippy::cast_possible_truncation)]
-    let cap = dev.capacity_bytes() as usize;
     if offset >= cap {
         return Ok(0);
     }
@@ -91,23 +184,40 @@ pub fn read(index: usize, offset: usize, buf: &mut [u8]) -> Result<usize, Errno>
     let end_sector = end.div_ceil(SECTOR_SIZE);
     let num_sectors = end_sector - start_sector;
 
-    let mut sector_buf = vec![0u8; num_sectors * SECTOR_SIZE];
-    dev.read_sectors(
-        u64::try_from(start_sector).expect("sector fits in u64"),
-        &mut sector_buf,
+    let sector_buf_len = num_sectors * SECTOR_SIZE;
+    let head_index = {
+        let mut guard = BLOCK_DEVICES.lock();
+        let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
+        dev.submit_read(
+            u64::try_from(start_sector).expect("sector fits in u64"),
+            sector_buf_len,
+        )
+    };
+
+    let result = wait_for_completion(index, head_index).await;
+    assert!(result.buffers.len() == 3, "Expected 3-descriptor chain");
+    let status = result.buffers[2][0];
+    assert!(
+        status == VIRTIO_BLK_S_OK,
+        "Block read failed with status {}",
+        status
     );
 
-    buf[..read_len]
-        .copy_from_slice(&sector_buf[offset_in_first_sector..offset_in_first_sector + read_len]);
+    buf[..read_len].copy_from_slice(
+        &result.buffers[1][offset_in_first_sector..offset_in_first_sector + read_len],
+    );
     Ok(read_len)
 }
 
-pub fn write(index: usize, offset: usize, data: &[u8]) -> Result<usize, Errno> {
-    let mut guard = BLOCK_DEVICES.lock();
-    let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
+pub async fn write(index: usize, offset: usize, data: &[u8]) -> Result<usize, Errno> {
+    let cap = {
+        let guard = BLOCK_DEVICES.lock();
+        let dev = guard.get(index).ok_or(Errno::ENODEV)?;
+        #[allow(clippy::cast_possible_truncation)]
+        let cap = dev.capacity_bytes() as usize;
+        cap
+    };
 
-    #[allow(clippy::cast_possible_truncation)]
-    let cap = dev.capacity_bytes() as usize;
     if offset >= cap {
         return Ok(0);
     }
@@ -125,18 +235,44 @@ pub fn write(index: usize, offset: usize, data: &[u8]) -> Result<usize, Errno> {
     // If not sector-aligned, read-modify-write
     let mut sector_buf = vec![0u8; num_sectors * SECTOR_SIZE];
     if offset_in_first_sector != 0 || !end.is_multiple_of(SECTOR_SIZE) {
-        dev.read_sectors(
-            u64::try_from(start_sector).expect("sector fits in u64"),
-            &mut sector_buf,
+        let head_index = {
+            let mut guard = BLOCK_DEVICES.lock();
+            let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
+            dev.submit_read(
+                u64::try_from(start_sector).expect("sector fits in u64"),
+                sector_buf.len(),
+            )
+        };
+        let result = wait_for_completion(index, head_index).await;
+        assert!(result.buffers.len() == 3, "Expected 3-descriptor chain");
+        let status = result.buffers[2][0];
+        assert!(
+            status == VIRTIO_BLK_S_OK,
+            "Block read (for RMW) failed with status {}",
+            status
         );
+        sector_buf.copy_from_slice(&result.buffers[1]);
     }
 
     sector_buf[offset_in_first_sector..offset_in_first_sector + write_len]
         .copy_from_slice(&data[..write_len]);
 
-    dev.write_sectors(
-        u64::try_from(start_sector).expect("sector fits in u64"),
-        &sector_buf,
+    let head_index = {
+        let mut guard = BLOCK_DEVICES.lock();
+        let dev = guard.get_mut(index).ok_or(Errno::ENODEV)?;
+        dev.submit_write(
+            u64::try_from(start_sector).expect("sector fits in u64"),
+            &sector_buf,
+        )
+    };
+
+    let result = wait_for_completion(index, head_index).await;
+    assert!(result.buffers.len() == 3, "Expected 3-descriptor chain");
+    let status = result.buffers[2][0];
+    assert!(
+        status == VIRTIO_BLK_S_OK,
+        "Block write failed with status {}",
+        status
     );
 
     Ok(write_len)
@@ -150,7 +286,7 @@ impl BlockDevice {
             && cs.subsystem_id().read() == VIRTIO_BLOCK_SUBSYSTEM_ID
     }
 
-    pub fn initialize(mut pci_device: PCIDevice) -> Result<Self, &'static str> {
+    pub fn initialize(mut pci_device: PCIDevice) -> Result<InitializedBlockDevice, &'static str> {
         let capabilities = pci_device.capabilities();
         let mut virtio_capabilities: Vec<MMIO<virtio_pci_cap>> = capabilities
             .filter(|cap| cap.id().read() == VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID)
@@ -260,6 +396,9 @@ impl BlockDevice {
             .write(request_queue.device_area_physical_address());
         common_cfg.queue_enable().write(1);
 
+        // Enable interrupts on request queue
+        request_queue.enable_interrupts();
+
         // Read device config (capacity)
         let blk_cfg_cap = virtio_capabilities
             .iter_mut()
@@ -280,10 +419,23 @@ impl BlockDevice {
             "Device failed"
         );
 
-        // Enable bus master for DMA
+        // Parse ISR status capability for interrupt acknowledgment
+        let isr_cfg_cap = virtio_capabilities
+            .iter()
+            .find(|cap| cap.cfg_type().read() == VIRTIO_PCI_CAP_ISR_CFG)
+            .ok_or("ISR configuration capability not found")?;
+
+        let isr_bar = pci_device.get_or_initialize_bar(isr_cfg_cap.bar().read());
+        let isr_status: MMIO<u32> =
+            MMIO::new((isr_bar.cpu_address + isr_cfg_cap.offset().read() as usize).as_usize());
+
+        // Enable Bus Master for DMA and clear Interrupt Disable for legacy INTx
         pci_device
             .configuration_space_mut()
             .set_command_register_bits(crate::pci::command_register::BUS_MASTER);
+        pci_device
+            .configuration_space_mut()
+            .clear_command_register_bits(crate::pci::command_register::INTERRUPT_DISABLE);
 
         info!(
             "Successfully initialized block device: {} sectors ({} bytes)",
@@ -291,12 +443,17 @@ impl BlockDevice {
             capacity_sectors * u64::try_from(SECTOR_SIZE).expect("fits")
         );
 
-        Ok(Self {
+        let device = BlockDevice {
             device: pci_device,
             common_cfg,
             blk_cfg,
             request_queue,
             capacity_sectors,
+        };
+
+        Ok(InitializedBlockDevice {
+            device,
+            interrupt_status: isr_status,
         })
     }
 
@@ -304,12 +461,12 @@ impl BlockDevice {
         self.capacity_sectors * u64::try_from(SECTOR_SIZE).expect("fits")
     }
 
-    fn read_sectors(&mut self, start_sector: u64, buf: &mut [u8]) {
+    fn submit_read(&mut self, start_sector: u64, buf_len: usize) -> u16 {
         assert!(
-            buf.len().is_multiple_of(SECTOR_SIZE),
+            buf_len.is_multiple_of(SECTOR_SIZE),
             "Buffer must be sector-aligned"
         );
-        let num_sectors = buf.len() / SECTOR_SIZE;
+        let num_sectors = buf_len / SECTOR_SIZE;
         assert!(
             start_sector + u64::try_from(num_sectors).expect("fits") <= self.capacity_sectors,
             "Read beyond device capacity"
@@ -322,38 +479,22 @@ impl BlockDevice {
         };
 
         let header_buf = header.as_slice().to_vec();
-        let data_buf = vec![0u8; buf.len()];
+        let data_buf = vec![0u8; buf_len];
         let status_buf = vec![0u8; 1];
 
         let chain = NonEmptyVec::new((header_buf, BufferDirection::DriverWritable))
             .push((data_buf, BufferDirection::DeviceWritable))
             .push((status_buf, BufferDirection::DeviceWritable));
 
-        self.request_queue
+        let head = self
+            .request_queue
             .put_buffer_chain(chain)
             .expect("Must be able to submit block request");
         self.request_queue.notify();
-
-        loop {
-            let completed = self.request_queue.receive_buffer();
-            if !completed.is_empty() {
-                assert!(completed.len() == 1, "Expected single completion");
-                let result = completed.into_iter().next().expect("checked");
-                assert!(result.buffers.len() == 3, "Expected 3-descriptor chain");
-                let status = result.buffers[2][0];
-                assert!(
-                    status == VIRTIO_BLK_S_OK,
-                    "Block read failed with status {}",
-                    status
-                );
-                buf.copy_from_slice(&result.buffers[1]);
-                return;
-            }
-            core::hint::spin_loop();
-        }
+        head
     }
 
-    fn write_sectors(&mut self, start_sector: u64, data: &[u8]) {
+    fn submit_write(&mut self, start_sector: u64, data: &[u8]) -> u16 {
         assert!(
             data.len().is_multiple_of(SECTOR_SIZE),
             "Data must be sector-aligned"
@@ -378,27 +519,12 @@ impl BlockDevice {
             .push((data_buf, BufferDirection::DriverWritable))
             .push((status_buf, BufferDirection::DeviceWritable));
 
-        self.request_queue
+        let head = self
+            .request_queue
             .put_buffer_chain(chain)
             .expect("Must be able to submit block request");
         self.request_queue.notify();
-
-        loop {
-            let completed = self.request_queue.receive_buffer();
-            if !completed.is_empty() {
-                assert!(completed.len() == 1, "Expected single completion");
-                let result = completed.into_iter().next().expect("checked");
-                assert!(result.buffers.len() == 3, "Expected 3-descriptor chain");
-                let status = result.buffers[2][0];
-                assert!(
-                    status == VIRTIO_BLK_S_OK,
-                    "Block write failed with status {}",
-                    status
-                );
-                return;
-            }
-            core::hint::spin_loop();
-        }
+        head
     }
 }
 

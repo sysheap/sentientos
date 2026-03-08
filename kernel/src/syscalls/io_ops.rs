@@ -36,7 +36,7 @@ impl LinuxSyscallHandler {
         Ok(data.len() as isize)
     }
 
-    pub(super) fn do_write(
+    pub(super) async fn do_write(
         &self,
         fd: c_int,
         buf: LinuxUserspaceArg<*const u8>,
@@ -46,11 +46,11 @@ impl LinuxSyscallHandler {
             .current_process
             .with_lock(|p| p.fd_table().get_descriptor(fd))?;
         let data = buf.validate_slice(count)?;
-        descriptor.write(&data)?;
+        descriptor.write(&data).await?;
         Ok(count as isize)
     }
 
-    pub(super) fn do_writev(
+    pub(super) async fn do_writev(
         &self,
         fd: c_int,
         iov: LinuxUserspaceArg<*const iovec>,
@@ -73,7 +73,7 @@ impl LinuxSyscallHandler {
         }
 
         let len = data.len();
-        descriptor.write(&data)?;
+        descriptor.write(&data).await?;
         Ok(len as isize)
     }
 
