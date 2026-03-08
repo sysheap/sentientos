@@ -27,8 +27,16 @@ impl PipeInner {
         }
     }
 
+    fn read_closed(&self) -> bool {
+        self.reader_count == 0
+    }
+
+    fn write_closed(&self) -> bool {
+        self.writer_count == 0
+    }
+
     pub fn write(&mut self, data: &[u8]) -> Result<usize, Errno> {
-        if self.reader_count == 0 {
+        if self.read_closed() {
             return Err(Errno::EPIPE);
         }
         self.data.extend(data);
@@ -41,7 +49,7 @@ impl PipeInner {
             let actual = min(self.data.len(), count);
             return Ok(self.data.drain(..actual).collect());
         }
-        if self.writer_count == 0 {
+        if self.write_closed() {
             return Ok(Vec::new());
         }
         Err(Errno::EAGAIN)
@@ -157,7 +165,7 @@ impl Future for ReadPipe {
             let actual = min(pipe.data.len(), max_count);
             return Poll::Ready(pipe.data.drain(..actual).collect());
         }
-        if pipe.writer_count == 0 {
+        if pipe.write_closed() {
             return Poll::Ready(Vec::new());
         }
         if !self.is_registered {
