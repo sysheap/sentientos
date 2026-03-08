@@ -147,6 +147,7 @@ impl LinuxSyscallHandler {
         options: c_int,
     ) -> Result<isize, Errno> {
         let wnohang = (options & headers::syscall_types::WNOHANG as c_int) != 0;
+        let wuntraced = (options & headers::syscall_types::WUNTRACED as c_int) != 0;
         let known_flags =
             (headers::syscall_types::WNOHANG | headers::syscall_types::WUNTRACED) as c_int;
         assert!(
@@ -167,7 +168,8 @@ impl LinuxSyscallHandler {
             let abs_pid = pid.checked_neg().ok_or(Errno::EINVAL)?;
             WaitPid::Pgid(Tid::try_from_i32(abs_pid).expect("abs(pid) is positive"))
         };
-        let (child_tid, wait_status) = WaitChild::new(parent_main_tid, target, wnohang).await?;
+        let (child_tid, wait_status) =
+            WaitChild::new(parent_main_tid, target, wnohang, wuntraced).await?;
 
         status.write_if_not_none(wait_status)?;
 

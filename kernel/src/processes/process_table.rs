@@ -129,6 +129,51 @@ impl ProcessTable {
         Some((tid, wstatus))
     }
 
+    pub fn take_stopped(&mut self, parent_tid: Tid, target: &WaitPid) -> Option<(Tid, i32)> {
+        let children = self.children.get(&parent_tid)?;
+
+        let tid = match target {
+            WaitPid::Specific(wanted) => {
+                if !children.contains(wanted) {
+                    return None;
+                }
+                let is_stopped = self
+                    .threads
+                    .get(wanted)?
+                    .with_lock(|t| t.get_state() == ThreadState::Stopped && !t.stopped_notified);
+                if !is_stopped {
+                    return None;
+                }
+                *wanted
+            }
+            WaitPid::Any => *children.iter().find(|&&child_tid| {
+                self.threads.get(&child_tid).is_some_and(|t| {
+                    t.with_lock(|t| t.get_state() == ThreadState::Stopped && !t.stopped_notified)
+                })
+            })?,
+            WaitPid::Pgid(pgid) => *children.iter().find(|&&child_tid| {
+                self.threads.get(&child_tid).is_some_and(|t| {
+                    t.with_lock(|t| {
+                        t.get_state() == ThreadState::Stopped
+                            && !t.stopped_notified
+                            && t.process().lock().pgid() == *pgid
+                    })
+                })
+            })?,
+        };
+
+        let thread = self.threads.get(&tid).expect("tid was just found");
+        thread.with_lock(|mut t| {
+            t.stopped_notified = true;
+        });
+
+        // WIFSTOPPED encoding: (SIGTSTP << 8) | 0x7f
+        let sigtstp =
+            i32::from(u8::try_from(headers::syscall_types::SIGTSTP).expect("SIGTSTP fits in u8"));
+        let wstatus = (sigtstp << 8) | 0x7f;
+        Some((tid, wstatus))
+    }
+
     pub fn get_pgid_of(&self, tid: Tid) -> Option<Tid> {
         let thread = self.threads.get(&tid)?;
         Some(thread.with_lock(|t| t.process().lock().pgid()))
