@@ -566,10 +566,9 @@ impl RootPageTableHolder {
         true
     }
 
-    pub fn get_userspace_permissions(&self, va: VirtAddr) -> XWRMode {
+    pub fn get_userspace_permissions(&self, va: VirtAddr) -> Option<XWRMode> {
         self.get_page_table_entry_for_address(va)
-            .expect("get_userspace_permissions: address not mapped")
-            .get_xwr_mode()
+            .map(|e| e.get_xwr_mode())
     }
 
     pub fn is_valid_userspace_ptr(&self, ptr: impl Pointer, writable: bool) -> bool {

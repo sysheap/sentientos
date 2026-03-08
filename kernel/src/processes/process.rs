@@ -20,6 +20,14 @@ use headers::errno::Errno;
 
 pub const POWERSAVE_TID: Tid = Tid::new(0);
 
+pub struct ForkedAddressSpace {
+    pub page_table: RootPageTableHolder,
+    pub allocated_pages: BTreeMap<VirtAddr, PinnedHeapPages>,
+    pub mmap_allocations: BTreeMap<VirtAddr, PinnedHeapPages>,
+    pub brk: Brk,
+    pub free_mmap_address: VirtAddr,
+}
+
 const FREE_MMAP_START_ADDRESS: usize = 0x2000000000;
 
 pub type ProcessRef = Arc<Spinlock<Process>>;
@@ -290,15 +298,7 @@ impl Process {
         self.threads.keys().copied().collect()
     }
 
-    pub fn fork_address_space(
-        &self,
-    ) -> (
-        RootPageTableHolder,
-        BTreeMap<VirtAddr, PinnedHeapPages>,
-        BTreeMap<VirtAddr, PinnedHeapPages>,
-        Brk,
-        VirtAddr,
-    ) {
+    pub fn fork_address_space(&self) -> ForkedAddressSpace {
         use super::signal;
 
         let mut child_pt = RootPageTableHolder::new_with_kernel_mapping(false);
@@ -325,7 +325,9 @@ impl Process {
                 }
                 for i in 0..parent_pages.len() {
                     let page_va = va + i * PAGE_SIZE;
-                    let perm = parent_pt.get_userspace_permissions(page_va);
+                    let Some(perm) = parent_pt.get_userspace_permissions(page_va) else {
+                        continue;
+                    };
                     pt.map_userspace(
                         page_va,
                         PhysAddr::new(child_pages.addr() + i * PAGE_SIZE),
@@ -339,16 +341,16 @@ impl Process {
             child_map
         };
 
-        let child_allocated = copy_pages(&self.allocated_pages, &mut child_pt, &self.page_table);
-        let child_mmap = copy_pages(&self.mmap_allocations, &mut child_pt, &self.page_table);
+        let allocated_pages = copy_pages(&self.allocated_pages, &mut child_pt, &self.page_table);
+        let mmap_allocations = copy_pages(&self.mmap_allocations, &mut child_pt, &self.page_table);
 
-        (
-            child_pt,
-            child_allocated,
-            child_mmap,
-            self.brk.clone(),
-            self.free_mmap_address,
-        )
+        ForkedAddressSpace {
+            page_table: child_pt,
+            allocated_pages,
+            mmap_allocations,
+            brk: self.brk.clone(),
+            free_mmap_address: self.free_mmap_address,
+        }
     }
 
     pub fn set_mmap_state(

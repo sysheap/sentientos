@@ -39,14 +39,13 @@ impl LinuxSyscallHandler {
 
         let child_tid = get_next_tid();
 
-        let (child_page_table, child_allocated, child_mmap, child_brk, child_free_mmap) =
-            parent_process.with_lock(|p| p.fork_address_space());
+        let forked = parent_process.with_lock(|p| p.fork_address_space());
 
         let child_process = Arc::new(Spinlock::new(Process::new(
             child_name.clone(),
-            child_page_table,
-            child_allocated,
-            child_brk,
+            forked.page_table,
+            forked.allocated_pages,
+            forked.brk,
             child_tid,
             parent_pgid,
             parent_sid,
@@ -59,7 +58,7 @@ impl LinuxSyscallHandler {
             child.set_fd_table(parent_fd_table);
             child.set_cwd(parent_cwd);
             child.set_umask(parent_umask);
-            child.set_mmap_state(child_mmap, child_free_mmap);
+            child.set_mmap_state(forked.mmap_allocations, forked.free_mmap_address);
         }
 
         let mut child_regs = parent_regs;

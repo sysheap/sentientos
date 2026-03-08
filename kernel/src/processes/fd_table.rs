@@ -8,7 +8,7 @@ use headers::{
 use crate::{
     fs::VfsOpenFile,
     io::{
-        pipe::{ReadPipe, SharedPipeBuffer},
+        pipe::{PipeReader, PipeWriter, ReadPipe},
         stdin_buf::ReadStdin,
     },
     net::sockets::SharedAssignedSocket,
@@ -44,38 +44,22 @@ pub enum FileDescriptor {
     Stderr,
     UnboundUdpSocket,
     UdpSocket(SharedAssignedSocket),
-    PipeRead(SharedPipeBuffer),
-    PipeWrite(SharedPipeBuffer),
+    PipeRead(PipeReader),
+    PipeWrite(PipeWriter),
     VfsFile(VfsOpenFile),
 }
 
 impl Clone for FileDescriptor {
     fn clone(&self) -> Self {
         match self {
-            Self::PipeRead(buf) => {
-                buf.lock().add_reader();
-                Self::PipeRead(buf.clone())
-            }
-            Self::PipeWrite(buf) => {
-                buf.lock().add_writer();
-                Self::PipeWrite(buf.clone())
-            }
+            Self::PipeRead(r) => Self::PipeRead(r.clone()),
+            Self::PipeWrite(w) => Self::PipeWrite(w.clone()),
             Self::Stdin => Self::Stdin,
             Self::Stdout => Self::Stdout,
             Self::Stderr => Self::Stderr,
             Self::UnboundUdpSocket => Self::UnboundUdpSocket,
             Self::UdpSocket(s) => Self::UdpSocket(s.clone()),
             Self::VfsFile(f) => Self::VfsFile(f.clone()),
-        }
-    }
-}
-
-impl Drop for FileDescriptor {
-    fn drop(&mut self) {
-        match self {
-            Self::PipeRead(buf) => buf.lock().close_read(),
-            Self::PipeWrite(buf) => buf.lock().close_write(),
-            _ => {}
         }
     }
 }
@@ -99,7 +83,7 @@ impl FileDescriptor {
     pub async fn read(&self, count: usize) -> Result<alloc::vec::Vec<u8>, Errno> {
         match self {
             FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
-            FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.clone(), count).await),
+            FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.shared_buffer(), count).await),
             FileDescriptor::VfsFile(file) => {
                 let mut tmp = alloc::vec![0u8; count];
                 let n = file.lock().read(&mut tmp)?;
@@ -121,7 +105,7 @@ impl FileDescriptor {
                     Ok(data)
                 }
             }
-            FileDescriptor::PipeRead(buf) => buf.lock().try_read(count),
+            FileDescriptor::PipeRead(buf) => buf.shared_buffer().lock().try_read(count),
             FileDescriptor::VfsFile(file) => {
                 let mut tmp = alloc::vec![0u8; count];
                 let n = file.lock().read(&mut tmp)?;
@@ -139,7 +123,7 @@ impl FileDescriptor {
                 print!("{}", s);
                 Ok(data.len())
             }
-            FileDescriptor::PipeWrite(buf) => buf.lock().write(data),
+            FileDescriptor::PipeWrite(buf) => buf.shared_buffer().lock().write(data),
             FileDescriptor::VfsFile(file) => file.lock().write(data),
             _ => Err(Errno::EBADF),
         }
