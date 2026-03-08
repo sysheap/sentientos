@@ -5,12 +5,18 @@ use core::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use headers::syscall_types::{
-    CLOCAL, CREAD, CS8, ECHO, ECHOE, ICANON, ICRNL, ISIG, NCCS, ONLCR, OPOST, VEOF, VERASE, VINTR,
-    VKILL, VMIN, VQUIT, VSUSP, VTIME, termios,
+use headers::{
+    errno::Errno,
+    syscall_types::{
+        CLOCAL, CREAD, CS8, ECHO, ECHOE, ICANON, ICRNL, ISIG, NCCS, ONLCR, OPOST, SIGTTIN, VEOF,
+        VERASE, VINTR, VKILL, VMIN, VQUIT, VSUSP, VTIME, termios,
+    },
 };
 
-use crate::klibc::{Spinlock, array_vec::ArrayVec, runtime_initialized::RuntimeInitializedData};
+use crate::{
+    klibc::{Spinlock, array_vec::ArrayVec, runtime_initialized::RuntimeInitializedData},
+    processes::{process::ProcessRef, process_table},
+};
 
 pub static CONSOLE_TTY: RuntimeInitializedData<TtyDevice> = RuntimeInitializedData::new();
 
@@ -249,19 +255,55 @@ impl TtyDeviceInner {
 pub struct ReadTty {
     device: TtyDevice,
     max_count: usize,
+    process: ProcessRef,
+    tid: Tid,
 }
 
 impl ReadTty {
-    pub fn new(device: TtyDevice, max_count: usize) -> Self {
-        Self { device, max_count }
+    pub fn new(device: TtyDevice, max_count: usize, process: ProcessRef, tid: Tid) -> Self {
+        Self {
+            device,
+            max_count,
+            process,
+            tid,
+        }
     }
 }
 
 impl Future for ReadTty {
-    type Output = Vec<u8>;
+    type Output = Result<Vec<u8>, Errno>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+
+        // SIGTTIN: background processes must not read from the controlling TTY
+        let fg_pgid = this.device.lock().fg_pgid();
+        let pgid = this.process.lock().pgid();
+
+        if pgid != fg_pgid {
+            let should_eio = process_table::THE.with_lock(|pt| {
+                let Some(thread) = pt.get_thread(this.tid) else {
+                    return true;
+                };
+                thread.with_lock(|t| {
+                    let is_blocked = t.get_sigmask() & (1u64 << SIGTTIN) != 0;
+                    let sa = t.get_sigaction_raw(SIGTTIN);
+                    let is_ignored = matches!(sa.sa_handler, Some(f) if f as usize == 1);
+                    is_blocked || is_ignored
+                })
+            });
+
+            if should_eio {
+                return Poll::Ready(Err(Errno::EIO));
+            }
+
+            process_table::THE.with_lock(|mut pt| {
+                pt.send_signal_to_pgid(pgid, SIGTTIN);
+            });
+
+            return Poll::Pending;
+        }
+
         let mut dev = this.device.lock();
         let is_canonical = dev.has_lflag(ICANON);
         let vmin = dev.vmin();
@@ -269,17 +311,17 @@ impl Future for ReadTty {
         if !dev.is_input_empty() {
             let min_needed = if is_canonical { 1 } else { vmin.max(1) };
             if dev.input_buf.len() >= min_needed || dev.input_buf.len() >= this.max_count {
-                return Poll::Ready(dev.get_input(this.max_count));
+                return Poll::Ready(Ok(dev.get_input(this.max_count)));
             }
         }
 
         if is_canonical && dev.eof_pending {
             dev.eof_pending = false;
-            return Poll::Ready(Vec::new());
+            return Poll::Ready(Ok(Vec::new()));
         }
 
         if !is_canonical && vmin == 0 {
-            return Poll::Ready(dev.get_input(this.max_count));
+            return Poll::Ready(Ok(dev.get_input(this.max_count)));
         }
 
         dev.register_wakeup(cx.waker().clone());
