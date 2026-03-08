@@ -1,9 +1,9 @@
-use alloc::sync::Arc;
+use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 use headers::errno::Errno;
 
-use crate::drivers::virtio::block;
+use crate::{drivers::virtio::block, klibc::Spinlock};
 
-use super::vfs::{NodeType, StaticDir, VfsNode, alloc_ino};
+use super::vfs::{DirEntry, NodeType, VfsNode, VfsNodeRef, alloc_ino};
 
 struct DevNull {
     ino: u64,
@@ -66,11 +66,12 @@ impl VfsNode for DevZero {
     }
 }
 
-struct DevVda {
+struct DevBlock {
     ino: u64,
+    index: usize,
 }
 
-impl VfsNode for DevVda {
+impl VfsNode for DevBlock {
     fn node_type(&self) -> NodeType {
         NodeType::File
     }
@@ -81,15 +82,15 @@ impl VfsNode for DevVda {
 
     #[allow(clippy::cast_possible_truncation)]
     fn size(&self) -> usize {
-        block::capacity() as usize
+        block::capacity(self.index) as usize
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
-        block::read(offset, buf)
+        block::read(self.index, offset, buf)
     }
 
     fn write(&self, offset: usize, data: &[u8]) -> Result<usize, Errno> {
-        block::write(offset, data)
+        block::write(self.index, offset, data)
     }
 
     fn truncate(&self) -> Result<(), Errno> {
@@ -97,10 +98,75 @@ impl VfsNode for DevVda {
     }
 }
 
-pub(super) fn new() -> Arc<StaticDir> {
-    StaticDir::new(vec![
-        ("null", Arc::new(DevNull { ino: alloc_ino() })),
-        ("zero", Arc::new(DevZero { ino: alloc_ino() })),
-        ("vda", Arc::new(DevVda { ino: alloc_ino() })),
-    ])
+struct DevfsDir {
+    ino: u64,
+    entries: Spinlock<BTreeMap<String, VfsNodeRef>>,
+}
+
+impl VfsNode for DevfsDir {
+    fn node_type(&self) -> NodeType {
+        NodeType::Directory
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn lookup(&self, name: &str) -> Result<VfsNodeRef, Errno> {
+        self.entries.lock().get(name).cloned().ok_or(Errno::ENOENT)
+    }
+
+    fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
+        Ok(self
+            .entries
+            .lock()
+            .iter()
+            .map(|(name, node)| DirEntry {
+                name: name.clone(),
+                ino: node.ino(),
+                node_type: node.node_type(),
+            })
+            .collect())
+    }
+}
+
+static DEVFS: Spinlock<Option<Arc<DevfsDir>>> = Spinlock::new(None);
+
+pub(super) fn new() -> VfsNodeRef {
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        String::from("null"),
+        Arc::new(DevNull { ino: alloc_ino() }) as VfsNodeRef,
+    );
+    entries.insert(
+        String::from("zero"),
+        Arc::new(DevZero { ino: alloc_ino() }) as VfsNodeRef,
+    );
+
+    let dir = Arc::new(DevfsDir {
+        ino: alloc_ino(),
+        entries: Spinlock::new(entries),
+    });
+    *DEVFS.lock() = Some(dir.clone());
+    dir
+}
+
+pub fn register_block_device(index: usize) {
+    let name = alloc::format!(
+        "vd{}",
+        (b'a' + u8::try_from(index).expect("index fits in u8")) as char
+    );
+    let node: VfsNodeRef = Arc::new(DevBlock {
+        ino: alloc_ino(),
+        index,
+    });
+    let devfs = DEVFS.lock();
+    let dir = devfs
+        .as_ref()
+        .expect("devfs must be initialized before registering devices");
+    dir.entries.lock().insert(name, node);
 }

@@ -1,4 +1,4 @@
-mod devfs;
+pub mod devfs;
 pub mod open_file;
 mod procfs;
 mod tmpfs;

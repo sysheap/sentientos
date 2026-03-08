@@ -2,7 +2,7 @@
 target = "riscv64gc-unknown-none-elf"
 
 [target.riscv64gc-unknown-none-elf]
-runner = "./qemu_wrapper.sh --gdb --net --smp"
+runner = "./qemu_wrapper.sh --gdb --net --smp --block disk.img"
 
 [target.x86_64-unknown-linux-gnu]
 linker = "gcc"

@@ -200,9 +200,11 @@ pub struct BlockDevice {
 - Subsystem ID: 2
 - Single virtqueue (index 0)
 - Read/write via `read_sectors()`/`write_sectors()` with spin-wait completion
-- Global `BLOCK_DEVICE: Spinlock<Option<BlockDevice>>` with `read()`/`write()` byte-level API
-- Exposed as `/dev/vda` in devfs
-- QEMU: `--block disk.img` flag in `qemu_wrapper.sh`
+- Global `BLOCK_DEVICES: Spinlock<Vec<BlockDevice>>` with indexed `read(index, ...)`/`write(index, ...)` byte-level API
+- `assign_block_device()` returns the device index; each device is dynamically registered in devfs as `/dev/vda`, `/dev/vdb`, etc.
+- Devfs uses `DevfsDir` with `Spinlock<BTreeMap>` entries for dynamic registration via `devfs::register_block_device(index)`
+- Only appears in `/dev` when a block device is actually attached (no unconditional entries)
+- QEMU: `--block disk.img` flag in `qemu_wrapper.sh` (auto-creates 1MB image if missing)
 
 ### VirtIO Capabilities
 

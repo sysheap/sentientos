@@ -51,6 +51,9 @@ while [[ $# -gt 0 ]]; do
             shift
             BLOCK_FILE="$1"
             shift
+            if [[ ! -f "$BLOCK_FILE" ]]; then
+                dd if=/dev/zero of="$BLOCK_FILE" bs=1M count=1 2>/dev/null
+            fi
             QEMU_CMD+=" -drive if=none,file=${BLOCK_FILE},format=raw,id=hd0 -device virtio-blk-pci,drive=hd0"
             ;;
         --net)
