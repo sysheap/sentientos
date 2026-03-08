@@ -115,7 +115,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         buf: LinuxUserspaceArg<*const u8>,
         count: usize,
     ) -> Result<isize, Errno> {
-        self.do_write(fd, buf, count)
+        self.do_write(fd, buf, count).await
     }
 
     async fn writev(
@@ -124,7 +124,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         iov: LinuxUserspaceArg<*const iovec>,
         iovcnt: c_int,
     ) -> Result<isize, Errno> {
-        self.do_writev(fd, iov, iovcnt)
+        self.do_writev(fd, iov, iovcnt).await
     }
 
     async fn close(&mut self, fd: c_int) -> Result<isize, Errno> {

@@ -85,10 +85,25 @@ impl FileDescriptor {
             FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
             FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.shared_buffer(), count).await),
             FileDescriptor::VfsFile(file) => {
-                let mut tmp = alloc::vec![0u8; count];
-                let n = file.lock().read(&mut tmp)?;
-                tmp.truncate(n);
-                Ok(tmp)
+                let block_info = {
+                    let inner = file.lock();
+                    inner
+                        .node()
+                        .block_device_index()
+                        .map(|idx| (idx, inner.offset()))
+                };
+                if let Some((idx, offset)) = block_info {
+                    let mut tmp = alloc::vec![0u8; count];
+                    let n = crate::drivers::virtio::block::read(idx, offset, &mut tmp).await?;
+                    file.lock().advance_offset(n);
+                    tmp.truncate(n);
+                    Ok(tmp)
+                } else {
+                    let mut tmp = alloc::vec![0u8; count];
+                    let n = file.lock().read(&mut tmp)?;
+                    tmp.truncate(n);
+                    Ok(tmp)
+                }
             }
             _ => Err(Errno::EBADF),
         }
@@ -116,7 +131,7 @@ impl FileDescriptor {
         }
     }
 
-    pub fn write(&self, data: &[u8]) -> Result<usize, Errno> {
+    pub async fn write(&self, data: &[u8]) -> Result<usize, Errno> {
         match self {
             FileDescriptor::Stdout | FileDescriptor::Stderr => {
                 let s = alloc::string::String::from_utf8_lossy(data);
@@ -124,7 +139,22 @@ impl FileDescriptor {
                 Ok(data.len())
             }
             FileDescriptor::PipeWrite(buf) => buf.shared_buffer().lock().write(data),
-            FileDescriptor::VfsFile(file) => file.lock().write(data),
+            FileDescriptor::VfsFile(file) => {
+                let block_info = {
+                    let mut inner = file.lock();
+                    inner
+                        .node()
+                        .block_device_index()
+                        .map(|idx| (idx, inner.effective_write_offset()))
+                };
+                if let Some((idx, offset)) = block_info {
+                    let n = crate::drivers::virtio::block::write(idx, offset, data).await?;
+                    file.lock().advance_offset(n);
+                    Ok(n)
+                } else {
+                    file.lock().write(data)
+                }
+            }
             _ => Err(Errno::EBADF),
         }
     }

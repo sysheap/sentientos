@@ -85,16 +85,12 @@ impl VfsNode for DevBlock {
         block::capacity(self.index) as usize
     }
 
-    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
-        block::read(self.index, offset, buf)
-    }
-
-    fn write(&self, offset: usize, data: &[u8]) -> Result<usize, Errno> {
-        block::write(self.index, offset, data)
-    }
-
     fn truncate(&self) -> Result<(), Errno> {
         Err(Errno::EINVAL)
+    }
+
+    fn block_device_index(&self) -> Option<usize> {
+        Some(self.index)
     }
 }
 

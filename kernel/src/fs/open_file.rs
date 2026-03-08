@@ -77,6 +77,18 @@ impl VfsOpenFileInner {
         self.offset
     }
 
+    pub fn advance_offset(&mut self, n: usize) {
+        self.offset += n;
+    }
+
+    pub fn effective_write_offset(&mut self) -> usize {
+        use headers::syscall_types::O_APPEND;
+        if (self.flags.cast_unsigned() & O_APPEND) != 0 {
+            self.offset = self.node.size();
+        }
+        self.offset
+    }
+
     pub fn is_directory(&self) -> bool {
         self.node.node_type() == NodeType::Directory
     }

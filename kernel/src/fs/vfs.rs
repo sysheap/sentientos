@@ -106,6 +106,10 @@ pub trait VfsNode: Send + Sync {
     fn readdir(&self) -> Result<Vec<DirEntry>, Errno> {
         Err(Errno::ENOTDIR)
     }
+
+    fn block_device_index(&self) -> Option<usize> {
+        None
+    }
 }
 
 static MOUNT_TABLE: Spinlock<BTreeMap<String, VfsNodeRef>> = Spinlock::new(BTreeMap::new());
