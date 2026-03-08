@@ -349,6 +349,33 @@ impl<'a> ElfFile<'a> {
         }
     }
 
+    fn get_section_name(&self, section: &ElfSectionHeader) -> Option<&'a str> {
+        let header = self.get_header();
+        let sections = self.get_section_headers();
+        let shstrtab =
+            sections.get(header.index_of_section_names_in_section_header_table as usize)?;
+        let offset = shstrtab.sh_offset.as_usize();
+        let size = shstrtab.sh_size.as_usize();
+        let strtab = self.data.get(offset..offset + size)?;
+        let name_start = section.sh_name as usize;
+        let name_bytes = strtab.get(name_start..)?;
+        let len = name_bytes.iter().position(|&b| b == 0)?;
+        core::str::from_utf8(&name_bytes[..len]).ok()
+    }
+
+    pub fn find_section_data_by_name(&self, name: &str) -> Option<(&'a [u8], usize)> {
+        let sections = self.get_section_headers();
+        for section in sections {
+            if self.get_section_name(section) == Some(name) {
+                let offset = section.sh_offset.as_usize();
+                let size = section.sh_size.as_usize();
+                let data = self.data.get(offset..offset + size)?;
+                return Some((data, section.sh_addr.as_usize()));
+            }
+        }
+        None
+    }
+
     pub fn find_symbol(&self, address: usize) -> Option<(&str, usize)> {
         let sections = self.get_section_headers();
         let symtab = sections.iter().find(|s| s.sh_type == SHT_SYMTAB)?;

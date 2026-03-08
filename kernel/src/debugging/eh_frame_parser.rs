@@ -105,13 +105,16 @@ impl<'a> EhFrameIterator<'a> {
     fn parse_cie(&mut self, length: usize, offset_of_cie: usize) -> Option<()> {
         let begin_position = self.data.position();
         let version = self.data.consume_sized_type::<u8>()?;
-        assert_eq!(version, 1);
+        assert!(
+            version == 1 || version == 3,
+            "Unsupported CIE version: {version}"
+        );
         let augmentation_string = self.data.consume_str()?;
 
-        // In case we have a signal trampoline this will change
-        // and contains an S
-        // See gimli parser for more details
-        assert_eq!(augmentation_string, "zR");
+        assert!(
+            augmentation_string.starts_with('z') && augmentation_string.contains('R'),
+            "Unsupported augmentation: {augmentation_string}"
+        );
 
         let _eh_data = if augmentation_string.contains("eh") {
             Some(self.data.consume_sized_type::<usize>()?)
@@ -174,9 +177,11 @@ impl<'a> EhFrameIterator<'a> {
             .clone();
 
         // Parse encoding of PC Begin
+        // R is always last in the augmentation string, so its encoding byte
+        // is the last byte of the CIE augmentation data.
         let pc_begin = if cie.augmentation_string.contains('R') {
-            assert_eq!(cie.augmentation_data?.len(), 1);
-            let augmentation_byte = cie.augmentation_data?[0];
+            let aug_data = cie.augmentation_data?;
+            let augmentation_byte = *aug_data.last()?;
             self.parse_pc_begin(augmentation_byte)?
         } else {
             self.data.consume_sized_type::<u32>()? as usize
@@ -281,6 +286,12 @@ impl<'a> EhFrameIterator<'a> {
                 let offset = instructions.consume_unsized_type::<UnsignedLEB128>()?.get();
                 Some(Instruction::DefCfa { register, offset })
             }
+            consts::DW_CFA_DEF_CFA_REGISTER => {
+                let register =
+                    u16::try_from(instructions.consume_unsized_type::<UnsignedLEB128>()?.get())
+                        .expect("Register number must fit in u16");
+                Some(Instruction::DefCfaRegister { register })
+            }
             consts::DW_CFA_DEF_CFA_OFFSET => {
                 let offset = instructions.consume_unsized_type::<UnsignedLEB128>()?.get();
                 Some(Instruction::DefCfaOffset { offset })
@@ -316,6 +327,7 @@ mod consts {
     pub const DW_CFA_OFFSET: u8 = 0x02 << 6;
     pub const DW_CFA_RESTORE: u8 = 0x03 << 6;
     pub const DW_CFA_DEF_CFA: u8 = 0x0c;
+    pub const DW_CFA_DEF_CFA_REGISTER: u8 = 0x0d;
     pub const DW_CFA_DEF_CFA_OFFSET: u8 = 0x0e;
     pub const DW_CFA_NOP: u8 = 0;
     pub const DW_CFA_ADVANCE_LOC1: u8 = 0x02;
@@ -331,6 +343,7 @@ pub enum Instruction {
     Offset { register: u16, offset: u64 },
     Restore { register: u16 },
     DefCfa { register: u16, offset: u64 },
+    DefCfaRegister { register: u16 },
     DefCfaOffset { offset: u64 },
     RemeberState,
     RestoreState,
@@ -476,6 +489,11 @@ mod tests {
                     offset: offset_,
                 } => {
                     matches!(self, CallFrameInstruction::DefCfa { register, offset } if register.0 == *register_ && offset == offset_)
+                }
+                Instruction::DefCfaRegister {
+                    register: register_,
+                } => {
+                    matches!(self, CallFrameInstruction::DefCfaRegister { register } if register.0 == *register_)
                 }
                 Instruction::DefCfaOffset { offset: offset_ } => {
                     matches!(self, CallFrameInstruction::DefCfaOffset { offset } if offset == offset_)

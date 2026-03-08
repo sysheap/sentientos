@@ -1,9 +1,9 @@
 use crate::{cpu::Cpu, info, klibc::sizes::MiB, processes::process_table};
 
 pub mod backtrace;
-mod eh_frame_parser;
+pub mod eh_frame_parser;
 pub mod symbols;
-mod unwinder;
+pub mod unwinder;
 
 pub fn dump_current_state() {
     let allocated_size_heap = crate::memory::heap::allocated_size();
