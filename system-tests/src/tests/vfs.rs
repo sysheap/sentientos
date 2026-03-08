@@ -1,4 +1,4 @@
-use crate::infra::qemu::QemuInstance;
+use crate::infra::qemu::{QemuInstance, QemuOptions};
 
 #[tokio::test]
 async fn cat_proc_version() -> anyhow::Result<()> {
@@ -91,5 +91,27 @@ async fn ls_dev() -> anyhow::Result<()> {
     let output = solaya.run_prog("ls-test /dev").await?;
     assert!(output.contains("null"), "ls /dev should list null");
     assert!(output.contains("zero"), "ls /dev should list zero");
+    assert!(
+        !output.contains("vda"),
+        "/dev/vda should not appear without --block"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn ls_dev_with_block() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let disk_path = dir.path().join("disk.img");
+    std::fs::write(&disk_path, vec![0u8; 1024 * 1024])?;
+
+    let mut solaya =
+        QemuInstance::start_with(QemuOptions::default().block_device(disk_path)).await?;
+    let output = solaya.run_prog("ls-test /dev").await?;
+    assert!(output.contains("null"), "ls /dev should list null");
+    assert!(output.contains("zero"), "ls /dev should list zero");
+    assert!(
+        output.contains("vda"),
+        "/dev/vda should appear with --block"
+    );
     Ok(())
 }
