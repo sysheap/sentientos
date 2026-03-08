@@ -224,7 +224,7 @@ Already configured in `.mcp.json` at the project root. Claude Code picks it up a
 
 **Commit incrementally.** Commit each small working step toward a larger goal. Include test code in commits. This enables incremental progress verification rather than large, hard-to-debug changesets.
 
-**Run commit-review after every commit.** After creating a commit, always use the Task tool with `subagent_type: commit-review` to review your changes. Do not skip this step.
+**Run commit-review after every commit.** After creating a commit, always use the Task tool with `subagent_type: commit-review` to review your changes. Run it in the foreground (not background) and wait for it to complete before continuing work, to prevent file conflicts from concurrent edits. Do not skip this step.
 
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
