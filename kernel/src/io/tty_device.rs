@@ -36,6 +36,7 @@ pub struct TtyDeviceInner {
     input_buf: VecDeque<u8>,
     wakeup_queue: Vec<Waker>,
     fg_pgid: Tid,
+    eof_pending: bool,
 }
 
 impl TtyDeviceInner {
@@ -63,6 +64,7 @@ impl TtyDeviceInner {
             input_buf: VecDeque::new(),
             wakeup_queue: Vec::new(),
             fg_pgid: Tid::new(1), // init process group by default
+            eof_pending: false,
         }
     }
 
@@ -175,7 +177,10 @@ impl TtyDeviceInner {
                     let _ = echo.push(b'\x08');
                 }
             } else if byte == self.settings.c_cc[VEOF as usize] {
-                if !self.line_buf.is_empty() {
+                if self.line_buf.is_empty() {
+                    self.eof_pending = true;
+                    self.wake_all();
+                } else {
                     self.flush_line_buf();
                 }
             } else if byte == self.settings.c_cc[VKILL as usize] {
@@ -208,13 +213,16 @@ impl TtyDeviceInner {
 
     fn flush_line_buf(&mut self) {
         self.input_buf.extend(self.line_buf.drain(..));
-        while let Some(waker) = self.wakeup_queue.pop() {
-            waker.wake();
-        }
+        self.eof_pending = false;
+        self.wake_all();
     }
 
     fn push_input(&mut self, byte: u8) {
         self.input_buf.push_back(byte);
+        self.wake_all();
+    }
+
+    fn wake_all(&mut self) {
         while let Some(waker) = self.wakeup_queue.pop() {
             waker.wake();
         }
@@ -268,6 +276,11 @@ impl Future for ReadTty {
             if dev.input_buf.len() >= min_needed || dev.input_buf.len() >= this.max_count {
                 return Poll::Ready(dev.get_input(this.max_count));
             }
+        }
+
+        if is_canonical && dev.eof_pending {
+            dev.eof_pending = false;
+            return Poll::Ready(Vec::new());
         }
 
         if !is_canonical && vmin == 0 {
@@ -363,6 +376,37 @@ mod tests {
             matches!(r.action, InputAction::Signal(sig) if sig == headers::syscall_types::SIGQUIT)
         );
         assert_eq!(&*r.echo, b"^\\\r\n");
+    }
+
+    #[test_case]
+    fn ctrl_d_on_empty_line_sets_eof() {
+        let mut dev = TtyDeviceInner::new();
+        let r = dev.process_input_byte(4); // Ctrl-D
+        assert!(matches!(r.action, InputAction::Consumed));
+        assert!(dev.eof_pending);
+        assert!(dev.is_input_empty());
+    }
+
+    #[test_case]
+    fn ctrl_d_with_data_flushes_without_eof() {
+        let mut dev = TtyDeviceInner::new();
+        dev.process_input_byte(b'a');
+        dev.process_input_byte(b'b');
+        let r = dev.process_input_byte(4); // Ctrl-D
+        assert!(matches!(r.action, InputAction::Consumed));
+        assert!(!dev.eof_pending);
+        assert_eq!(dev.get_input(1024), b"ab");
+    }
+
+    #[test_case]
+    fn new_line_clears_stale_eof_pending() {
+        let mut dev = TtyDeviceInner::new();
+        dev.process_input_byte(4); // Ctrl-D on empty line
+        assert!(dev.eof_pending);
+        dev.process_input_byte(b'x');
+        dev.process_input_byte(b'\n');
+        assert!(!dev.eof_pending);
+        assert_eq!(dev.get_input(1024), b"x\n");
     }
 
     #[test_case]

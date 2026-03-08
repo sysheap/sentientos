@@ -62,7 +62,7 @@ const DONT_LOG_FOLLOWING_MODULES: &[&str] = &[
     "kernel::processes::scheduler",
     "kernel::processes::process_table",
     "kernel::processes::timer",
-    "kernel::io::stdin_buf",
+    "kernel::io::tty_device",
 ];
 ```
 

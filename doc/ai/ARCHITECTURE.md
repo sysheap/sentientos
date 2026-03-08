@@ -31,7 +31,7 @@ kernel/src/
   interrupts/          # Trap handling, PLIC
   net/                 # UDP network stack
   drivers/virtio/      # VirtIO drivers
-  io/                  # UART, TTY line discipline, stdin buffer
+  io/                  # UART, TtyDevice (terminal subsystem)
   pci/                 # PCI enumeration
   klibc/               # Kernel utilities
   debugging/           # Backtrace, symbols
@@ -145,8 +145,8 @@ All 32 general-purpose registers saved on trap/syscall.
      Timer Int    UART Int    Syscall
           |           |           |
           v           v           v
-    scheduler    stdin_buf   syscalls/
-    .schedule()  .push()     handler.rs
+    scheduler    tty_device  syscalls/
+    .schedule()  .push_input handler.rs
           |           |           |
           v           v           v
     Context      read()      Process/
