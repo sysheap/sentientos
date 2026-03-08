@@ -86,6 +86,7 @@ linux_syscalls! {
     SYSCALL_NR_UTIMENSAT => utimensat(dirfd: c_int, pathname: *const u8, times: usize, flags: c_int);
     SYSCALL_NR_WAIT4 => wait4(pid: c_int, status: Option<*mut c_int>, options: c_int, rusage: usize);
     SYSCALL_NR_WRITEV => writev(fd: c_int, iov: *const iovec, iovcnt: c_int);
+    SYSCALL_NR_SPLICE => splice(fd_in: c_int, off_in: usize, fd_out: c_int, off_out: usize, len: usize, flags: c_uint);
     SYSCALL_NR_WRITE => write(fd: c_int, buf: *const u8, count: usize);
 }
 
@@ -620,6 +621,18 @@ impl LinuxSyscalls for LinuxSyscallHandler {
 
     async fn getegid(&mut self) -> Result<isize, Errno> {
         Ok(0)
+    }
+
+    async fn splice(
+        &mut self,
+        _fd_in: c_int,
+        _off_in: usize,
+        _fd_out: c_int,
+        _off_out: usize,
+        _len: usize,
+        _flags: c_uint,
+    ) -> Result<isize, Errno> {
+        Err(Errno::ENOSYS)
     }
 }
 

@@ -9,6 +9,7 @@ build-cargo: build-userspace
 
 build-userspace:
     cd userspace && cargo build --bins --target-dir ../target-userspace --artifact-dir ../kernel/compiled_userspace -Z unstable-options --release # -Z build-std=panic_abort,std
+    cd kernel/compiled_userspace && grep '^uu_' ../../userspace/Cargo.toml | sed 's/^uu_//;s/[= {].*//' | xargs -I{} ln -sf coreutils {}
 
 clippy: build-userspace
     cd userspace && cargo clippy -- -D warnings
