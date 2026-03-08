@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, string::ToString, vec::Vec};
 use common::errors::LoaderError;
-use headers::syscall_types::{AT_NULL, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM};
+use headers::syscall_types::{AT_NULL, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_RANDOM};
 
 use crate::klibc::{util::align_up, writable_buffer::WritableBuffer};
 
@@ -40,6 +40,8 @@ struct AuxvInfo {
     phnum: usize,
 }
 
+const AT_RANDOM_SIZE: usize = 16;
+
 fn set_up_arguments(
     stack: &mut [u8],
     name: &str,
@@ -48,11 +50,17 @@ fn set_up_arguments(
     auxv_info: &AuxvInfo,
 ) -> Result<VirtAddr, LoaderError> {
     // layout:
-    // [argc, argv[0]..argv[n], NULL, envp[0]..envp[m], NULL, auxv..., name\0, args\0..., env\0...]
+    // [argc, argv[0]..argv[n], NULL, envp[0]..envp[m], NULL, auxv..., name\0, args\0..., env\0..., random(16)]
     let argc = 1 + args.len(); // name + amount of args
     let mut argv = vec![0usize; args.len() + 2]; // number of args plus name and null terminator
     let mut envp = vec![0usize; env.len() + 1]; // env entries + NULL
-    let auxv = [
+
+    let mut random_bytes = [0u8; AT_RANDOM_SIZE];
+    if crate::drivers::virtio::rng::is_available() {
+        crate::drivers::virtio::rng::read_random(&mut random_bytes);
+    }
+
+    let mut auxv = [
         AT_PAGESZ as usize,
         PAGE_SIZE,
         AT_PHDR as usize,
@@ -61,9 +69,12 @@ fn set_up_arguments(
         auxv_info.phent,
         AT_PHNUM as usize,
         auxv_info.phnum,
+        AT_RANDOM as usize,
+        0, // placeholder, patched below
         AT_NULL as usize,
         0,
     ];
+
     let strings = [name]
         .iter()
         .chain(args)
@@ -75,13 +86,18 @@ fn set_up_arguments(
     let start_of_strings_offset =
         core::mem::size_of_val(&argc) + argv.in_bytes() + envp.in_bytes() + auxv.in_bytes();
 
-    let total_length = align_up(start_of_strings_offset + strings.in_bytes(), 8);
+    let random_bytes_offset = start_of_strings_offset + strings.in_bytes();
+    let total_length = align_up(random_bytes_offset + AT_RANDOM_SIZE, 8);
 
     if total_length >= stack.len() {
         return Err(LoaderError::StackToSmall);
     }
 
     let real_start = STACK_START - total_length + 1;
+
+    // Patch AT_RANDOM to point at the random bytes on the stack
+    auxv[9] = (real_start + random_bytes_offset).as_usize();
+
     let mut addr_current_string = real_start + start_of_strings_offset;
 
     // Patch argv pointers
@@ -129,6 +145,10 @@ fn set_up_arguments(
 
     writable_buffer
         .write_slice(&strings)
+        .map_err(|_| LoaderError::StackToSmall)?;
+
+    writable_buffer
+        .write_slice(&random_bytes)
         .map_err(|_| LoaderError::StackToSmall)?;
 
     // We want to point into the arguments

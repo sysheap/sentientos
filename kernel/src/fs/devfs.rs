@@ -1,7 +1,10 @@
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 use headers::errno::Errno;
 
-use crate::{drivers::virtio::block, klibc::Spinlock};
+use crate::{
+    drivers::virtio::{block, rng},
+    klibc::Spinlock,
+};
 
 use super::vfs::{DirEntry, NodeType, VfsNode, VfsNodeRef, alloc_ino};
 
@@ -94,6 +97,37 @@ impl VfsNode for DevBlock {
     }
 }
 
+struct DevRandom {
+    ino: u64,
+}
+
+impl VfsNode for DevRandom {
+    fn node_type(&self) -> NodeType {
+        NodeType::File
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn read(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+        rng::read_random(buf);
+        Ok(buf.len())
+    }
+
+    fn write(&self, _offset: usize, data: &[u8]) -> Result<usize, Errno> {
+        Ok(data.len())
+    }
+
+    fn truncate(&self) -> Result<(), Errno> {
+        Ok(())
+    }
+}
+
 struct DevfsDir {
     ino: u64,
     entries: Spinlock<BTreeMap<String, VfsNodeRef>>,
@@ -149,6 +183,15 @@ pub(super) fn new() -> VfsNodeRef {
     });
     *DEVFS.lock() = Some(dir.clone());
     dir
+}
+
+pub fn register_random_device() {
+    let node: VfsNodeRef = Arc::new(DevRandom { ino: alloc_ino() });
+    let dir = DEVFS
+        .lock()
+        .clone()
+        .expect("devfs must be initialized before registering devices");
+    dir.entries.lock().insert(String::from("random"), node);
 }
 
 pub fn register_block_device(index: usize) {
