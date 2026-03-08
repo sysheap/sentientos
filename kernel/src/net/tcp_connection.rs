@@ -68,9 +68,7 @@ pub struct TcpConnection {
     established: bool,
     closed: bool,
     user_close_requested: bool,
-    user_close_waker: Option<Waker>,
     send_buffer: VecDeque<u8>,
-    send_waker: Option<Waker>,
 }
 
 pub type SharedTcpConnection = Arc<Spinlock<TcpConnection>>;
@@ -89,17 +87,13 @@ impl TcpConnection {
             established: false,
             closed: false,
             user_close_requested: false,
-            user_close_waker: None,
             send_buffer: VecDeque::new(),
-            send_waker: None,
         }
     }
 
-    fn deliver_segment(&mut self, segment: ReceivedSegment) {
+    fn deliver_segment(&mut self, segment: ReceivedSegment) -> Option<Waker> {
         self.segment_mailbox.push_back(segment);
-        if let Some(waker) = self.segment_waker.take() {
-            waker.wake();
-        }
+        self.segment_waker.take()
     }
 
     pub fn local_port(&self) -> u16 {
@@ -135,36 +129,14 @@ impl TcpConnection {
         self.recv_waker = Some(waker);
     }
 
-    pub fn queue_send_data(&mut self, data: &[u8]) {
+    pub fn queue_send_data(&mut self, data: &[u8]) -> Option<Waker> {
         self.send_buffer.extend(data);
-        if let Some(waker) = self.send_waker.take() {
-            waker.wake();
-        }
+        self.segment_waker.take()
     }
 
-    pub fn request_close(&mut self) {
+    pub fn request_close(&mut self) -> Option<Waker> {
         self.user_close_requested = true;
-        if let Some(waker) = self.user_close_waker.take() {
-            waker.wake();
-        }
-        if let Some(waker) = self.segment_waker.take() {
-            waker.wake();
-        }
-    }
-
-    fn send_packet(&self, flags: u16, seq: u32, ack: u32, data: &[u8]) {
-        let packet = TcpHeader::create_tcp_packet(
-            self.id.remote_ip,
-            self.remote_mac,
-            self.id.local_port,
-            self.id.remote_port,
-            seq,
-            ack,
-            flags,
-            WINDOW_SIZE,
-            data,
-        );
-        super::send_packet(packet);
+        self.segment_waker.take()
     }
 }
 
@@ -189,11 +161,9 @@ impl TcpListener {
         self.port
     }
 
-    fn push_connection(&mut self, conn: SharedTcpConnection) {
+    fn push_connection(&mut self, conn: SharedTcpConnection) -> Option<Waker> {
         self.backlog.push_back(conn);
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+        self.waker.take()
     }
 
     pub fn accept(&mut self) -> Option<SharedTcpConnection> {
@@ -242,7 +212,10 @@ pub fn process_tcp_packet(ip_header: &IpV4Header, data: &[u8], source_mac: MacAd
 
     // Try existing connection first
     if let Some(conn) = TCP_CONNECTIONS.lock().get(&conn_id) {
-        conn.lock().deliver_segment(segment);
+        let waker = conn.lock().deliver_segment(segment);
+        if let Some(w) = waker {
+            w.wake();
+        }
         return;
     }
 
@@ -304,7 +277,7 @@ impl Future for WaitForSegment {
         if let Some(seg) = conn.segment_mailbox.pop_front() {
             return Poll::Ready(Some(seg));
         }
-        if conn.user_close_requested {
+        if conn.user_close_requested || !conn.send_buffer.is_empty() {
             return Poll::Ready(None);
         }
         conn.segment_waker = Some(cx.waker().clone());
@@ -377,13 +350,14 @@ async fn server_connection_task(
     initial_syn: ReceivedSegment,
     listener: SharedTcpListener,
 ) {
-    let (conn_id, iss) = {
+    let (conn_id, iss, recv_ack) = {
         let mut c = conn.lock();
         c.recv_ack = initial_syn.seq.wrapping_add(1);
         let iss = c.send_seq;
-        c.send_packet(FLAG_SYN | FLAG_ACK, iss, c.recv_ack, &[]);
-        (c.id, iss)
+        let recv_ack = c.recv_ack;
+        (c.id, iss, recv_ack)
     };
+    send_data_packet(&conn, FLAG_SYN | FLAG_ACK, iss, recv_ack, &[]);
 
     // Wait for ACK to complete handshake
     let mut retransmits = 0;
@@ -406,21 +380,25 @@ async fn server_connection_task(
                     cleanup_connection(conn_id);
                     return;
                 }
-                let c = conn.lock();
-                c.send_packet(FLAG_SYN | FLAG_ACK, iss, c.recv_ack, &[]);
+                let recv_ack = conn.lock().recv_ack;
+                send_data_packet(&conn, FLAG_SYN | FLAG_ACK, iss, recv_ack, &[]);
             }
         }
     }
 
     // Established
-    {
+    let waker = {
         let mut c = conn.lock();
         c.established = true;
-        if let Some(waker) = c.recv_waker.take() {
-            waker.wake();
-        }
+        c.recv_waker.take()
+    };
+    if let Some(w) = waker {
+        w.wake();
     }
-    listener.lock().push_connection(conn.clone());
+    let listener_waker = listener.lock().push_connection(conn.clone());
+    if let Some(w) = listener_waker {
+        w.wake();
+    }
     info!("TCP connection established (server) {:?}", conn_id);
 
     established_loop(&conn).await;
@@ -429,70 +407,94 @@ async fn server_connection_task(
 
 async fn established_loop(conn: &SharedTcpConnection) {
     loop {
-        // Check for data to send
-        let send_data = {
+        // Drain and send any queued user data while not holding the lock across send_packet
+        {
             let mut c = conn.lock();
             if !c.send_buffer.is_empty() {
                 let data: Vec<u8> = c.send_buffer.drain(..).collect();
-                Some(data)
-            } else {
-                None
+                let seq = c.send_seq;
+                let ack = c.recv_ack;
+                c.send_seq = seq.wrapping_add(len_as_seq(data.len()));
+                drop(c);
+                send_data_packet(conn, FLAG_ACK, seq, ack, &data);
             }
-        };
-
-        if let Some(data) = send_data {
-            let c = conn.lock();
-            c.send_packet(FLAG_ACK, c.send_seq, c.recv_ack, &data);
-            drop(c);
-            conn.lock().send_seq = conn.lock().send_seq.wrapping_add(len_as_seq(data.len()));
         }
 
         match wait_for_segment(conn).await {
             Some(seg) => {
                 if seg.flags & FLAG_RST != 0 {
+                    let waker = {
+                        let mut c = conn.lock();
+                        c.closed = true;
+                        c.recv_waker.take()
+                    };
+                    if let Some(w) = waker {
+                        w.wake();
+                    }
+                    return;
+                }
+
+                let (send_ack, waker, do_fin_ack, do_user_close) = {
                     let mut c = conn.lock();
-                    c.closed = true;
-                    if let Some(w) = c.recv_waker.take() {
-                        w.wake();
+
+                    let mut need_ack = false;
+                    let mut waker = None;
+
+                    // Process incoming data (drop out-of-order per minimal TCP)
+                    if !seg.data.is_empty() && seg.seq == c.recv_ack {
+                        c.recv_ack = c.recv_ack.wrapping_add(len_as_seq(seg.data.len()));
+                        c.recv_buffer.extend(&seg.data);
+                        waker = c.recv_waker.take();
+                        need_ack = true;
                     }
+
+                    // Process FIN
+                    if seg.flags & FLAG_FIN != 0 {
+                        c.recv_ack = c.recv_ack.wrapping_add(1);
+                        c.closed = true;
+                        waker = waker.or_else(|| c.recv_waker.take());
+                        let ack_info = Some((c.send_seq, c.recv_ack));
+                        (ack_info, waker, true, false)
+                    } else if c.user_close_requested {
+                        let seq = c.send_seq;
+                        let ack = c.recv_ack;
+                        c.send_seq = seq.wrapping_add(1);
+                        (
+                            if need_ack { Some((seq, ack)) } else { None },
+                            waker,
+                            false,
+                            true,
+                        )
+                    } else {
+                        (
+                            if need_ack {
+                                Some((c.send_seq, c.recv_ack))
+                            } else {
+                                None
+                            },
+                            waker,
+                            false,
+                            false,
+                        )
+                    }
+                };
+
+                // All waker.wake() and send_packet calls happen outside the lock
+                if let Some(w) = waker {
+                    w.wake();
+                }
+                if let Some((seq, ack)) = send_ack {
+                    send_data_packet(conn, FLAG_ACK, seq, ack, &[]);
+                }
+                if do_fin_ack {
                     return;
                 }
-
-                let mut c = conn.lock();
-
-                // Process ACK
-                if seg.flags & FLAG_ACK != 0 {
-                    // Peer acknowledged data - nothing to track for minimal impl
-                }
-
-                // Process incoming data (drop out-of-order per minimal TCP)
-                if !seg.data.is_empty() && seg.seq == c.recv_ack {
-                    c.recv_ack = c.recv_ack.wrapping_add(len_as_seq(seg.data.len()));
-                    c.recv_buffer.extend(&seg.data);
-                    if let Some(w) = c.recv_waker.take() {
-                        w.wake();
-                    }
-                    c.send_packet(FLAG_ACK, c.send_seq, c.recv_ack, &[]);
-                }
-
-                // Process FIN
-                if seg.flags & FLAG_FIN != 0 {
-                    c.recv_ack = c.recv_ack.wrapping_add(1);
-                    c.send_packet(FLAG_ACK, c.send_seq, c.recv_ack, &[]);
-                    c.closed = true;
-                    if let Some(w) = c.recv_waker.take() {
-                        w.wake();
-                    }
-                    return;
-                }
-
-                // Check user close
-                if c.user_close_requested {
-                    // Send FIN
-                    c.send_packet(FLAG_FIN | FLAG_ACK, c.send_seq, c.recv_ack, &[]);
-                    c.send_seq = c.send_seq.wrapping_add(1);
-                    drop(c);
-                    // Wait for ACK of FIN
+                if do_user_close {
+                    let (seq, ack) = {
+                        let c = conn.lock();
+                        (c.send_seq.wrapping_sub(1), c.recv_ack)
+                    };
+                    send_data_packet(conn, FLAG_FIN | FLAG_ACK, seq, ack, &[]);
                     wait_for_fin_ack(conn).await;
                     conn.lock().closed = true;
                     return;
@@ -500,11 +502,19 @@ async fn established_loop(conn: &SharedTcpConnection) {
             }
             None => {
                 // User close (no segment)
-                let c = conn.lock();
-                if c.user_close_requested {
-                    c.send_packet(FLAG_FIN | FLAG_ACK, c.send_seq, c.recv_ack, &[]);
-                    drop(c);
-                    conn.lock().send_seq = conn.lock().send_seq.wrapping_add(1);
+                let close_info = {
+                    let mut c = conn.lock();
+                    if c.user_close_requested {
+                        let seq = c.send_seq;
+                        let ack = c.recv_ack;
+                        c.send_seq = seq.wrapping_add(1);
+                        Some((seq, ack))
+                    } else {
+                        None
+                    }
+                };
+                if let Some((seq, ack)) = close_info {
+                    send_data_packet(conn, FLAG_FIN | FLAG_ACK, seq, ack, &[]);
                     wait_for_fin_ack(conn).await;
                     conn.lock().closed = true;
                     return;
@@ -514,16 +524,35 @@ async fn established_loop(conn: &SharedTcpConnection) {
     }
 }
 
+fn send_data_packet(conn: &SharedTcpConnection, flags: u16, seq: u32, ack: u32, data: &[u8]) {
+    let c = conn.lock();
+    let packet = TcpHeader::create_tcp_packet(
+        c.id.remote_ip,
+        c.remote_mac,
+        c.id.local_port,
+        c.id.remote_port,
+        seq,
+        ack,
+        flags,
+        WINDOW_SIZE,
+        data,
+    );
+    drop(c);
+    super::send_packet(packet);
+}
+
 async fn wait_for_fin_ack(conn: &SharedTcpConnection) {
     for _ in 0..MAX_RETRANSMITS {
         match wait_for_segment_or_timeout(conn, 1).await {
             Some(seg) => {
                 if seg.flags & FLAG_ACK != 0 {
-                    // Also handle if peer sends FIN at the same time
                     if seg.flags & FLAG_FIN != 0 {
-                        let mut c = conn.lock();
-                        c.recv_ack = c.recv_ack.wrapping_add(1);
-                        c.send_packet(FLAG_ACK, c.send_seq, c.recv_ack, &[]);
+                        let (seq, ack) = {
+                            let mut c = conn.lock();
+                            c.recv_ack = c.recv_ack.wrapping_add(1);
+                            (c.send_seq, c.recv_ack)
+                        };
+                        send_data_packet(conn, FLAG_ACK, seq, ack, &[]);
                     }
                     return;
                 }
@@ -532,13 +561,11 @@ async fn wait_for_fin_ack(conn: &SharedTcpConnection) {
                 }
             }
             None => {
-                let c = conn.lock();
-                c.send_packet(
-                    FLAG_FIN | FLAG_ACK,
-                    c.send_seq.wrapping_sub(1),
-                    c.recv_ack,
-                    &[],
-                );
+                let (seq, ack) = {
+                    let c = conn.lock();
+                    (c.send_seq.wrapping_sub(1), c.recv_ack)
+                };
+                send_data_packet(conn, FLAG_FIN | FLAG_ACK, seq, ack, &[]);
             }
         }
     }
@@ -573,7 +600,7 @@ pub async fn initiate_connect(
     TCP_CONNECTIONS.lock().insert(conn_id, conn.clone());
 
     // Send SYN
-    conn.lock().send_packet(FLAG_SYN, iss, 0, &[]);
+    send_data_packet(&conn, FLAG_SYN, iss, 0, &[]);
 
     // Wait for SYN-ACK
     let mut retransmits = 0;
@@ -581,15 +608,15 @@ pub async fn initiate_connect(
         match wait_for_segment_or_timeout(&conn, 1).await {
             Some(seg) => {
                 if seg.flags & FLAG_SYN != 0 && seg.flags & FLAG_ACK != 0 {
-                    let mut c = conn.lock();
-                    c.recv_ack = seg.seq.wrapping_add(1);
-                    c.send_seq = iss.wrapping_add(1);
-                    c.established = true;
-                    // Send ACK
-                    c.send_packet(FLAG_ACK, c.send_seq, c.recv_ack, &[]);
-                    drop(c);
+                    let (seq, ack) = {
+                        let mut c = conn.lock();
+                        c.recv_ack = seg.seq.wrapping_add(1);
+                        c.send_seq = iss.wrapping_add(1);
+                        c.established = true;
+                        (c.send_seq, c.recv_ack)
+                    };
+                    send_data_packet(&conn, FLAG_ACK, seq, ack, &[]);
                     info!("TCP connection established (client) {:?}", conn_id);
-                    // Spawn task to handle established state
                     let conn_for_task = conn.clone();
                     kernel_tasks::spawn(async move {
                         established_loop(&conn_for_task).await;
@@ -608,7 +635,7 @@ pub async fn initiate_connect(
                     cleanup_connection(conn_id);
                     return None;
                 }
-                conn.lock().send_packet(FLAG_SYN, iss, 0, &[]);
+                send_data_packet(&conn, FLAG_SYN, iss, 0, &[]);
             }
         }
     }

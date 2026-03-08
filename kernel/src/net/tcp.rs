@@ -4,10 +4,7 @@ use core::net::Ipv4Addr;
 use crate::{
     assert::static_assert_size,
     debug,
-    klibc::{
-        big_endian::BigEndian,
-        util::{BufferExtension, ByteInterpretable},
-    },
+    klibc::{big_endian::BigEndian, util::ByteInterpretable},
     net::ethernet::EthernetHeader,
 };
 
@@ -121,22 +118,24 @@ impl TcpHeader {
     pub fn process<'a>(
         data: &'a [u8],
         ip_header: &IpV4Header,
-    ) -> Result<(&'a TcpHeader, &'a [u8]), TcpParseError> {
+    ) -> Result<(TcpHeader, &'a [u8]), TcpParseError> {
         if data.len() < Self::HEADER_SIZE {
             return Err(TcpParseError::PacketTooSmall);
         }
 
-        let (tcp_header, rest) = data.split_as::<TcpHeader>();
+        // SAFETY: data.len() >= HEADER_SIZE verified above. read_unaligned
+        // handles arbitrary alignment. TcpHeader is repr(C) with no padding.
+        let tcp_header: TcpHeader =
+            unsafe { core::ptr::read_unaligned(data.as_ptr().cast::<TcpHeader>()) };
 
         let data_offset = usize::from(tcp_header.data_offset_and_flags.get() >> 12);
         assert!(data_offset >= 5, "TCP data offset must be at least 5");
 
         let header_bytes = data_offset * 4;
-        let payload_start = header_bytes - Self::HEADER_SIZE;
-        if rest.len() < payload_start {
+        if data.len() < header_bytes {
             return Err(TcpParseError::PacketTooSmall);
         }
-        let payload = &rest[payload_start..];
+        let payload = &data[header_bytes..];
 
         let total_tcp_len =
             usize::from(ip_header.total_packet_length.get()) - IpV4Header::HEADER_SIZE;

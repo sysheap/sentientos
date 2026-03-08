@@ -63,9 +63,9 @@ while [[ $# -gt 0 ]]; do
                 NET_PORT="$1"
                 shift
             else
-                NET_PORT=$(python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()")
+                NET_PORT=$(python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(('127.0.0.1', 0)); print(s.getsockname()[1]); s.close()")
             fi
-            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::${NET_PORT}-:1234 -device virtio-net-pci,netdev=netdev1"
+            QEMU_CMD+=" -netdev user,id=netdev1,hostfwd=udp::${NET_PORT}-:1234,hostfwd=tcp::${NET_PORT}-:1234 -device virtio-net-pci,netdev=netdev1"
             ;;
         --smp)
             QEMU_CMD+=" -smp $(nproc)"
