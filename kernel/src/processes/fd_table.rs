@@ -9,13 +9,13 @@ use crate::{
     fs::VfsOpenFile,
     io::{
         pipe::{PipeReader, PipeWriter, ReadPipe},
-        stdin_buf::ReadStdin,
+        tty_device::{ReadTty, TtyDevice},
+        uart::QEMU_UART,
     },
     net::{
         sockets::SharedAssignedSocket,
         tcp_connection::{SharedTcpConnection, SharedTcpListener},
     },
-    print,
 };
 
 pub type RawFd = i32;
@@ -42,9 +42,7 @@ impl FdFlags {
 }
 
 pub enum FileDescriptor {
-    Stdin,
-    Stdout,
-    Stderr,
+    Tty(TtyDevice),
     UnboundUdpSocket,
     UdpSocket(SharedAssignedSocket),
     UnboundTcpSocket,
@@ -58,11 +56,9 @@ pub enum FileDescriptor {
 impl Clone for FileDescriptor {
     fn clone(&self) -> Self {
         match self {
+            Self::Tty(dev) => Self::Tty(dev.clone()),
             Self::PipeRead(r) => Self::PipeRead(r.clone()),
             Self::PipeWrite(w) => Self::PipeWrite(w.clone()),
-            Self::Stdin => Self::Stdin,
-            Self::Stdout => Self::Stdout,
-            Self::Stderr => Self::Stderr,
             Self::UnboundUdpSocket => Self::UnboundUdpSocket,
             Self::UdpSocket(s) => Self::UdpSocket(s.clone()),
             Self::UnboundTcpSocket => Self::UnboundTcpSocket,
@@ -76,9 +72,7 @@ impl Clone for FileDescriptor {
 impl fmt::Debug for FileDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FileDescriptor::Stdin => write!(f, "Stdin"),
-            FileDescriptor::Stdout => write!(f, "Stdout"),
-            FileDescriptor::Stderr => write!(f, "Stderr"),
+            FileDescriptor::Tty(_) => write!(f, "Tty"),
             FileDescriptor::UnboundUdpSocket => write!(f, "UnboundUdpSocket"),
             FileDescriptor::UdpSocket(_) => write!(f, "UdpSocket(..)"),
             FileDescriptor::UnboundTcpSocket => write!(f, "UnboundTcpSocket"),
@@ -94,7 +88,7 @@ impl fmt::Debug for FileDescriptor {
 impl FileDescriptor {
     pub async fn read(&self, count: usize) -> Result<alloc::vec::Vec<u8>, Errno> {
         match self {
-            FileDescriptor::Stdin => Ok(ReadStdin::new(count).await),
+            FileDescriptor::Tty(dev) => Ok(ReadTty::new(dev.clone(), count).await),
             FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.shared_buffer(), count).await),
             FileDescriptor::TcpStream(conn) => {
                 use crate::net::tcp_connection::wait_for_recv_data;
@@ -126,10 +120,10 @@ impl FileDescriptor {
     }
 
     pub fn try_read(&self, count: usize) -> Result<alloc::vec::Vec<u8>, Errno> {
-        use crate::io::stdin_buf::STDIN_BUFFER;
         match self {
-            FileDescriptor::Stdin => {
-                let data = STDIN_BUFFER.lock().get(count);
+            FileDescriptor::Tty(dev) => {
+                let mut d = dev.lock();
+                let data = d.get_input(count);
                 if data.is_empty() {
                     Err(Errno::EAGAIN)
                 } else {
@@ -157,9 +151,12 @@ impl FileDescriptor {
 
     pub async fn write(&self, data: &[u8]) -> Result<usize, Errno> {
         match self {
-            FileDescriptor::Stdout | FileDescriptor::Stderr => {
-                let s = alloc::string::String::from_utf8_lossy(data);
-                print!("{}", s);
+            FileDescriptor::Tty(dev) => {
+                let processed = dev.lock().process_output(data);
+                let mut uart = QEMU_UART.lock();
+                for &b in &processed {
+                    uart.write_byte(b);
+                }
                 Ok(data.len())
             }
             FileDescriptor::PipeWrite(buf) => buf.shared_buffer().lock().write(data),
@@ -204,29 +201,19 @@ pub struct FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
+        use crate::io::tty_device::console_tty;
         let mut table = BTreeMap::new();
         let default_flags = FdFlags::default();
-        table.insert(
-            0,
-            FdEntry {
-                descriptor: FileDescriptor::Stdin,
-                flags: default_flags,
-            },
-        );
-        table.insert(
-            1,
-            FdEntry {
-                descriptor: FileDescriptor::Stdout,
-                flags: default_flags,
-            },
-        );
-        table.insert(
-            2,
-            FdEntry {
-                descriptor: FileDescriptor::Stderr,
-                flags: default_flags,
-            },
-        );
+        let tty = console_tty().clone();
+        for fd in 0..=2 {
+            table.insert(
+                fd,
+                FdEntry {
+                    descriptor: FileDescriptor::Tty(tty.clone()),
+                    flags: default_flags,
+                },
+            );
+        }
         FdTable { table }
     }
 

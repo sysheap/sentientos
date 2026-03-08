@@ -98,9 +98,10 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
                     buffered_output: buffered,
                 });
             }
-            let input = &local_buffer[0..bytes];
-            self.print_to_stderr(input).await;
-            self.buffer.append(input);
+            let mut input = local_buffer[0..bytes].to_vec();
+            input.retain(|&b| b != b'\r');
+            self.print_to_stderr(&input).await;
+            self.buffer.append(&input);
         }
     }
 
@@ -110,9 +111,10 @@ impl<Reader: AsyncRead + Unpin> ReadAsserter<Reader> {
             let mut local_buffer = [0u8; 1024];
             match tokio::time::timeout(timeout, self.reader.read(&mut local_buffer)).await {
                 Ok(Ok(bytes)) if bytes > 0 => {
-                    let input = &local_buffer[0..bytes];
-                    self.print_to_stderr(input).await;
-                    self.buffer.append(input);
+                    let mut input = local_buffer[0..bytes].to_vec();
+                    input.retain(|&b| b != b'\r');
+                    self.print_to_stderr(&input).await;
+                    self.buffer.append(&input);
                 }
                 _ => break,
             }

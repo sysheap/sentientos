@@ -17,8 +17,6 @@ use crate::{
 use alloc::sync::Arc;
 use common::syscalls::trap_frame::Register;
 use core::task::{Context, Poll};
-use headers::syscall_types::SIGINT;
-
 pub struct CpuScheduler {
     current_thread: ThreadRef,
     powersave_thread: ThreadRef,
@@ -157,12 +155,9 @@ impl CpuScheduler {
         }
     }
 
-    pub fn send_ctrl_c(&mut self) {
+    pub fn send_tty_signal(&mut self, sig: u32, fg_pgid: common::pid::Tid) {
         process_table::THE.with_lock(|mut pt| {
-            let highest_tid = pt.get_highest_tid_without(&["dash", "sh", "init"]);
-            if let Some(tid) = highest_tid {
-                pt.send_signal_to_process(tid, SIGINT);
-            }
+            pt.send_signal_to_pgid(fg_pgid, sig);
         });
         self.schedule();
     }

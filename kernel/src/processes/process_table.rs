@@ -68,19 +68,6 @@ impl ProcessTable {
         self.children.entry(parent_tid).or_default().push(tid);
     }
 
-    pub fn get_highest_tid_without(&self, process_names: &[&str]) -> Option<Tid> {
-        self.threads
-            .iter()
-            .filter(|(_, t)| {
-                let t = t.lock();
-                !matches!(t.get_state(), ThreadState::Zombie(_))
-                    && !process_names.iter().any(|n| t.get_name() == *n)
-                    && t.get_tid() != POWERSAVE_TID
-            })
-            .max_by_key(|(pid, _)| *pid)
-            .map(|(pid, _)| *pid)
-    }
-
     pub fn dump(&self) {
         for (tid, thread) in &self.threads {
             if let Some(()) = thread.try_with_lock(|t| {
@@ -199,6 +186,23 @@ impl ProcessTable {
             if should_enqueue {
                 RUN_QUEUE.lock().push_back(thread);
             }
+        }
+    }
+
+    pub fn send_signal_to_pgid(&mut self, pgid: Tid, sig: u32) {
+        let tids: Vec<Tid> = self
+            .threads
+            .iter()
+            .filter(|(_, t)| {
+                t.with_lock(|t| {
+                    !matches!(t.get_state(), ThreadState::Zombie(_))
+                        && t.process().lock().pgid() == pgid
+                })
+            })
+            .map(|(tid, _)| *tid)
+            .collect();
+        for tid in tids {
+            self.send_signal(tid, sig);
         }
     }
 

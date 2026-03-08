@@ -3,6 +3,7 @@ use headers::errno::Errno;
 
 use crate::{
     drivers::virtio::{block, rng},
+    io::tty_device::{TtyDevice, console_tty},
     klibc::Spinlock,
 };
 
@@ -128,6 +129,48 @@ impl VfsNode for DevRandom {
     }
 }
 
+struct DevConsole {
+    ino: u64,
+    device: TtyDevice,
+}
+
+impl VfsNode for DevConsole {
+    fn node_type(&self) -> NodeType {
+        NodeType::File
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn read(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+        let mut dev = self.device.lock();
+        let data = dev.get_input(buf.len());
+        if data.is_empty() {
+            return Err(Errno::EAGAIN);
+        }
+        buf[..data.len()].copy_from_slice(&data);
+        Ok(data.len())
+    }
+
+    fn write(&self, _offset: usize, data: &[u8]) -> Result<usize, Errno> {
+        let processed = self.device.lock().process_output(data);
+        let mut uart = crate::io::uart::QEMU_UART.lock();
+        for &b in &processed {
+            uart.write_byte(b);
+        }
+        Ok(data.len())
+    }
+
+    fn truncate(&self) -> Result<(), Errno> {
+        Ok(())
+    }
+}
+
 struct DevfsDir {
     ino: u64,
     entries: Spinlock<BTreeMap<String, VfsNodeRef>>,
@@ -175,6 +218,13 @@ pub(super) fn new() -> VfsNodeRef {
     entries.insert(
         String::from("zero"),
         Arc::new(DevZero { ino: alloc_ino() }) as VfsNodeRef,
+    );
+    entries.insert(
+        String::from("console"),
+        Arc::new(DevConsole {
+            ino: alloc_ino(),
+            device: console_tty().clone(),
+        }) as VfsNodeRef,
     );
 
     let dir = Arc::new(DevfsDir {
