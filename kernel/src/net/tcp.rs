@@ -143,18 +143,13 @@ impl TcpHeader {
         let payload_len = total_tcp_len - header_bytes;
         let payload = &payload[..payload_len];
 
-        if tcp_header.checksum.get() != 0 {
-            let computed =
-                Self::compute_checksum_raw(&data[..total_tcp_len], ip_header, total_tcp_len);
-            assert!(computed == 0, "TCP checksum must be valid");
-        }
+        let computed = Self::compute_checksum_raw(&data[..total_tcp_len], ip_header, total_tcp_len);
+        assert!(computed == 0, "TCP checksum must be valid");
 
         Ok((tcp_header, payload))
     }
 
-    fn compute_checksum(data: &[u8], tcp_header: &TcpHeader, ip_header: &IpV4Header) -> u16 {
-        let tcp_length = Self::HEADER_SIZE + data.len();
-
+    fn pseudo_header(ip_header: &IpV4Header, tcp_length: usize) -> [u8; 12] {
         let mut pseudo_header = [0u8; 12];
         pseudo_header[0..4].copy_from_slice(&ip_header.source_ip.octets());
         pseudo_header[4..8].copy_from_slice(&ip_header.destination_ip.octets());
@@ -164,22 +159,18 @@ impl TcpHeader {
                 .expect("TCP length must fit in u16")
                 .to_be_bytes(),
         );
+        pseudo_header
+    }
 
-        super::checksum::ones_complement_checksum(&[&pseudo_header, tcp_header.as_slice(), data])
+    fn compute_checksum(data: &[u8], tcp_header: &TcpHeader, ip_header: &IpV4Header) -> u16 {
+        let tcp_length = Self::HEADER_SIZE + data.len();
+        let pseudo = Self::pseudo_header(ip_header, tcp_length);
+        super::checksum::ones_complement_checksum(&[&pseudo, tcp_header.as_slice(), data])
     }
 
     fn compute_checksum_raw(tcp_bytes: &[u8], ip_header: &IpV4Header, tcp_length: usize) -> u16 {
-        let mut pseudo_header = [0u8; 12];
-        pseudo_header[0..4].copy_from_slice(&ip_header.source_ip.octets());
-        pseudo_header[4..8].copy_from_slice(&ip_header.destination_ip.octets());
-        pseudo_header[9] = Self::TCP_PROTOCOL;
-        pseudo_header[10..12].copy_from_slice(
-            &u16::try_from(tcp_length)
-                .expect("TCP length must fit in u16")
-                .to_be_bytes(),
-        );
-
-        super::checksum::ones_complement_checksum(&[&pseudo_header, tcp_bytes])
+        let pseudo = Self::pseudo_header(ip_header, tcp_length);
+        super::checksum::ones_complement_checksum(&[&pseudo, tcp_bytes])
     }
 }
 

@@ -33,7 +33,8 @@ pub enum IpV4ParseError {
     PacketTooSmall,
 }
 
-const UDP_PROTOCOL_TYPE_UDP: u8 = 17;
+pub const PROTOCOL_TCP: u8 = 6;
+pub const PROTOCOL_UDP: u8 = 17;
 
 impl IpV4Header {
     pub const HEADER_SIZE: usize = core::mem::size_of::<Self>();
@@ -83,9 +84,10 @@ impl IpV4Header {
             "Destination ip address is not ours."
         );
 
+        let proto = ipv4_header.upper_protocol.get();
         assert!(
-            ipv4_header.upper_protocol.get() == UDP_PROTOCOL_TYPE_UDP,
-            "Only UDP is supported for now"
+            proto == PROTOCOL_UDP || proto == PROTOCOL_TCP,
+            "Unsupported IP protocol: {proto}"
         );
 
         assert!(
