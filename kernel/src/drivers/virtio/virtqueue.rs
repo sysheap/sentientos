@@ -1,6 +1,9 @@
 use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
-use crate::{debug, klibc::MMIO};
+use crate::{
+    debug,
+    klibc::{MMIO, non_empty_vec::NonEmptyVec},
+};
 
 /// A virtio queue.
 /// Using Box to prevent content from being moved.
@@ -114,7 +117,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         buffer: Vec<u8>,
         direction: BufferDirection,
     ) -> Result<u16, QueueError> {
-        self.put_buffer_chain(vec![(buffer, direction)])
+        self.put_buffer_chain(NonEmptyVec::new((buffer, direction)))
     }
 
     /// Put a chain of descriptors into the virtqueue.
@@ -122,9 +125,8 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
     /// Only the head descriptor index is placed in the available ring.
     pub fn put_buffer_chain(
         &mut self,
-        buffers: Vec<(Vec<u8>, BufferDirection)>,
+        buffers: NonEmptyVec<(Vec<u8>, BufferDirection)>,
     ) -> Result<u16, QueueError> {
-        assert!(!buffers.is_empty(), "Buffer chain must not be empty");
         if self.free_descriptor_indices.len() < buffers.len() {
             return Err(QueueError::NoFreeDescriptors);
         }
@@ -202,7 +204,8 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
             let total_written = result_descriptor.len as usize;
 
             // Follow the descriptor chain collecting all buffers
-            let mut chain_buffers: Vec<Vec<u8>> = Vec::new();
+            let mut first_buffer: Option<Vec<u8>> = None;
+            let mut rest_buffers: Vec<Vec<u8>> = Vec::new();
             let mut current_idx = head_index;
             let mut remaining_written = total_written;
 
@@ -225,7 +228,12 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
                     stored.length
                 };
 
-                chain_buffers.push(stored.into_vec_with_len(buf_len));
+                let buf = stored.into_vec_with_len(buf_len);
+                if first_buffer.is_none() {
+                    first_buffer = Some(buf);
+                } else {
+                    rest_buffers.push(buf);
+                }
 
                 descriptor.addr = 0;
                 descriptor.len = 0;
@@ -240,9 +248,15 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
                 }
             }
 
+            let first = first_buffer.expect("chain always has at least one descriptor");
+            let mut buffers = NonEmptyVec::new(first);
+            for buf in rest_buffers {
+                buffers = buffers.push(buf);
+            }
+
             return_buffers.push(UsedBuffer {
                 index: head_index,
-                buffers: chain_buffers,
+                buffers,
             });
             self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
         }
@@ -264,7 +278,7 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
 #[derive(Debug)]
 pub struct UsedBuffer {
     pub index: u16,
-    pub buffers: Vec<Vec<u8>>,
+    pub buffers: NonEmptyVec<Vec<u8>>,
 }
 
 /* This marks a buffer as continuing via the next field. */
