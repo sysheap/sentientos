@@ -1,5 +1,6 @@
 /target
 /target-userspace
+/target-coreutils
 qemu-infra/target/
 qemu-infra/Cargo.lock
 mcp-server/target/

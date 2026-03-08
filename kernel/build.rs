@@ -7,6 +7,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=qemu.ld");
     println!("cargo:rerun-if-changed=../userspace/");
     println!("cargo:rerun-if-changed=../common/");
+    println!("cargo:rerun-if-changed=../flake.nix");
+    println!("cargo:rerun-if-changed=../flake.lock");
     println!("cargo:rustc-link-arg-bin=kernel=-Tkernel/qemu.ld");
     println!("cargo::rustc-check-cfg=cfg(kani)");
 
@@ -37,7 +39,9 @@ fn generate_userspace_programs_include() -> Result<(), Box<dyn Error>> {
     // Use BTreeMap to have the program names in a sorted order
     let mut programs: BTreeMap<String, String> = BTreeMap::new();
 
-    let entries = read_dir("../kernel/compiled_userspace")?;
+    let compiled_userspace = read_dir("../kernel/compiled_userspace")?;
+    let compiled_userspace_nix = read_dir("../kernel/compiled_userspace_nix")?;
+    let entries = compiled_userspace.chain(compiled_userspace_nix);
 
     let mut canonical_to_static: BTreeMap<PathBuf, String> = BTreeMap::new();
 
