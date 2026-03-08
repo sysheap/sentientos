@@ -13,6 +13,10 @@
           {
             "type": "command",
             "command": "cat .claude/hooks/commit-reminder.txt"
+          },
+          {
+            "type": "command",
+            "command": "cat .claude/hooks/question-reminder.txt"
           }
         ]
       }

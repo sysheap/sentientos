@@ -1,0 +1,5 @@
+QUESTION ASKING REQUIRED
+=====================
+
+When something is not entirely clear or there are other
+alternative solutions, stop and ask the user for input.
