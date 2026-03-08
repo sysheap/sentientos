@@ -7,8 +7,7 @@ This document contains research summaries for planned future enhancements. Each 
 1. [ext2 Filesystem](#1-ext2-filesystem)
 2. [QEMU Framebuffer](#2-qemu-framebuffer)
 3. [Port Doom](#3-port-doom)
-4. [Minimal TCP Implementation](#4-minimal-tcp-implementation)
-5. [Dynamic Linking](#5-dynamic-linking)
+4. [Dynamic Linking](#4-dynamic-linking)
 ---
 
 ## 1. ext2 Filesystem
@@ -148,7 +147,7 @@ No sound support.
 - `read/write`, `mmap/munmap`, `brk`, `nanosleep`
 
 ❌ Missing:
-- **Framebuffer access** - Need graphics device (#4)
+- **Framebuffer access** - Need graphics device (#2)
 - **File system** - VFS is done; need persistent storage (block device done + #1 ext2) for WAD files
 - **Keyboard input** - Need input event interface
 - **Timing** - Need `clock_gettime` for `DG_GetTicksMs`
@@ -156,7 +155,7 @@ No sound support.
 ### What Needs Implementation
 
 **Major Components:**
-1. **Framebuffer** (#4) - VirtIO-GPU or bochs-display driver
+1. **Framebuffer** (#2) - VirtIO-GPU or bochs-display driver
 2. **File System** - VFS with tmpfs/procfs is done. Need persistent storage for WAD files.
    - Alternative: Embed doom1.wad (shareware, ~4MB) in kernel initially
 3. **Keyboard Driver** - VirtIO input or PS/2 keyboard
@@ -182,78 +181,7 @@ qemu-system-riscv64 \
 
 ---
 
-## 4. Minimal TCP Implementation
-
-**Complexity:** Medium to High
-
-### What Can Be Omitted
-
-Minimal TCP can safely omit:
-- TCP options (ignore incoming, don't send)
-- Window scaling (fixed window, e.g., 8192 bytes)
-- Congestion control (fixed retransmit timeout)
-- Urgent pointer
-- Out-of-order buffering (drop initially)
-- Advanced RST handling
-- Timestamp options, SACK
-- Path MTU discovery (fixed MSS, e.g., 1460)
-
-### Connection Establishment (Three-Way Handshake)
-
-**Client:**
-1. SYN with random ISN
-2. Receive SYN-ACK
-3. Send ACK
-
-**TCP Header:** 20 bytes minimum (source/dest port, seq/ack nums, flags, window, checksum)
-
-### Data Transfer
-- **Sequence numbers:** 32-bit byte position in stream
-- **Acknowledgments:** Cumulative ACK (next expected seq num)
-- **Window size:** Fixed receive buffer (e.g., 8192)
-- **Retransmission:** Fixed timeout (e.g., 1 second)
-
-### Connection Teardown
-Four-way handshake (FIN, ACK, FIN, ACK) - can optimize to three-way.
-
-### Simplified State Machine
-
-**Minimal states:**
-- CLOSED, LISTEN, SYN-SENT, SYN-RECEIVED
-- ESTABLISHED
-- FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, LAST-ACK
-- Optional: TIME-WAIT (can skip for faster iteration)
-
-### Integration with Existing Stack
-
-**Reuse:**
-- `kernel/src/net/ipv4.rs` - Change protocol 17→6
-- `kernel/src/net/checksum.rs` - Same algorithm
-- `kernel/src/net/sockets.rs` - Socket management pattern
-
-**New:**
-- `kernel/src/net/tcp.rs` - TCP header, parsing, packet creation
-- `kernel/src/net/tcp_socket.rs` - Connection state machine
-- `kernel/src/net/tcp_sockets.rs` - Global connection table
-- Add `FileDescriptor::TcpSocket` variant
-
-**Syscall Modifications:**
-- `socket()` accept `SOCK_STREAM`
-- Add `listen()`, `accept()`, `connect()`
-- Modify `send()`/`recv()` for stream semantics
-
-**Implementation Strategy:**
-1. Client-side active open (connect)
-2. Basic data transfer
-3. Server-side passive open (listen/accept)
-4. Graceful close (FIN)
-5. Retransmission for reliability
-
-**Estimated effort:** 3-5 weeks
-
----
-
-## 5. Dynamic Linking
+## 4. Dynamic Linking
 
 **Complexity:** Medium to High
 
@@ -340,7 +268,7 @@ Before implementation, consider:
 
 1. **Framebuffer Choice (#2):** ramfb (simplest), bochs-display (recommended), or virtio-gpu (most complex)?
 
-2. **Dynamic Linking (#5):** Should we prioritize this over other features, or wait until persistent filesystem support is ready?
+2. **Dynamic Linking (#4):** Should we prioritize this over other features, or wait until persistent filesystem support is ready?
 
 3. **Testing Strategy:** Should each major feature include new system tests, or batch testing?
 
