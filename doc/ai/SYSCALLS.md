@@ -57,7 +57,8 @@ fn handle_syscall() {
 | getuid | | Get user ID (stub, returns 0) |
 | ioctl | fd, op, arg | Device control (+ Solaya extensions, FIONBIO for sockets) |
 | kill | pid, sig | Send signal to process |
-| llistxattr | pathname, list, size | List extended attributes (stub, returns 0) |
+| listxattr | pathname, list, size | List extended attributes (stub, returns 0) |
+| llistxattr | pathname, list, size | List extended attributes, no symlink follow (stub, returns 0) |
 | lseek | fd, offset, whence | Reposition file offset |
 | madvise | addr, length, advice | Memory advice (stub, returns 0) |
 | mkdirat | dirfd, pathname, mode | Create directory (supports CWD-relative paths) |
