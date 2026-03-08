@@ -3,8 +3,11 @@ use crate::{
     debug,
     drivers::virtio::{
         capability::{
+            DEVICE_STATUS_ACKNOWLEDGE, DEVICE_STATUS_DRIVER, DEVICE_STATUS_DRIVER_OK,
+            DEVICE_STATUS_FAILED, DEVICE_STATUS_FEATURES_OK, VIRTIO_DEVICE_ID, VIRTIO_F_VERSION_1,
             VIRTIO_PCI_CAP_COMMON_CFG, VIRTIO_PCI_CAP_DEVICE_CFG, VIRTIO_PCI_CAP_ISR_CFG,
-            VIRTIO_PCI_CAP_NOTIFY_CFG, virtio_pci_cap,
+            VIRTIO_PCI_CAP_NOTIFY_CFG, VIRTIO_VENDOR_ID, VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID,
+            virtio_pci_cap, virtio_pci_common_cfg, virtio_pci_notify_cap,
         },
         virtqueue::{BufferDirection, VirtQueue},
     },
@@ -23,18 +26,7 @@ use super::virtqueue::QueueError;
 
 const EXPECTED_QUEUE_SIZE: usize = 0x100;
 
-const VIRTIO_VENDOR_SPECIFIC_CAPABILITY_ID: u8 = 0x9;
-
-const DEVICE_STATUS_ACKNOWLEDGE: u8 = 1;
-const DEVICE_STATUS_DRIVER: u8 = 2;
-const DEVICE_STATUS_DRIVER_OK: u8 = 4;
-const DEVICE_STATUS_FEATURES_OK: u8 = 8;
-const DEVICE_STATUS_FAILED: u8 = 128;
-#[allow(dead_code)]
-const DEVICE_STATUS_DEVICE_NEEDS_RESTART: u8 = 64;
-
 const VIRTIO_NET_F_MAC: u64 = 1 << 5;
-const VIRTIO_F_VERSION_1: u64 = 1 << 32;
 
 #[allow(dead_code)]
 pub struct NetworkDevice {
@@ -47,8 +39,6 @@ pub struct NetworkDevice {
     mac_address: MacAddress,
 }
 
-const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
-const VIRTIO_DEVICE_ID: core::ops::RangeInclusive<u16> = 0x1000..=0x107F;
 const VIRTIO_NETWORK_SUBSYSTEM_ID: u16 = 1;
 
 pub struct InitializedNetworkDevice {
@@ -332,7 +322,12 @@ impl NetworkDevice {
         let mut received_packets = Vec::new();
 
         for receive_buffer in new_receive_buffers {
-            let (net_hdr, data_bytes) = receive_buffer.buffer.split_as::<virtio_net_hdr>();
+            assert!(
+                receive_buffer.buffers.len() == 1,
+                "Net receive uses single-descriptor buffers"
+            );
+            let buffer = receive_buffer.buffers.into_iter().next().expect("checked");
+            let (net_hdr, data_bytes) = buffer.split_as::<virtio_net_hdr>();
 
             assert!(net_hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE);
             assert!(net_hdr.flags == 0);
@@ -340,9 +335,10 @@ impl NetworkDevice {
             let data = data_bytes.to_vec();
             received_packets.push(data);
 
-            // Put buffer back into receive queue
+            // Put a fresh buffer back into receive queue
+            let receive_buffer = vec![0xffu8; 1526];
             self.receive_queue
-                .put_buffer(receive_buffer.buffer, BufferDirection::DeviceWritable)
+                .put_buffer(receive_buffer, BufferDirection::DeviceWritable)
                 .expect("Receive buffer must be insertable into the queue.");
         }
 
@@ -350,10 +346,11 @@ impl NetworkDevice {
     }
 
     pub fn send_packet(&mut self, data: Vec<u8>) -> Result<u16, QueueError> {
-        // First free all already transmited packets
+        // First free all already transmitted packets
         debug!("Going to free all buffers which were used to send packets.");
         for transmitted_packet in self.transmit_queue.receive_buffer() {
             debug!("Transmitted packet: {:?}", transmitted_packet.index);
+            drop(transmitted_packet);
         }
 
         let header = virtio_net_hdr {
@@ -386,29 +383,6 @@ impl Drop for NetworkDevice {
     fn drop(&mut self) {
         info!("Reset network device becuase of drop");
         self.common_cfg.device_status().write(0x0);
-    }
-}
-
-mmio_struct! {
-    #[repr(C)]
-    struct virtio_pci_common_cfg {
-        device_feature_select: u32,
-        device_feature: u32,
-        driver_feature_select: u32,
-        driver_feature: u32,
-        config_msix_vector: u16,
-        num_queues: u16,
-        device_status: u8,
-        config_generation: u8,
-        /* About a specific virtqueue. */
-        queue_select: u16,
-        queue_size: u16,
-        queue_msix_vector: u16,
-        queue_enable: u16,
-        queue_notify_off: u16,
-        queue_desc: u64,
-        queue_driver: u64,
-        queue_device: u64,
     }
 }
 
@@ -448,11 +422,3 @@ struct virtio_net_hdr {
 static_assert_size!(virtio_net_hdr, 12);
 
 impl ByteInterpretable for virtio_net_hdr {}
-
-mmio_struct! {
-    #[repr(C)]
-    struct virtio_pci_notify_cap {
-        cap: crate::drivers::virtio::capability::virtio_pci_cap,
-        notify_off_multiplier: u32,
-    }
-}

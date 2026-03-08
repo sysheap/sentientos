@@ -36,6 +36,7 @@ pub struct QemuOptions {
     add_network_card: bool,
     use_smp: bool,
     enable_gdb: bool,
+    block_device: Option<PathBuf>,
 }
 
 impl Default for QemuOptions {
@@ -45,6 +46,7 @@ impl Default for QemuOptions {
             add_network_card: false,
             use_smp: true,
             enable_gdb,
+            block_device: None,
         }
     }
 }
@@ -62,6 +64,10 @@ impl QemuOptions {
         self.enable_gdb = value;
         self
     }
+    pub fn block_device(mut self, path: PathBuf) -> Self {
+        self.block_device = Some(path);
+        self
+    }
 
     fn apply(self, command: &mut Command) -> Option<u16> {
         let mut network_port = None;
@@ -69,6 +75,9 @@ impl QemuOptions {
             let port = find_available_port().expect("Failed to allocate network port");
             command.args(["--net", &port.to_string()]);
             network_port = Some(port);
+        }
+        if let Some(block_path) = &self.block_device {
+            command.args(["--block", &block_path.to_string_lossy()]);
         }
         if self.use_smp {
             command.arg("--smp");
