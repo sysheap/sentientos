@@ -17,6 +17,7 @@ use crate::{
 use alloc::sync::Arc;
 use common::syscalls::trap_frame::Register;
 use core::task::{Context, Poll};
+use headers::errno::Errno;
 pub struct CpuScheduler {
     current_thread: ThreadRef,
     powersave_thread: ThreadRef,
@@ -118,38 +119,50 @@ impl CpuScheduler {
             }
             true
         } else {
-            // Still pending — check if a terminating or stop signal arrived while
-            // we were blocked. We intentionally avoid deliver_signal() here because
-            // it may set up a handler frame (modifying PC/SP), which would
-            // corrupt state if we then stored the task back.
+            // Still pending — check if a terminating, stop, or handler signal
+            // arrived while we were blocked.
             enum BlockedAction {
                 None,
                 Terminate(super::signal::ExitStatus),
                 Stop(u32),
+                Interrupt,
             }
             let action = self.current_thread.with_lock(|mut t| {
-                let Some(sig) = t.peek_first_unblocked_signal() else {
-                    return BlockedAction::None;
-                };
-                let sa = t.get_sigaction_raw(sig);
-                if sa.sa_handler.is_none() {
-                    match super::signal::default_action(sig) {
-                        super::signal::DefaultAction::Terminate => {
+                loop {
+                    let Some(sig) = t.peek_first_unblocked_signal() else {
+                        return BlockedAction::None;
+                    };
+                    let sa = *t.get_sigaction_raw(sig);
+                    match sa.sa_handler {
+                        None => match super::signal::default_action(sig) {
+                            super::signal::DefaultAction::Terminate => {
+                                t.take_next_pending_signal();
+                                return BlockedAction::Terminate(
+                                    super::signal::ExitStatus::Signaled(
+                                        u8::try_from(sig).expect("signal number fits in u8"),
+                                    ),
+                                );
+                            }
+                            super::signal::DefaultAction::Stop => {
+                                t.take_next_pending_signal();
+                                return BlockedAction::Stop(sig);
+                            }
+                            _ => {
+                                t.take_next_pending_signal();
+                                continue;
+                            }
+                        },
+                        Some(f) if f as usize == 1 => {
+                            // SIG_IGN — consume and check for more
                             t.take_next_pending_signal();
-                            return BlockedAction::Terminate(super::signal::ExitStatus::Signaled(
-                                u8::try_from(sig).expect("signal number fits in u8"),
-                            ));
+                            continue;
                         }
-                        super::signal::DefaultAction::Stop => {
-                            t.take_next_pending_signal();
-                            return BlockedAction::Stop(sig);
-                        }
-                        _ => {
-                            t.take_next_pending_signal();
+                        Some(_) => {
+                            // Custom handler — interrupt the syscall with EINTR
+                            return BlockedAction::Interrupt;
                         }
                     }
                 }
-                BlockedAction::None
             });
             match action {
                 BlockedAction::Terminate(exit_status) => {
@@ -161,6 +174,32 @@ impl CpuScheduler {
                     self.current_thread.lock().store_syscall_task(task);
                     self.stop_current_process(sig);
                     return false;
+                }
+                BlockedAction::Interrupt => {
+                    // Drop the syscall task and return -EINTR to userspace
+                    drop(task);
+                    let signal_result = self.current_thread.with_lock(|mut t| {
+                        let trap_frame = t.get_register_state_mut();
+                        trap_frame[Register::a0] = (-(Errno::EINTR as isize)).cast_unsigned();
+                        let pc = t.get_program_counter();
+                        t.set_program_counter(pc + 4);
+                        super::signal::deliver_signal(&mut t)
+                    });
+                    match signal_result {
+                        super::signal::SignalDeliveryResult::Terminate(exit_status) => {
+                            self.kill_current_process(exit_status);
+                            return false;
+                        }
+                        super::signal::SignalDeliveryResult::Stop(sig) => {
+                            self.stop_current_process(sig);
+                            return false;
+                        }
+                        super::signal::SignalDeliveryResult::Continue => {}
+                    }
+                    if !self.set_cpu_reg_for_current_thread() {
+                        return false;
+                    }
+                    return true;
                 }
                 BlockedAction::None => {}
             }

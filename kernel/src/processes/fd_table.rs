@@ -1,4 +1,5 @@
 use alloc::collections::BTreeMap;
+use common::pid::Tid;
 use core::fmt;
 use headers::{
     errno::Errno,
@@ -16,6 +17,7 @@ use crate::{
         sockets::SharedAssignedSocket,
         tcp_connection::{SharedTcpConnection, SharedTcpListener},
     },
+    processes::process::ProcessRef,
 };
 
 pub type RawFd = i32;
@@ -86,9 +88,14 @@ impl fmt::Debug for FileDescriptor {
 }
 
 impl FileDescriptor {
-    pub async fn read(&self, count: usize) -> Result<alloc::vec::Vec<u8>, Errno> {
+    pub async fn read(
+        &self,
+        count: usize,
+        process: ProcessRef,
+        tid: Tid,
+    ) -> Result<alloc::vec::Vec<u8>, Errno> {
         match self {
-            FileDescriptor::Tty(dev) => Ok(ReadTty::new(dev.clone(), count).await),
+            FileDescriptor::Tty(dev) => ReadTty::new(dev.clone(), count, process, tid).await,
             FileDescriptor::PipeRead(buf) => Ok(ReadPipe::new(buf.shared_buffer(), count).await),
             FileDescriptor::TcpStream(conn) => {
                 use crate::net::tcp_connection::wait_for_recv_data;

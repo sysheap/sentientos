@@ -28,7 +28,9 @@ impl LinuxSyscallHandler {
         let data = if flags.is_nonblocking() {
             descriptor.try_read(count)?
         } else {
-            descriptor.read(count).await?
+            descriptor
+                .read(count, self.current_process.clone(), self.current_tid)
+                .await?
         };
         assert!(data.len() <= count, "Read more than requested");
         buf.write_slice(&data)?;

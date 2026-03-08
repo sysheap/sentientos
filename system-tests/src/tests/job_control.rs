@@ -88,3 +88,45 @@ async fn fg_resumes_stopped_process() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn cat_bg_then_fg_then_ctrl_c() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+
+    // Start cat in background — it will try to read and get stopped by SIGTTIN
+    solaya.stdin().write_all(b"cat &\n").await?;
+    solaya.stdin().flush().await?;
+    solaya.stdout().assert_read_until(PROMPT).await?;
+
+    // Resume cat in foreground with fg
+    solaya.stdin().write_all(b"fg\n").await?;
+    solaya.stdin().flush().await?;
+    solaya.stdout().assert_read_until("fg\n").await?;
+
+    // Send Ctrl+C to kill cat (now in foreground)
+    solaya.stdin().write_all(&[0x03]).await?;
+    solaya.stdin().flush().await?;
+    solaya.stdout().assert_read_until(PROMPT).await?;
+
+    // Verify shell still works
+    let output = solaya.run_prog("prog1").await?;
+    assert_eq!(output, "Hello from Prog1\n");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn bg_process_gets_sigttin() -> anyhow::Result<()> {
+    let mut solaya = QemuInstance::start().await?;
+
+    // Start cat in background — SIGTTIN should stop it, not steal input
+    solaya.stdin().write_all(b"cat &\n").await?;
+    solaya.stdin().flush().await?;
+    solaya.stdout().assert_read_until(PROMPT).await?;
+
+    // Shell should still work because cat is stopped, not consuming input
+    let output = solaya.run_prog("prog1").await?;
+    assert_eq!(output, "Hello from Prog1\n");
+
+    Ok(())
+}
