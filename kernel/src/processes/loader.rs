@@ -20,7 +20,7 @@ use crate::{
 
 pub const STACK_START: VirtAddr = VirtAddr::new(usize::MAX);
 
-pub const STACK_SIZE_PAGES: usize = 4;
+pub const STACK_SIZE_PAGES: usize = 32;
 pub const STACK_SIZE: usize = PAGE_SIZE * STACK_SIZE_PAGES;
 
 pub const STACK_END: VirtAddr = VirtAddr::new(usize::MAX - STACK_SIZE + 1);
@@ -165,7 +165,6 @@ pub fn load_elf(
         phnum: elf_header.number_of_entries_in_program_header as usize,
     };
 
-    // Map 4KB stack
     let mut stack = PinnedHeapPages::new(STACK_SIZE_PAGES);
 
     let args_start = set_up_arguments(stack.as_u8_slice(), name, args, env, &auxv_info)?;

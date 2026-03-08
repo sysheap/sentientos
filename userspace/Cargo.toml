@@ -12,3 +12,13 @@ forced-target = "riscv64gc-unknown-linux-musl"
 
 [dependencies]
 common = { path = "../common" }
+uucore = "0.6.0"
+uu_cat = "0.6.0"
+uu_echo = "0.6.0"
+uu_false = "0.6.0"
+uu_ls = { version = "0.6.0", default-features = false }
+uu_mkdir = "0.6.0"
+uu_pwd = "0.6.0"
+uu_rm = "0.6.0"
+uu_touch = "0.6.0"
+uu_true = "0.6.0"

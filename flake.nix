@@ -25,8 +25,6 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        lib = pkgs.lib;
-
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain;
         kani = import ./nix/kani.nix { inherit pkgs; };
 
@@ -55,17 +53,6 @@
           dontStrip = true;
         });
 
-        coreutils = riscv-toolchain.coreutils.overrideAttrs (old: {
-          hardeningDisable = [ "fortify" ];
-          separateDebugInfo = false;
-          dontStrip = true;
-          env.NIX_CFLAGS_COMPILE = old.env.NIX_CFLAGS_COMPILE + " -O0 -ggdb";
-          postPatch = old.postPatch + ''
-            # copy sources to $out/src so gdb can find them
-            mkdir -p $out/src
-            cp -r ./ $out/src/
-          '';
-        });
 
         basePackages = [
           pkgs.qemu
@@ -86,32 +73,15 @@
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
         };
 
-        userBins = [
-          "${coreutils}/bin/cat"
-          "${coreutils}/bin/echo"
-          "${coreutils}/bin/false"
-          "${coreutils}/bin/ls"
-          "${coreutils}/bin/mkdir"
-          "${coreutils}/bin/pwd"
-          "${coreutils}/bin/rm"
-          "${coreutils}/bin/touch"
-          "${coreutils}/bin/true"
-          "${dash}/bin/dash"
-        ];
-
         hook = ''
-          rm -rf musl coreutils headers/linux_headers headers/musl_headers kernel/compiled_userspace_nix
+          rm -rf musl headers/linux_headers headers/musl_headers
 
           ln -sf ${musl-riscv}/src musl
-          ln -sf ${coreutils}/src coreutils
           ln -sf ${musl-riscv.linuxHeaders}/ headers/linux_headers
           ln -sf ${musl-riscv.dev}/include headers/musl_headers
 
-          mkdir kernel/compiled_userspace_nix
-          for target in ${lib.concatStringsSep " " (map (p: "'${p}'") userBins)}; do
-            name="$(basename "$target")"
-            ln -sf "$target" "./kernel/compiled_userspace_nix/$name"
-          done
+          mkdir -p kernel/compiled_userspace_nix
+          ln -sf "${dash}/bin/dash" "./kernel/compiled_userspace_nix/dash"
           ln -sf "${dash}/bin/dash" "./kernel/compiled_userspace_nix/sh"
 
           just mcp-server
