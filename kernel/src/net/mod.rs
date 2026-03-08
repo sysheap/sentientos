@@ -23,6 +23,8 @@ mod ethernet;
 mod ipv4;
 pub mod mac;
 pub mod sockets;
+#[allow(dead_code)]
+pub mod tcp;
 pub mod udp;
 
 struct NetworkStack {
