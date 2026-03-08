@@ -15,7 +15,12 @@ use crate::{
     net::{ipv4::IpV4Header, udp::UdpHeader},
 };
 
-use self::{ethernet::EthernetHeader, mac::MacAddress, sockets::OpenSockets};
+use self::{
+    ethernet::EthernetHeader,
+    ipv4::{PROTOCOL_TCP, PROTOCOL_UDP},
+    mac::MacAddress,
+    sockets::OpenSockets,
+};
 
 pub mod arp;
 mod checksum;
@@ -25,6 +30,7 @@ pub mod mac;
 pub mod sockets;
 #[allow(dead_code)]
 pub mod tcp;
+pub mod tcp_connection;
 pub mod udp;
 
 struct NetworkStack {
@@ -179,12 +185,23 @@ fn process_packet(packet: Vec<u8>) {
 fn process_ipv4_packet(data: &[u8], source_mac: MacAddress) {
     let (ipv4_header, rest) = IpV4Header::process(data).expect("IPv4 packet must be processed.");
     arp::cache_insert(ipv4_header.source_ip, source_mac);
-    let (udp_header, data) =
-        UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
-    open_sockets().lock().put_data(
-        ipv4_header.source_ip,
-        sockets::Port::new(udp_header.source_port()),
-        sockets::Port::new(udp_header.destination_port()),
-        data,
-    );
+
+    match ipv4_header.upper_protocol.get() {
+        PROTOCOL_UDP => {
+            let (udp_header, data) =
+                UdpHeader::process(rest, ipv4_header).expect("Udp header must be valid.");
+            open_sockets().lock().put_data(
+                ipv4_header.source_ip,
+                sockets::Port::new(udp_header.source_port()),
+                sockets::Port::new(udp_header.destination_port()),
+                data,
+            );
+        }
+        PROTOCOL_TCP => {
+            tcp_connection::process_tcp_packet(ipv4_header, rest, source_mac);
+        }
+        proto => {
+            debug!("Unsupported IP protocol: {}", proto);
+        }
+    }
 }
