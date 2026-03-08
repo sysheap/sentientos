@@ -313,8 +313,7 @@ just stress-system-test  # Run all tests 5x
 | Lock | File |
 |------|------|
 | `QEMU_UART` | `kernel/src/io/uart.rs` |
-| `TTY` | `kernel/src/io/tty.rs` |
-| `STDIN_BUFFER` | `kernel/src/io/stdin_buf.rs` |
+| `CONSOLE_TTY` | `kernel/src/io/tty_device.rs` |
 | `PLIC` | `kernel/src/interrupts/plic.rs` |
 | `WAKEUP_QUEUE` | `kernel/src/processes/timer.rs` |
 | `ProcessTable (THE)` | `kernel/src/processes/process_table.rs` |

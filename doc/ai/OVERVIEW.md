@@ -62,7 +62,7 @@ kernel/src/
   fs/            - VFS layer (tmpfs, procfs, devfs, open file tracking)
   net/           - Network stack (UDP, TCP)
   drivers/       - VirtIO drivers
-  io/            - UART, stdin buffer
+  io/            - UART, TtyDevice (terminal subsystem)
   pci/           - PCI enumeration
   klibc/         - Kernel utilities (spinlock, elf, etc.)
   debugging/     - Backtrace, symbols, unwinder
