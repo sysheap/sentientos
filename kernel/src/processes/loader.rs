@@ -95,8 +95,13 @@ fn set_up_arguments(
 
     let real_start = STACK_START - total_length + 1;
 
-    // Patch AT_RANDOM to point at the random bytes on the stack
-    auxv[9] = (real_start + random_bytes_offset).as_usize();
+    // Patch AT_RANDOM value to point at the random bytes on the stack.
+    // Search only keys (even indices) to avoid matching a value that happens to equal AT_RANDOM.
+    let at_random_pair_idx = auxv
+        .chunks(2)
+        .position(|pair| pair[0] == AT_RANDOM as usize)
+        .expect("AT_RANDOM must be in auxv");
+    auxv[at_random_pair_idx * 2 + 1] = (real_start + random_bytes_offset).as_usize();
 
     let mut addr_current_string = real_start + start_of_strings_offset;
 
