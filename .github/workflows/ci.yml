@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: [self-hosted, nix]
