@@ -108,30 +108,66 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
         &*self.device_area as *const _ as u64
     }
 
-    /// Put a buffer into the virtque.
-    /// Returns the id of the descriptor if the request was successful.
-    /// Returns the original request data in case the request was errornous.
+    /// Put a single buffer into the virtqueue.
     pub fn put_buffer(
         &mut self,
         buffer: Vec<u8>,
         direction: BufferDirection,
     ) -> Result<u16, QueueError> {
-        let free_descriptor_index = self
-            .free_descriptor_indices
-            .pop()
-            .ok_or(QueueError::NoFreeDescriptors)?;
-        let descriptor = &mut self.descriptor_area[free_descriptor_index as usize];
-        descriptor.addr = buffer.as_ptr() as u64;
-        descriptor.len = u32::try_from(buffer.len()).expect("buffer length fits in u32");
-        descriptor.flags = match direction {
-            BufferDirection::DeviceWritable => VIRTQ_DESC_F_WRITE,
-            BufferDirection::DriverWritable => 0,
-        };
-        descriptor.next = 0;
+        self.put_buffer_chain(vec![(buffer, direction)])
+    }
 
-        // Set available ring
-        // avail->ring[avail->idx % qsz] = head;
-        self.driver_area.ring[self.driver_area.idx as usize % QUEUE_SIZE] = free_descriptor_index;
+    /// Put a chain of descriptors into the virtqueue.
+    /// Each element is (buffer, direction). The descriptors are chained via VIRTQ_DESC_F_NEXT.
+    /// Only the head descriptor index is placed in the available ring.
+    pub fn put_buffer_chain(
+        &mut self,
+        buffers: Vec<(Vec<u8>, BufferDirection)>,
+    ) -> Result<u16, QueueError> {
+        assert!(!buffers.is_empty(), "Buffer chain must not be empty");
+        if self.free_descriptor_indices.len() < buffers.len() {
+            return Err(QueueError::NoFreeDescriptors);
+        }
+
+        let descriptor_count = buffers.len();
+        let mut indices: Vec<u16> = Vec::with_capacity(descriptor_count);
+        for _ in 0..descriptor_count {
+            indices.push(self.free_descriptor_indices.pop().expect("checked above"));
+        }
+
+        for (i, (buffer, direction)) in buffers.into_iter().enumerate() {
+            let desc_idx = indices[i];
+            let descriptor = &mut self.descriptor_area[desc_idx as usize];
+            descriptor.addr = buffer.as_ptr() as u64;
+            descriptor.len = u32::try_from(buffer.len()).expect("buffer length fits in u32");
+
+            let mut flags = match direction {
+                BufferDirection::DeviceWritable => VIRTQ_DESC_F_WRITE,
+                BufferDirection::DriverWritable => 0,
+            };
+
+            if i + 1 < descriptor_count {
+                flags |= VIRTQ_DESC_F_NEXT;
+                descriptor.next = indices[i + 1];
+            } else {
+                descriptor.next = 0;
+            }
+            descriptor.flags = flags;
+
+            let insert_result = self
+                .outstanding_buffers
+                .insert(desc_idx, DeconstructedVec::from_vec(buffer))
+                .is_none();
+            assert!(
+                insert_result,
+                "Outstanding buffers is not allowed to contain this index"
+            );
+        }
+
+        let head = indices[0];
+
+        // Only head goes into the available ring
+        self.driver_area.ring[self.driver_area.idx as usize % QUEUE_SIZE] = head;
 
         arch::cpu::memory_fence();
 
@@ -139,22 +175,11 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
 
         arch::cpu::memory_fence();
 
-        let insert_result = self
-            .outstanding_buffers
-            .insert(free_descriptor_index, DeconstructedVec::from_vec(buffer))
-            .is_none();
-
-        assert!(
-            insert_result,
-            "Outstanding buffers is not allowed to contain this index"
-        );
-
-        Ok(free_descriptor_index)
+        Ok(head)
     }
 
     pub fn receive_buffer(&mut self) -> Vec<UsedBuffer> {
         arch::cpu::memory_fence();
-        // Prevent re/reading the hardware. Only tackle the current amount of buffers.
         let current_device_index = self.device_area.idx;
         if self.last_used_ring_index == current_device_index {
             return Vec::new();
@@ -171,19 +196,54 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
                 result_descriptor.id,
                 QUEUE_SIZE
             );
-            let descriptor_entry = &mut self.descriptor_area[result_descriptor.id as usize];
-            debug!("Received packet from descriptor {:#x?}", descriptor_entry);
-            debug!("Result descriptor {:#x?}", result_descriptor);
-            let index = u16::try_from(result_descriptor.id).expect("descriptor id fits in u16");
-            let buffer = self
-                .outstanding_buffers
-                .remove(&index)
-                .expect("There must be an outstanding buffer for this id")
-                .into_vec_with_len(result_descriptor.len as usize);
-            return_buffers.push(UsedBuffer { index, buffer });
-            descriptor_entry.addr = 0;
-            descriptor_entry.len = 0;
-            self.free_descriptor_indices.push(index);
+
+            let head_index =
+                u16::try_from(result_descriptor.id).expect("descriptor id fits in u16");
+            let total_written = result_descriptor.len as usize;
+
+            // Follow the descriptor chain collecting all buffers
+            let mut chain_buffers: Vec<Vec<u8>> = Vec::new();
+            let mut current_idx = head_index;
+            let mut remaining_written = total_written;
+
+            loop {
+                let descriptor = &mut self.descriptor_area[current_idx as usize];
+                let is_device_writable = descriptor.flags & VIRTQ_DESC_F_WRITE != 0;
+                let has_next = descriptor.flags & VIRTQ_DESC_F_NEXT != 0;
+                let next_idx = descriptor.next;
+
+                let stored = self
+                    .outstanding_buffers
+                    .remove(&current_idx)
+                    .expect("There must be an outstanding buffer for this id");
+
+                let buf_len = if is_device_writable {
+                    let len = core::cmp::min(remaining_written, stored.length);
+                    remaining_written = remaining_written.saturating_sub(stored.length);
+                    len
+                } else {
+                    stored.length
+                };
+
+                chain_buffers.push(stored.into_vec_with_len(buf_len));
+
+                descriptor.addr = 0;
+                descriptor.len = 0;
+                descriptor.flags = 0;
+                descriptor.next = 0;
+                self.free_descriptor_indices.push(current_idx);
+
+                if has_next {
+                    current_idx = next_idx;
+                } else {
+                    break;
+                }
+            }
+
+            return_buffers.push(UsedBuffer {
+                index: head_index,
+                buffers: chain_buffers,
+            });
             self.last_used_ring_index = self.last_used_ring_index.wrapping_add(1);
         }
         return_buffers
@@ -204,11 +264,10 @@ impl<const QUEUE_SIZE: usize> VirtQueue<QUEUE_SIZE> {
 #[derive(Debug)]
 pub struct UsedBuffer {
     pub index: u16,
-    pub buffer: Vec<u8>,
+    pub buffers: Vec<Vec<u8>>,
 }
 
 /* This marks a buffer as continuing via the next field. */
-#[allow(dead_code)]
 const VIRTQ_DESC_F_NEXT: u16 = 1;
 /* This marks a buffer as device write-only (otherwise device read-only). */
 const VIRTQ_DESC_F_WRITE: u16 = 2;

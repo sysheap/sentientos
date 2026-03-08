@@ -78,6 +78,8 @@ pub struct BootParams {
     pub force: Option<bool>,
     #[schemars(description = "Enable GDB debugging. Defaults to true")]
     pub gdb: Option<bool>,
+    #[schemars(description = "Path to a raw disk image to attach as virtio-blk device")]
+    pub block: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -135,10 +137,13 @@ impl QemuMcpServer {
             }
         }
 
-        let options = QemuOptions::default()
+        let mut options = QemuOptions::default()
             .add_network_card(params.network.unwrap_or(false))
             .use_smp(params.smp.unwrap_or(true))
             .enable_gdb(params.gdb.unwrap_or(true));
+        if let Some(block_path) = params.block {
+            options = options.block_device(std::path::PathBuf::from(block_path));
+        }
 
         // Release the lock during the long boot so other tools can check status
         drop(guard);

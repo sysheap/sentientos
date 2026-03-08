@@ -175,6 +175,16 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         processes::kernel_tasks::spawn(net::network_rx_task());
     }
 
+    let virtio_blk = pci_devices
+        .iter()
+        .position(drivers::virtio::block::BlockDevice::is_virtio_block);
+    if let Some(index) = virtio_blk {
+        let device = pci_devices.swap_remove(index);
+        let blk = drivers::virtio::block::BlockDevice::initialize(device)
+            .expect("Block device initialization must work.");
+        drivers::virtio::block::assign_block_device(blk);
+    }
+
     processes::kernel_tasks::create_worker_thread();
 
     info!("kernel_init done! Starting other harts");

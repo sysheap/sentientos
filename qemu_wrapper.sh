@@ -34,6 +34,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS] <KERNEL_PATH>"
             echo ""
             echo "Options:"
+            echo "  --block FILE   Attach a raw disk image as virtio-blk device"
             echo "  --gdb [PORT]   Enable GDB server (default: dynamic port)"
             echo "  --log          Log qemu events to /tmp/solaya.log"
             echo "  --capture      Capture network traffic into network.pcap"
@@ -45,6 +46,12 @@ while [[ $# -gt 0 ]]; do
         --log)
             QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/solaya.log"
             shift
+            ;;
+        --block)
+            shift
+            BLOCK_FILE="$1"
+            shift
+            QEMU_CMD+=" -drive if=none,file=${BLOCK_FILE},format=raw,id=hd0 -device virtio-blk-pci,drive=hd0"
             ;;
         --net)
             shift
