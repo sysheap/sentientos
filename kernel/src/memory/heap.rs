@@ -149,7 +149,7 @@ impl<Allocator: PageAllocator> Heap<Allocator> {
     }
 
     fn is_page_allocator_allocation(&self, layout: &Layout) -> bool {
-        layout.size() >= PAGE_SIZE || layout.align() == PAGE_SIZE
+        layout.size() >= PAGE_SIZE || layout.align() > FreeBlock::DATA_ALIGNMENT
     }
 
     fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
