@@ -221,6 +221,37 @@ pub struct ElfProgramHeaderEntry {
 
 static_assert_size!(ElfProgramHeaderEntry, 0x38);
 
+#[repr(C)]
+struct ElfSectionHeader {
+    sh_name: u32,
+    sh_type: u32,
+    sh_flags: u64,
+    sh_addr: u64,
+    sh_offset: u64,
+    sh_size: u64,
+    sh_link: u32,
+    sh_info: u32,
+    sh_addralign: u64,
+    sh_entsize: u64,
+}
+
+static_assert_size!(ElfSectionHeader, 64);
+
+#[repr(C)]
+struct Elf64Sym {
+    st_name: u32,
+    st_info: u8,
+    st_other: u8,
+    st_shndx: u16,
+    st_value: u64,
+    st_size: u64,
+}
+
+static_assert_size!(Elf64Sym, 24);
+
+const SHT_SYMTAB: u32 = 2;
+const STT_FUNC: u8 = 2;
+
 #[derive(Debug)]
 pub enum ElfParseErrors {
     FileTooShort,
@@ -293,6 +324,76 @@ impl<'a> ElfFile<'a> {
         let size = program_header.file_size.as_usize();
 
         &self.data[start..start + size]
+    }
+
+    fn get_section_headers(&self) -> &[ElfSectionHeader] {
+        let header = self.get_header();
+        let count = header.number_of_entries_section_header as usize;
+        let offset = header.start_of_section_header.as_usize();
+        let entry_size = header.size_section_header_entry as usize;
+
+        if count == 0 || offset == 0 {
+            return &[];
+        }
+        assert_eq!(entry_size, core::mem::size_of::<ElfSectionHeader>());
+        assert!(offset + entry_size * count <= self.data.len());
+
+        // SAFETY: Bounds checked above; entry_size matches struct size.
+        unsafe {
+            let ptr = self
+                .data
+                .as_ptr()
+                .byte_add(offset)
+                .cast::<ElfSectionHeader>();
+            core::slice::from_raw_parts(ptr, count)
+        }
+    }
+
+    pub fn find_symbol(&self, address: usize) -> Option<(&str, usize)> {
+        let sections = self.get_section_headers();
+        let symtab = sections.iter().find(|s| s.sh_type == SHT_SYMTAB)?;
+
+        let strtab_section = sections.get(symtab.sh_link as usize)?;
+        let strtab_offset = strtab_section.sh_offset.as_usize();
+        let strtab_size = strtab_section.sh_size.as_usize();
+        let strtab = &self.data[strtab_offset..strtab_offset + strtab_size];
+
+        let sym_offset = symtab.sh_offset.as_usize();
+        let sym_count = symtab.sh_size.as_usize() / core::mem::size_of::<Elf64Sym>();
+        assert!(sym_offset + symtab.sh_size.as_usize() <= self.data.len());
+
+        // SAFETY: Bounds checked above; Elf64Sym is repr(C) and entsize matches.
+        let symbols = unsafe {
+            let ptr = self.data.as_ptr().byte_add(sym_offset).cast::<Elf64Sym>();
+            core::slice::from_raw_parts(ptr, sym_count)
+        };
+
+        let mut best: Option<(&Elf64Sym, usize)> = None;
+        for sym in symbols {
+            if sym.st_info & 0xf != STT_FUNC {
+                continue;
+            }
+            let sym_addr = sym.st_value.as_usize();
+            if sym_addr == 0 || sym_addr > address {
+                continue;
+            }
+            let offset = address - sym_addr;
+            match best {
+                Some((_, best_offset)) if offset < best_offset => best = Some((sym, offset)),
+                None => best = Some((sym, offset)),
+                _ => {}
+            }
+        }
+
+        let (sym, offset) = best?;
+        let name_start = sym.st_name as usize;
+        let name_end = strtab[name_start..]
+            .iter()
+            .position(|&b| b == 0)
+            .map(|p| name_start + p)
+            .unwrap_or(strtab.len());
+        let name = core::str::from_utf8(&strtab[name_start..name_end]).ok()?;
+        Some((name, offset))
     }
 
     fn check_validity(data: &[u8]) -> Option<ElfParseErrors> {
