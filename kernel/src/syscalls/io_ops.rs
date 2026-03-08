@@ -78,12 +78,10 @@ impl LinuxSyscallHandler {
     }
 
     pub(super) fn do_pipe2(&self, fds: LinuxUserspaceArg<*mut c_int>) -> Result<isize, Errno> {
-        let buffer = pipe::new_pipe();
+        let (reader, writer) = pipe::new_pipe();
         let (read_fd, write_fd) = self.current_process.with_lock(|p| {
-            let r = p
-                .fd_table()
-                .allocate(FileDescriptor::PipeRead(buffer.clone()))?;
-            let w = p.fd_table().allocate(FileDescriptor::PipeWrite(buffer))?;
+            let r = p.fd_table().allocate(FileDescriptor::PipeRead(reader))?;
+            let w = p.fd_table().allocate(FileDescriptor::PipeWrite(writer))?;
             Ok::<_, Errno>((r, w))
         })?;
         fds.write_slice(&[read_fd, write_fd])?;

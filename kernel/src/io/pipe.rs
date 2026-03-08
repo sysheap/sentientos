@@ -51,11 +51,19 @@ impl PipeInner {
         Err(Errno::EAGAIN)
     }
 
-    pub fn add_reader(&mut self) {
+    fn add_reader(&mut self) {
+        assert!(
+            self.reader_count > 0,
+            "Cannot reopen a closed read side of pipe"
+        );
         self.reader_count += 1;
     }
 
-    pub fn add_writer(&mut self) {
+    fn add_writer(&mut self) {
+        assert!(
+            self.writer_count > 0,
+            "Cannot reopen a closed write side of pipe"
+        );
         self.writer_count += 1;
     }
 
@@ -83,8 +91,51 @@ impl PipeInner {
     }
 }
 
-pub fn new_pipe() -> SharedPipeBuffer {
-    Arc::new(Spinlock::new(PipeInner::new()))
+pub struct PipeReader(SharedPipeBuffer);
+
+impl PipeReader {
+    pub fn shared_buffer(&self) -> SharedPipeBuffer {
+        self.0.clone()
+    }
+}
+
+impl Clone for PipeReader {
+    fn clone(&self) -> Self {
+        self.0.lock().add_reader();
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for PipeReader {
+    fn drop(&mut self) {
+        self.0.lock().close_read();
+    }
+}
+
+pub struct PipeWriter(SharedPipeBuffer);
+
+impl PipeWriter {
+    pub fn shared_buffer(&self) -> SharedPipeBuffer {
+        self.0.clone()
+    }
+}
+
+impl Clone for PipeWriter {
+    fn clone(&self) -> Self {
+        self.0.lock().add_writer();
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for PipeWriter {
+    fn drop(&mut self) {
+        self.0.lock().close_write();
+    }
+}
+
+pub fn new_pipe() -> (PipeReader, PipeWriter) {
+    let buf = Arc::new(Spinlock::new(PipeInner::new()));
+    (PipeReader(buf.clone()), PipeWriter(buf))
 }
 
 pub struct ReadPipe {
