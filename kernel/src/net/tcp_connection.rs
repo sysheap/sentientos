@@ -29,7 +29,7 @@ const MAX_RETRANSMITS: usize = 5;
 
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 
-fn allocate_ephemeral_port() -> u16 {
+pub fn allocate_ephemeral_port() -> u16 {
     NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed)
 }
 
@@ -100,6 +100,18 @@ impl TcpConnection {
         if let Some(waker) = self.segment_waker.take() {
             waker.wake();
         }
+    }
+
+    pub fn local_port(&self) -> u16 {
+        self.id.local_port
+    }
+
+    pub fn remote_ip(&self) -> Ipv4Addr {
+        self.id.remote_ip
+    }
+
+    pub fn remote_port(&self) -> u16 {
+        self.id.remote_port
     }
 
     pub fn is_established(&self) -> bool {
