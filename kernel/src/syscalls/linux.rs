@@ -49,6 +49,7 @@ linux_syscalls! {
     SYSCALL_NR_GETTID => gettid();
     SYSCALL_NR_GETUID => getuid();
     SYSCALL_NR_IOCTL => ioctl(fd: c_int, op: c_uint, arg: usize);
+    SYSCALL_NR_LISTXATTR => listxattr(pathname: *const u8, list: *mut u8, size: usize);
     SYSCALL_NR_LLISTXATTR => llistxattr(pathname: *const u8, list: *mut u8, size: usize);
     SYSCALL_NR_LSEEK => lseek(fd: c_int, offset: isize, whence: c_int);
     SYSCALL_NR_MADVISE => madvise(addr: usize, length: usize, advice: c_int);
@@ -570,6 +571,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _offset: isize,
         _len: isize,
         _advice: c_int,
+    ) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn listxattr(
+        &mut self,
+        _pathname: LinuxUserspaceArg<*const u8>,
+        _list: LinuxUserspaceArg<*mut u8>,
+        _size: usize,
     ) -> Result<isize, Errno> {
         Ok(0)
     }
