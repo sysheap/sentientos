@@ -6,7 +6,7 @@ use headers::{
 
 use crate::{
     klibc::util::ByteInterpretable,
-    net::{self, arp, sockets::Port, udp::UdpHeader},
+    net::{self, arp, sockets::Port, tcp_connection, udp::UdpHeader},
     processes::fd_table::FileDescriptor,
     syscalls::linux_validator::LinuxUserspaceArg,
 };
@@ -52,11 +52,6 @@ impl LinuxSyscallHandler {
             .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
             .ok_or(Errno::EBADF)?;
 
-        assert!(
-            matches!(descriptor, FileDescriptor::UnboundUdpSocket),
-            "bind: fd {fd} is not an unbound UDP socket"
-        );
-
         if !net::has_network_device() {
             return Err(Errno::ENETDOWN);
         }
@@ -64,17 +59,28 @@ impl LinuxSyscallHandler {
         let sin_arg =
             LinuxUserspaceArg::<*const sockaddr_in>::new(addr.raw_arg(), self.get_process());
         let sin = sin_arg.validate_ptr()?;
-        let port = Port::new(u16::from_be(sin.sin_port));
+        let port = u16::from_be(sin.sin_port);
 
-        let socket = net::open_sockets()
-            .lock()
-            .try_get_socket(port)
-            .ok_or(Errno::EADDRINUSE)?;
-
-        self.current_process.with_lock(|p| {
-            p.fd_table()
-                .replace_descriptor(fd, FileDescriptor::UdpSocket(socket))
-        })?;
+        match descriptor {
+            FileDescriptor::UnboundUdpSocket => {
+                let socket = net::open_sockets()
+                    .lock()
+                    .try_get_socket(Port::new(port))
+                    .ok_or(Errno::EADDRINUSE)?;
+                self.current_process.with_lock(|p| {
+                    p.fd_table()
+                        .replace_descriptor(fd, FileDescriptor::UdpSocket(socket))
+                })?;
+            }
+            FileDescriptor::UnboundTcpSocket => {
+                let listener = tcp_connection::create_listener(port);
+                self.current_process.with_lock(|p| {
+                    p.fd_table()
+                        .replace_descriptor(fd, FileDescriptor::TcpListener(listener))
+                })?;
+            }
+            _ => return Err(Errno::EINVAL),
+        }
 
         Ok(0)
     }
@@ -182,5 +188,189 @@ impl LinuxSyscallHandler {
         }
 
         Ok(bytes_read as isize)
+    }
+
+    pub(super) async fn do_connect(
+        &self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*const u8>,
+        addrlen: c_uint,
+    ) -> Result<isize, Errno> {
+        assert!(
+            addrlen as usize >= core::mem::size_of::<sockaddr_in>(),
+            "connect: addrlen too small ({addrlen})"
+        );
+
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+
+        assert!(
+            matches!(descriptor, FileDescriptor::UnboundTcpSocket),
+            "connect: fd {fd} is not an unbound TCP socket"
+        );
+
+        if !net::has_network_device() {
+            return Err(Errno::ENETDOWN);
+        }
+
+        let sin_arg =
+            LinuxUserspaceArg::<*const sockaddr_in>::new(addr.raw_arg(), self.get_process());
+        let sin = sin_arg.validate_ptr()?;
+        let dest_ip = core::net::Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
+        let dest_port = u16::from_be(sin.sin_port);
+        let local_port = tcp_connection::allocate_ephemeral_port();
+
+        let conn = tcp_connection::initiate_connect(local_port, dest_ip, dest_port)
+            .await
+            .ok_or(Errno::ECONNREFUSED)?;
+
+        self.current_process.with_lock(|p| {
+            p.fd_table()
+                .replace_descriptor(fd, FileDescriptor::TcpStream(conn))
+        })?;
+
+        Ok(0)
+    }
+
+    pub(super) fn do_listen(&self, fd: c_int) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+        let listener = match descriptor {
+            FileDescriptor::TcpListener(l) => l,
+            _ => return Err(Errno::ENOTSOCK),
+        };
+
+        tcp_connection::register_listener(listener);
+        Ok(0)
+    }
+
+    pub(super) async fn do_accept(
+        &self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<Option<*mut u8>>,
+        addrlen: LinuxUserspaceArg<Option<*mut c_uint>>,
+    ) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+        let listener = match descriptor {
+            FileDescriptor::TcpListener(l) => l,
+            _ => return Err(Errno::ENOTSOCK),
+        };
+
+        let conn = tcp_connection::wait_for_accept(&listener).await;
+
+        if addr.arg_nonzero() {
+            let c = conn.lock();
+            let sin = sockaddr_in {
+                sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
+                sin_port: c.remote_port().to_be(),
+                sin_addr: headers::socket::in_addr {
+                    s_addr: u32::from(c.remote_ip()).to_be(),
+                },
+                sin_zero: [0; 8],
+            };
+            drop(c);
+            let addr_writer = LinuxUserspaceArg::<*mut u8>::new(addr.raw_arg(), self.get_process());
+            addr_writer.write_slice(sin.as_slice())?;
+            let addrlen_val = c_uint::try_from(core::mem::size_of::<sockaddr_in>())
+                .expect("sockaddr_in size fits in c_uint");
+            addrlen.write_if_not_none(addrlen_val)?;
+        }
+
+        let new_fd = self
+            .current_process
+            .with_lock(|p| p.fd_table().allocate(FileDescriptor::TcpStream(conn)))?;
+
+        Ok(new_fd as isize)
+    }
+
+    pub(super) fn do_getsockname(
+        &self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*mut u8>,
+        addrlen: LinuxUserspaceArg<*mut c_uint>,
+    ) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+
+        let local_port = match &descriptor {
+            FileDescriptor::TcpListener(l) => l.lock().port(),
+            FileDescriptor::TcpStream(c) => c.lock().local_port(),
+            FileDescriptor::UdpSocket(s) => s.lock().get_port().as_u16(),
+            _ => return Err(Errno::ENOTSOCK),
+        };
+
+        let our_ip = net::ip_addr();
+        let sin = sockaddr_in {
+            sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
+            sin_port: local_port.to_be(),
+            sin_addr: headers::socket::in_addr {
+                s_addr: u32::from(our_ip).to_be(),
+            },
+            sin_zero: [0; 8],
+        };
+
+        addr.write_slice(sin.as_slice())?;
+        let addrlen_val = c_uint::try_from(core::mem::size_of::<sockaddr_in>())
+            .expect("sockaddr_in size fits in c_uint");
+        addrlen.write_slice(&[addrlen_val])?;
+
+        Ok(0)
+    }
+
+    pub(super) fn do_getpeername(
+        &self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*mut u8>,
+        addrlen: LinuxUserspaceArg<*mut c_uint>,
+    ) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+        let conn = match descriptor {
+            FileDescriptor::TcpStream(c) => c,
+            _ => return Err(Errno::ENOTSOCK),
+        };
+
+        let c = conn.lock();
+        let sin = sockaddr_in {
+            sin_family: u16::try_from(AF_INET).expect("AF_INET fits in u16"),
+            sin_port: c.remote_port().to_be(),
+            sin_addr: headers::socket::in_addr {
+                s_addr: u32::from(c.remote_ip()).to_be(),
+            },
+            sin_zero: [0; 8],
+        };
+        drop(c);
+
+        addr.write_slice(sin.as_slice())?;
+        let addrlen_val = c_uint::try_from(core::mem::size_of::<sockaddr_in>())
+            .expect("sockaddr_in size fits in c_uint");
+        addrlen.write_slice(&[addrlen_val])?;
+
+        Ok(0)
+    }
+
+    pub(super) fn do_shutdown(&self, fd: c_int) -> Result<isize, Errno> {
+        let descriptor = self
+            .current_process
+            .with_lock(|p| p.fd_table().get(fd).map(|e| e.descriptor.clone()))
+            .ok_or(Errno::EBADF)?;
+        let conn = match descriptor {
+            FileDescriptor::TcpStream(c) => c,
+            _ => return Err(Errno::ENOTSOCK),
+        };
+
+        conn.lock().request_close();
+        Ok(0)
     }
 }

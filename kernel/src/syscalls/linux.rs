@@ -77,6 +77,13 @@ linux_syscalls! {
     SYSCALL_NR_SET_ROBUST_LIST => set_robust_list(head: usize, len: usize);
     SYSCALL_NR_SET_TID_ADDRESS => set_tid_address(tidptr: *mut c_int);
     SYSCALL_NR_SIGALTSTACK => sigaltstack(uss: Option<*const stack_t>, uoss: Option<*mut stack_t>);
+    SYSCALL_NR_SETSOCKOPT => setsockopt(fd: c_int, level: c_int, optname: c_int, optval: *const u8, optlen: c_uint);
+    SYSCALL_NR_GETSOCKNAME => getsockname(fd: c_int, addr: *mut u8, addrlen: *mut c_uint);
+    SYSCALL_NR_GETPEERNAME => getpeername(fd: c_int, addr: *mut u8, addrlen: *mut c_uint);
+    SYSCALL_NR_CONNECT => connect(fd: c_int, addr: *const u8, addrlen: c_uint);
+    SYSCALL_NR_LISTEN => listen(fd: c_int, backlog: c_int);
+    SYSCALL_NR_ACCEPT4 => accept4(fd: c_int, addr: Option<*mut u8>, addrlen: Option<*mut c_uint>, flags: c_int);
+    SYSCALL_NR_SHUTDOWN => shutdown(fd: c_int, how: c_int);
     SYSCALL_NR_SOCKET => socket(domain: c_int, typ: c_int, protocol: c_int);
     SYSCALL_NR_STATX => statx(dirfd: c_int, pathname: *const u8, flags: c_int, mask: c_uint, statxbuf: *mut u8);
     SYSCALL_NR_KILL => kill(pid: c_int, sig: c_int);
@@ -442,6 +449,62 @@ impl LinuxSyscalls for LinuxSyscallHandler {
     ) -> Result<isize, Errno> {
         self.do_recvfrom(fd, buf, len, flags, src_addr, addrlen)
             .await
+    }
+
+    async fn connect(
+        &mut self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*const u8>,
+        addrlen: c_uint,
+    ) -> Result<isize, Errno> {
+        self.do_connect(fd, addr, addrlen).await
+    }
+
+    async fn listen(&mut self, fd: c_int, _backlog: c_int) -> Result<isize, Errno> {
+        self.do_listen(fd)
+    }
+
+    async fn accept4(
+        &mut self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<Option<*mut u8>>,
+        addrlen: LinuxUserspaceArg<Option<*mut c_uint>>,
+        _flags: c_int,
+    ) -> Result<isize, Errno> {
+        self.do_accept(fd, addr, addrlen).await
+    }
+
+    async fn setsockopt(
+        &mut self,
+        _fd: c_int,
+        _level: c_int,
+        _optname: c_int,
+        _optval: LinuxUserspaceArg<*const u8>,
+        _optlen: c_uint,
+    ) -> Result<isize, Errno> {
+        Ok(0)
+    }
+
+    async fn getsockname(
+        &mut self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*mut u8>,
+        addrlen: LinuxUserspaceArg<*mut c_uint>,
+    ) -> Result<isize, Errno> {
+        self.do_getsockname(fd, addr, addrlen)
+    }
+
+    async fn getpeername(
+        &mut self,
+        fd: c_int,
+        addr: LinuxUserspaceArg<*mut u8>,
+        addrlen: LinuxUserspaceArg<*mut c_uint>,
+    ) -> Result<isize, Errno> {
+        self.do_getpeername(fd, addr, addrlen)
+    }
+
+    async fn shutdown(&mut self, fd: c_int, _how: c_int) -> Result<isize, Errno> {
+        self.do_shutdown(fd)
     }
 
     // --- Time & polling (time_ops.rs) ---
