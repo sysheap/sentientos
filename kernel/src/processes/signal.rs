@@ -131,7 +131,7 @@ impl ByteInterpretable for SignalFrame {}
 pub enum SignalDeliveryResult {
     Continue,
     Terminate(ExitStatus),
-    Stop,
+    Stop(u32),
 }
 
 /// Check for pending signals and either set up a signal handler frame, return
@@ -155,7 +155,7 @@ pub fn deliver_signal(thread: &mut Thread) -> SignalDeliveryResult {
                         ));
                     }
                     DefaultAction::Stop => {
-                        return SignalDeliveryResult::Stop;
+                        return SignalDeliveryResult::Stop(sig);
                     }
                     DefaultAction::Ignore | DefaultAction::Continue => {
                         continue;

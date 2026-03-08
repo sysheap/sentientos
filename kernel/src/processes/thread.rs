@@ -104,6 +104,7 @@ pub struct Thread {
     // return value to a0 and skip advancing PC past ecall.
     registers_replaced: bool,
     pub stopped_notified: bool,
+    pub stop_signal: u32,
 }
 
 impl core::fmt::Display for Thread {
@@ -252,6 +253,7 @@ impl Thread {
             syscall_task: None,
             registers_replaced: false,
             stopped_notified: false,
+            stop_signal: 0,
         }))
     }
 

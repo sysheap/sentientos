@@ -163,14 +163,14 @@ impl ProcessTable {
         };
 
         let thread = self.threads.get(&tid).expect("tid was just found");
-        thread.with_lock(|mut t| {
+        let stop_sig = thread.with_lock(|mut t| {
             t.stopped_notified = true;
+            t.stop_signal
         });
 
-        // WIFSTOPPED encoding: (SIGTSTP << 8) | 0x7f
-        let sigtstp =
-            i32::from(u8::try_from(headers::syscall_types::SIGTSTP).expect("SIGTSTP fits in u8"));
-        let wstatus = (sigtstp << 8) | 0x7f;
+        // WIFSTOPPED encoding: (stop_signal << 8) | 0x7f
+        let wstatus =
+            (i32::from(u8::try_from(stop_sig).expect("stop signal fits in u8")) << 8) | 0x7f;
         Some((tid, wstatus))
     }
 

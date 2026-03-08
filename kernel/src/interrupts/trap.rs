@@ -228,9 +228,9 @@ fn handle_syscall() {
                             s.schedule();
                         });
                     }
-                    SignalDeliveryResult::Stop => {
+                    SignalDeliveryResult::Stop(sig) => {
                         Cpu::with_scheduler(|mut s| {
-                            s.stop_current_process();
+                            s.stop_current_process(sig);
                             s.schedule();
                         });
                     }
