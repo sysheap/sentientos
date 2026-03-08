@@ -156,17 +156,17 @@ pub(super) fn new() -> VfsNodeRef {
 }
 
 pub fn register_block_device(index: usize) {
-    let name = alloc::format!(
-        "vd{}",
-        (b'a' + u8::try_from(index).expect("index fits in u8")) as char
-    );
+    assert!(index < 26, "block device index must be < 26 (a-z)");
+    #[allow(clippy::cast_possible_truncation)]
+    let suffix = (b'a' + index as u8) as char;
+    let name = alloc::format!("vd{suffix}");
     let node: VfsNodeRef = Arc::new(DevBlock {
         ino: alloc_ino(),
         index,
     });
-    let devfs = DEVFS.lock();
-    let dir = devfs
-        .as_ref()
+    let dir = DEVFS
+        .lock()
+        .clone()
         .expect("devfs must be initialized before registering devices");
     dir.entries.lock().insert(name, node);
 }
