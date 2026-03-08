@@ -5,6 +5,7 @@ pub mod consumable_buffer;
 pub mod elf;
 pub mod leb128;
 pub mod mmio;
+pub mod non_empty_vec;
 pub mod runtime_initialized;
 pub mod sizes;
 pub mod spinlock;

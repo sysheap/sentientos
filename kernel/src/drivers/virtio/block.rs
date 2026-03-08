@@ -15,6 +15,7 @@ use crate::{
     info,
     klibc::{
         MMIO, Spinlock,
+        non_empty_vec::NonEmptyVec,
         util::{ByteInterpretable, is_power_of_2_or_zero},
     },
     mmio_struct,
@@ -324,18 +325,15 @@ impl BlockDevice {
         let data_buf = vec![0u8; buf.len()];
         let status_buf = vec![0u8; 1];
 
-        let chain = vec![
-            (header_buf, BufferDirection::DriverWritable),
-            (data_buf, BufferDirection::DeviceWritable),
-            (status_buf, BufferDirection::DeviceWritable),
-        ];
+        let chain = NonEmptyVec::new((header_buf, BufferDirection::DriverWritable))
+            .push((data_buf, BufferDirection::DeviceWritable))
+            .push((status_buf, BufferDirection::DeviceWritable));
 
         self.request_queue
             .put_buffer_chain(chain)
             .expect("Must be able to submit block request");
         self.request_queue.notify();
 
-        // Spin-wait for completion
         loop {
             let completed = self.request_queue.receive_buffer();
             if !completed.is_empty() {
@@ -376,18 +374,15 @@ impl BlockDevice {
         let data_buf = data.to_vec();
         let status_buf = vec![0u8; 1];
 
-        let chain = vec![
-            (header_buf, BufferDirection::DriverWritable),
-            (data_buf, BufferDirection::DriverWritable),
-            (status_buf, BufferDirection::DeviceWritable),
-        ];
+        let chain = NonEmptyVec::new((header_buf, BufferDirection::DriverWritable))
+            .push((data_buf, BufferDirection::DriverWritable))
+            .push((status_buf, BufferDirection::DeviceWritable));
 
         self.request_queue
             .put_buffer_chain(chain)
             .expect("Must be able to submit block request");
         self.request_queue.notify();
 
-        // Spin-wait for completion
         loop {
             let completed = self.request_queue.receive_buffer();
             if !completed.is_empty() {

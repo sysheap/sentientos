@@ -326,7 +326,7 @@ impl NetworkDevice {
                 receive_buffer.buffers.len() == 1,
                 "Net receive uses single-descriptor buffers"
             );
-            let buffer = receive_buffer.buffers.into_iter().next().expect("checked");
+            let buffer = receive_buffer.buffers.into_first();
             let (net_hdr, data_bytes) = buffer.split_as::<virtio_net_hdr>();
 
             assert!(net_hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE);
