@@ -1,6 +1,7 @@
 mod basics;
 mod block;
 mod connect4;
+mod ext2;
 mod coreutils;
 mod fork;
 mod job_control;
