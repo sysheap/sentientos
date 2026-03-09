@@ -28,9 +28,7 @@ mod ethernet;
 mod ipv4;
 pub mod mac;
 pub mod sockets;
-#[allow(dead_code)]
 pub mod tcp;
-#[allow(dead_code)]
 pub mod tcp_connection;
 pub mod udp;
 
