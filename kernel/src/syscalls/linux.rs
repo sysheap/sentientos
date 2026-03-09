@@ -66,6 +66,7 @@ linux_syscalls! {
     SYSCALL_NR_PPOLL => ppoll(fds: *mut pollfd, n: c_uint, to: Option<*const timespec>, mask: Option<*const sigset_t>);
     SYSCALL_NR_PRCTL => prctl();
     SYSCALL_NR_READ => read(fd: c_int, buf: *mut u8, count: usize);
+    SYSCALL_NR_READV => readv(fd: c_int, iov: *const iovec, iovcnt: c_int);
     SYSCALL_NR_READLINKAT => readlinkat(dirfd: c_int, pathname: *const u8, buf: *mut u8, bufsiz: usize);
     SYSCALL_NR_RECVFROM => recvfrom(fd: c_int, buf: *mut u8, len: usize, flags: c_int, src_addr: Option<*mut u8>, addrlen: Option<*mut c_uint>);
     SYSCALL_NR_RT_SIGACTION => rt_sigaction(sig: c_uint, act: Option<*const sigaction>, oact: Option<*mut sigaction>, sigsetsize: usize);
@@ -123,6 +124,15 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         count: usize,
     ) -> Result<isize, Errno> {
         self.do_write(fd, buf, count).await
+    }
+
+    async fn readv(
+        &mut self,
+        fd: c_int,
+        iov: LinuxUserspaceArg<*const iovec>,
+        iovcnt: c_int,
+    ) -> Result<isize, Errno> {
+        self.do_readv(fd, iov, iovcnt).await
     }
 
     async fn writev(

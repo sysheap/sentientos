@@ -52,6 +52,44 @@ impl LinuxSyscallHandler {
         Ok(count as isize)
     }
 
+    pub(super) async fn do_readv(
+        &mut self,
+        fd: c_int,
+        iov: LinuxUserspaceArg<*const iovec>,
+        iovcnt: c_int,
+    ) -> Result<isize, Errno> {
+        let (descriptor, flags) = self
+            .current_process
+            .with_lock(|p| p.fd_table().get_descriptor_and_flags(fd))?;
+
+        let buffers: Vec<(usize, usize)> = {
+            let iov = iov.validate_slice(usize::try_from(iovcnt).map_err(|_| Errno::EINVAL)?)?;
+            iov.iter()
+                .filter(|io| io.iov_len != 0)
+                .map(|io| (io.iov_base as usize, io.iov_len.as_usize()))
+                .collect()
+        };
+        let mut total = 0isize;
+
+        for (base, count) in buffers {
+            let data = if flags.is_nonblocking() {
+                descriptor.try_read(count)?
+            } else {
+                descriptor
+                    .read(count, self.current_process.clone(), self.current_tid)
+                    .await?
+            };
+            let buf = LinuxUserspaceArg::<*mut u8>::new(base, self.get_process());
+            buf.write_slice(&data)?;
+            total += data.len() as isize;
+            if data.len() < count {
+                break;
+            }
+        }
+
+        Ok(total)
+    }
+
     pub(super) async fn do_writev(
         &self,
         fd: c_int,
