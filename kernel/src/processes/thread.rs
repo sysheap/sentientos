@@ -274,6 +274,10 @@ impl Thread {
             // The thread is still Running so wake_up() couldn't transition
             // it to Runnable. Don't suspend — stay schedulable.
             self.wakeup_pending = false;
+        } else if self.has_pending_unblocked_signal() {
+            // A signal arrived while the thread was Running (before the syscall
+            // yielded). Don't suspend — stay schedulable so the scheduler can
+            // deliver the signal and return EINTR.
         } else {
             self.suspend();
         }
