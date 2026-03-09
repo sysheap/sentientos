@@ -45,6 +45,9 @@ gdb := 'pwndbg --nh -iex "add-auto-load-safe-path ."'
 run: build
     cargo run --release
 
+run-fb: build
+    cargo run --release -- --fb
+
 test: unit-test system-test
 
 ci: build
