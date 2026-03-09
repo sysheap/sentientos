@@ -195,6 +195,15 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
 
     if let Some(i) = pci_devices
         .iter()
+        .position(drivers::bochs_display::is_bochs_display)
+    {
+        let device = pci_devices.swap_remove(i);
+        drivers::bochs_display::initialize(device);
+        fs::devfs::register_framebuffer_device();
+    }
+
+    if let Some(i) = pci_devices
+        .iter()
         .position(drivers::virtio::rng::RngDevice::is_virtio_rng)
     {
         let device = pci_devices.swap_remove(i);

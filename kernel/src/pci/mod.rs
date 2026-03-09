@@ -183,10 +183,8 @@ impl PCIDevice {
 
         let original_bar_value = configuration_space.bar(index);
         assert!(original_bar_value & 0x1 == 0, "Bar must be memory mapped");
-        assert!(
-            (original_bar_value & 0b110) >> 1 == 0x2,
-            "Bar must be 64-bit wide"
-        );
+        let bar_type = (original_bar_value & 0b110) >> 1;
+        let is_64bit = bar_type == 0x2;
 
         // Determine size of bar
         configuration_space.write_bar(index, 0xffffffff);
@@ -196,7 +194,7 @@ impl PCIDevice {
         // Invert the value and add 1 to get the size (because the bits that are not set are zero because of alignment)
         let size = !(bar_value & !0b1111) + 1;
 
-        debug!("Bar {} size: {:#x}", index, size);
+        debug!("Bar {} size: {:#x} 64bit={}", index, size, is_64bit);
 
         let space = pci::PCI_ALLOCATOR_64_BIT
             .lock()
@@ -207,10 +205,12 @@ impl PCIDevice {
             index,
             u32::try_from(space.pci_address.as_usize() & 0xFFFF_FFFF).expect("masked to 32 bits"),
         );
-        configuration_space.write_bar(
-            index + 1,
-            u32::try_from(space.pci_address.as_usize() >> 32).expect("high 32 bits fit in u32"),
-        );
+        if is_64bit {
+            configuration_space.write_bar(
+                index + 1,
+                u32::try_from(space.pci_address.as_usize() >> 32).expect("high 32 bits fit in u32"),
+            );
+        }
 
         configuration_space.set_command_register_bits(command_register::MEMORY_SPACE);
 
@@ -241,7 +241,9 @@ pub fn enumerate_devices(pci_information: &PCIInformation) -> Vec<PCIDevice> {
                 if let Some(device) = maybe_device {
                     let vendor_id = device.configuration_space.vendor_id().read();
                     let device_id = device.configuration_space.device_id().read();
-                    let name = lookup(vendor_id, device_id).expect("PCI Device must be known.");
+                    let name = lookup(vendor_id, device_id).unwrap_or_else(|| {
+                        alloc::format!("Unknown device {vendor_id:#06x}:{device_id:#06x}")
+                    });
                     info!(
                         "PCI Device {:#x}:{:#x} found at {} ({})",
                         vendor_id, device_id, address, name
