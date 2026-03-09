@@ -532,10 +532,7 @@ impl LinuxSyscalls for LinuxSyscallHandler {
         _clockid: c_int,
         tp: LinuxUserspaceArg<*mut timespec>,
     ) -> Result<isize, Errno> {
-        tp.write_slice(&[timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        }])?;
+        tp.write_slice(&[crate::processes::timer::current_time()])?;
         Ok(0)
     }
 
