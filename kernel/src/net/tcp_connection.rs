@@ -30,7 +30,9 @@ const MAX_RETRANSMITS: usize = 5;
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 
 pub fn allocate_ephemeral_port() -> u16 {
-    NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed)
+    let port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
+    assert!(port >= 49152, "Ephemeral port pool exhausted");
+    port
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -108,10 +110,6 @@ impl TcpConnection {
         self.id.remote_port
     }
 
-    pub fn is_established(&self) -> bool {
-        self.established
-    }
-
     pub fn is_closed(&self) -> bool {
         self.closed
     }
@@ -182,10 +180,6 @@ static TCP_LISTENERS: Spinlock<BTreeMap<u16, SharedTcpListener>> = Spinlock::new
 pub fn register_listener(listener: SharedTcpListener) {
     let port = listener.lock().port();
     TCP_LISTENERS.lock().insert(port, listener);
-}
-
-pub fn unregister_listener(port: u16) {
-    TCP_LISTENERS.lock().remove(&port);
 }
 
 pub fn process_tcp_packet(ip_header: &IpV4Header, data: &[u8], source_mac: MacAddress) {
@@ -320,23 +314,17 @@ impl Future for SegmentOrTimeout {
     type Output = Option<ReceivedSegment>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: Pin projection is sound here because WaitForSegment and
-        // Sleep are structurally pinned and we never move them after pinning.
-        let this = unsafe { self.get_unchecked_mut() };
+        let this = self.get_mut();
         if this.done {
             return Poll::Ready(None);
         }
 
-        // SAFETY: segment is structurally pinned within this future.
-        let seg_pin = unsafe { Pin::new_unchecked(&mut this.segment) };
-        if let Poll::Ready(seg) = seg_pin.poll(cx) {
+        if let Poll::Ready(seg) = Pin::new(&mut this.segment).poll(cx) {
             this.done = true;
             return Poll::Ready(seg);
         }
 
-        // SAFETY: timeout is structurally pinned within this future.
-        let timeout_pin = unsafe { Pin::new_unchecked(&mut this.timeout) };
-        if let Poll::Ready(()) = timeout_pin.poll(cx) {
+        if let Poll::Ready(()) = Pin::new(&mut this.timeout).poll(cx) {
             this.done = true;
             return Poll::Ready(None);
         }

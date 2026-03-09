@@ -33,8 +33,10 @@ pub enum IpV4ParseError {
     PacketTooSmall,
 }
 
-pub const PROTOCOL_TCP: u8 = 6;
-pub const PROTOCOL_UDP: u8 = 17;
+#[allow(clippy::cast_possible_truncation)]
+pub const PROTOCOL_TCP: u8 = headers::socket::IPPROTO_TCP as u8;
+#[allow(clippy::cast_possible_truncation)]
+pub const PROTOCOL_UDP: u8 = headers::socket::IPPROTO_UDP as u8;
 
 impl IpV4Header {
     pub const HEADER_SIZE: usize = core::mem::size_of::<Self>();

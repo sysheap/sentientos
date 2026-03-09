@@ -10,11 +10,14 @@ use crate::{
 
 use super::{ipv4::IpV4Header, mac::MacAddress};
 
-pub const FLAG_FIN: u16 = 0x001;
-pub const FLAG_SYN: u16 = 0x002;
-pub const FLAG_RST: u16 = 0x004;
-pub const FLAG_PSH: u16 = 0x008;
-pub const FLAG_ACK: u16 = 0x010;
+#[allow(clippy::cast_possible_truncation)]
+pub const FLAG_FIN: u16 = headers::socket::TH_FIN as u16;
+#[allow(clippy::cast_possible_truncation)]
+pub const FLAG_SYN: u16 = headers::socket::TH_SYN as u16;
+#[allow(clippy::cast_possible_truncation)]
+pub const FLAG_RST: u16 = headers::socket::TH_RST as u16;
+#[allow(clippy::cast_possible_truncation)]
+pub const FLAG_ACK: u16 = headers::socket::TH_ACK as u16;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -35,7 +38,8 @@ impl ByteInterpretable for TcpHeader {}
 
 impl TcpHeader {
     const HEADER_SIZE: usize = core::mem::size_of::<Self>();
-    const TCP_PROTOCOL: u8 = 6;
+    #[allow(clippy::cast_possible_truncation)]
+    const TCP_PROTOCOL: u8 = headers::socket::IPPROTO_TCP as u8;
 
     pub fn source_port(&self) -> u16 {
         self.source_port.get()
@@ -55,10 +59,6 @@ impl TcpHeader {
 
     pub fn flags(&self) -> u16 {
         self.data_offset_and_flags.get() & 0x1FF
-    }
-
-    pub fn window_size(&self) -> u16 {
-        self.window_size.get()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -129,7 +129,9 @@ impl TcpHeader {
             unsafe { core::ptr::read_unaligned(data.as_ptr().cast::<TcpHeader>()) };
 
         let data_offset = usize::from(tcp_header.data_offset_and_flags.get() >> 12);
-        assert!(data_offset >= 5, "TCP data offset must be at least 5");
+        if data_offset < 5 {
+            return Err(TcpParseError::InvalidDataOffset);
+        }
 
         let header_bytes = data_offset * 4;
         if data.len() < header_bytes {
@@ -143,7 +145,9 @@ impl TcpHeader {
         let payload = &payload[..payload_len];
 
         let computed = Self::compute_checksum_raw(&data[..total_tcp_len], ip_header, total_tcp_len);
-        assert!(computed == 0, "TCP checksum must be valid");
+        if computed != 0 {
+            return Err(TcpParseError::InvalidChecksum);
+        }
 
         Ok((tcp_header, payload))
     }
@@ -176,6 +180,8 @@ impl TcpHeader {
 #[derive(Debug)]
 pub enum TcpParseError {
     PacketTooSmall,
+    InvalidDataOffset,
+    InvalidChecksum,
 }
 
 #[cfg(test)]
