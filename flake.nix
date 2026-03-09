@@ -74,9 +74,10 @@
             cd doomgeneric
             cp ${./userspace/doom/dg_solaya.c} dg_solaya.c
 
-            # Embed doom1.wad as a binary object
+            # Embed doom1.wad as a binary object in a separate directory
             cp ${doom1-wad} doom1.wad
-            riscv64-unknown-linux-musl-ld -r -b binary -o doom1_wad.o doom1.wad
+            mkdir -p wad_obj
+            riscv64-unknown-linux-musl-ld -r -b binary -o wad_obj/doom1_wad.o doom1.wad
 
             CC=riscv64-unknown-linux-musl-gcc
             CFLAGS="-static -O2 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -I."
@@ -103,7 +104,7 @@
               $CC $CFLAGS -c $f -o ''${f%.c}.o
             done
 
-            $CC $CFLAGS -o doom *.o doom1_wad.o -lm
+            $CC $CFLAGS -o doom *.o wad_obj/doom1_wad.o -lm
           '';
           installPhase = ''
             mkdir -p $out/bin

@@ -4,6 +4,7 @@ mod clocktest;
 mod connect4;
 mod ext2;
 mod coreutils;
+mod doom;
 mod fork;
 mod framebuffer;
 mod job_control;
