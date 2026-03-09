@@ -4,6 +4,7 @@ mod clocktest;
 mod connect4;
 mod coreutils;
 mod fork;
+mod framebuffer;
 mod job_control;
 mod mutex;
 mod net;

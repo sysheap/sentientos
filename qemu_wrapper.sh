@@ -21,6 +21,10 @@ while [[ $# -gt 0 ]]; do
             QEMU_CMD+=" -object filter-dump,id=f1,netdev=netdev1,file=network.pcap "
             shift
             ;;
+        --fb)
+            QEMU_CMD+=" -device bochs-display"
+            shift
+            ;;
         --gdb)
             shift
             if [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -36,6 +40,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --block FILE   Attach a raw disk image as virtio-blk device"
+            echo "  --fb           Attach bochs-display framebuffer device"
             echo "  --gdb [PORT]   Enable GDB server (default: dynamic port)"
             echo "  --log          Log qemu events to /tmp/solaya.log"
             echo "  --capture      Capture network traffic into network.pcap"

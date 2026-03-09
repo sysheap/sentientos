@@ -37,6 +37,7 @@ pub struct QemuOptions {
     use_smp: bool,
     enable_gdb: bool,
     block_device: Option<PathBuf>,
+    framebuffer: bool,
 }
 
 impl Default for QemuOptions {
@@ -47,6 +48,7 @@ impl Default for QemuOptions {
             use_smp: true,
             enable_gdb,
             block_device: None,
+            framebuffer: false,
         }
     }
 }
@@ -68,6 +70,10 @@ impl QemuOptions {
         self.block_device = Some(path);
         self
     }
+    pub fn framebuffer(mut self, value: bool) -> Self {
+        self.framebuffer = value;
+        self
+    }
 
     fn apply(self, command: &mut Command) -> Option<u16> {
         let mut network_port = None;
@@ -78,6 +84,9 @@ impl QemuOptions {
         }
         if let Some(block_path) = &self.block_device {
             command.args(["--block", &block_path.to_string_lossy()]);
+        }
+        if self.framebuffer {
+            command.arg("--fb");
         }
         if self.use_smp {
             command.arg("--smp");

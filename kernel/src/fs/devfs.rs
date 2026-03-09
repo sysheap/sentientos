@@ -2,9 +2,12 @@ use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 use headers::errno::Errno;
 
 use crate::{
-    drivers::virtio::{block, rng},
+    drivers::{
+        bochs_display,
+        virtio::{block, rng},
+    },
     io::tty_device::{TtyDevice, console_tty},
-    klibc::Spinlock,
+    klibc::{MMIO, Spinlock},
 };
 
 use super::vfs::{DirEntry, NodeType, VfsNode, VfsNodeRef, alloc_ino};
@@ -242,6 +245,73 @@ pub fn register_random_device() {
         .clone()
         .expect("devfs must be initialized before registering devices");
     dir.entries.lock().insert(String::from("random"), node);
+}
+
+struct DevFramebuffer {
+    ino: u64,
+}
+
+impl VfsNode for DevFramebuffer {
+    fn node_type(&self) -> NodeType {
+        NodeType::File
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        bochs_display::FB_SIZE
+    }
+
+    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+        let base = bochs_display::fb_base();
+        if base == 0 {
+            return Err(Errno::ENODEV);
+        }
+        let end = offset.saturating_add(buf.len()).min(bochs_display::FB_SIZE);
+        if offset >= end {
+            return Ok(0);
+        }
+        let len = end - offset;
+        for (i, byte) in buf[..len].iter_mut().enumerate() {
+            let mmio: MMIO<u8> = MMIO::new(base + offset + i);
+            *byte = mmio.read();
+        }
+        Ok(len)
+    }
+
+    fn write(&self, offset: usize, data: &[u8]) -> Result<usize, Errno> {
+        let base = bochs_display::fb_base();
+        if base == 0 {
+            return Err(Errno::ENODEV);
+        }
+        let end = offset
+            .saturating_add(data.len())
+            .min(bochs_display::FB_SIZE);
+        if offset >= end {
+            return Ok(0);
+        }
+        let len = end - offset;
+        for (i, &byte) in data[..len].iter().enumerate() {
+            let mut mmio: MMIO<u8> = MMIO::new(base + offset + i);
+            mmio.write(byte);
+        }
+        Ok(len)
+    }
+
+    fn truncate(&self) -> Result<(), Errno> {
+        Ok(())
+    }
+}
+
+pub fn register_framebuffer_device() {
+    let node: VfsNodeRef = Arc::new(DevFramebuffer { ino: alloc_ino() });
+    let dir = DEVFS
+        .lock()
+        .clone()
+        .expect("devfs must be initialized before registering devices");
+    dir.entries.lock().insert(String::from("fb0"), node);
 }
 
 pub fn register_block_device(index: usize) {
