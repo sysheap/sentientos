@@ -90,6 +90,20 @@ pub fn wakeup_wakers() {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
+pub fn current_time() -> timespec {
+    let clocks = arch::timer::get_current_clocks();
+    let clocks_per_nano = *CLOCKS_PER_NANO;
+    let clocks_per_second = clocks_per_nano * 1000 * 1000;
+    let secs = clocks / clocks_per_second;
+    let remaining_clocks = clocks % clocks_per_second;
+    let nsecs = remaining_clocks / clocks_per_nano;
+    timespec {
+        tv_sec: secs as i64,
+        tv_nsec: nsecs as i64,
+    }
+}
+
 pub fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = arch::timer::get_current_clocks();
