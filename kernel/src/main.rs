@@ -224,6 +224,20 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         fs::devfs::register_random_device();
     }
 
+    if let Some(i) = pci_devices
+        .iter()
+        .position(drivers::virtio::input::InputDevice::is_virtio_input)
+    {
+        let device = pci_devices.swap_remove(i);
+        let plic_irq = device.plic_interrupt_id();
+        let init = drivers::virtio::input::InputDevice::initialize(device)
+            .expect("Input device initialization must work.");
+        drivers::virtio::input::init_isr_status(init.interrupt_status);
+        drivers::virtio::input::set_device(init.device);
+        plic::init_virtio_input_interrupt(plic_irq);
+        fs::devfs::register_keyboard_device();
+    }
+
     processes::kernel_tasks::create_worker_thread();
 
     info!("kernel_init done! Starting other harts");

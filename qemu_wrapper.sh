@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --fb)
-            QEMU_CMD+=" -device bochs-display"
+            QEMU_CMD+=" -device bochs-display -device virtio-keyboard-pci"
             NEED_DISPLAY=true
             shift
             ;;

@@ -116,6 +116,11 @@ fn handle_external_interrupt() {
             drop(plic);
             crate::drivers::virtio::block::on_block_interrupt();
         }
+        InterruptSource::VirtioInput => {
+            plic.complete_interrupt(plic_interrupt);
+            drop(plic);
+            crate::drivers::virtio::input::on_input_interrupt();
+        }
     }
 }
 

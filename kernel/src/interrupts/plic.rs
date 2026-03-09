@@ -65,6 +65,9 @@ impl Plic {
             UART_INTERRUPT_NUMBER => Some(InterruptSource::Uart),
             id if id == VIRTIO_NET_IRQ.load(Ordering::Relaxed) => Some(InterruptSource::VirtioNet),
             id if VIRTIO_BLK_IRQS.lock().contains(&id) => Some(InterruptSource::VirtioBlock(id)),
+            id if id == VIRTIO_INPUT_IRQ.load(Ordering::Relaxed) => {
+                Some(InterruptSource::VirtioInput)
+            }
             id => panic!("Unknown PLIC interrupt source ID {id}"),
         }
     }
@@ -74,6 +77,7 @@ impl Plic {
             InterruptSource::Uart => UART_INTERRUPT_NUMBER,
             InterruptSource::VirtioNet => VIRTIO_NET_IRQ.load(Ordering::Relaxed),
             InterruptSource::VirtioBlock(irq) => irq,
+            InterruptSource::VirtioInput => VIRTIO_INPUT_IRQ.load(Ordering::Relaxed),
         };
         self.claim_complete_register.write(interrupt_id);
     }
@@ -84,11 +88,13 @@ pub static PLIC: RuntimeInitializedData<Spinlock<Plic>> = RuntimeInitializedData
 const UART_INTERRUPT_NUMBER: u32 = 10;
 static VIRTIO_NET_IRQ: AtomicU32 = AtomicU32::new(0);
 static VIRTIO_BLK_IRQS: Spinlock<Vec<u32>> = Spinlock::new(Vec::new());
+static VIRTIO_INPUT_IRQ: AtomicU32 = AtomicU32::new(0);
 
 pub enum InterruptSource {
     Uart,
     VirtioNet,
     VirtioBlock(u32),
+    VirtioInput,
 }
 
 pub fn init_uart_interrupt(cpu_id: CpuId) {
@@ -113,6 +119,14 @@ pub fn init_virtio_net_interrupt(interrupt_id: u32) {
 pub fn init_virtio_block_interrupt(interrupt_id: u32) {
     info!("Initializing plic virtio block interrupt (IRQ {interrupt_id})");
     VIRTIO_BLK_IRQS.lock().push(interrupt_id);
+    let mut plic = PLIC.lock();
+    plic.enable(interrupt_id);
+    plic.set_priority(interrupt_id, 1);
+}
+
+pub fn init_virtio_input_interrupt(interrupt_id: u32) {
+    info!("Initializing plic virtio input interrupt (IRQ {interrupt_id})");
+    VIRTIO_INPUT_IRQ.store(interrupt_id, Ordering::Relaxed);
     let mut plic = PLIC.lock();
     plic.enable(interrupt_id);
     plic.set_priority(interrupt_id, 1);

@@ -8,17 +8,64 @@
 #include <unistd.h>
 #include <time.h>
 #include <termios.h>
+#include <stdint.h>
 
 /* Embedded doom1.wad via ld -r -b binary */
 extern char _binary_doom1_wad_start[];
 extern char _binary_doom1_wad_end[];
 
 static int fb_fd = -1;
+static int kb_fd = -1;
 static struct termios orig_termios;
 
 #define FB_WIDTH  640
 #define FB_HEIGHT 480
 #define WAD_PATH  "/tmp/doom1.wad"
+
+/* Linux input event constants */
+#define EV_KEY 1
+
+/* Linux keycodes for keys we care about */
+#define KEY_ESC_LC       1
+#define KEY_1_LC         2
+#define KEY_2_LC         3
+#define KEY_3_LC         4
+#define KEY_4_LC         5
+#define KEY_5_LC         6
+#define KEY_6_LC         7
+#define KEY_7_LC         8
+#define KEY_8_LC         9
+#define KEY_9_LC        10
+#define KEY_0_LC        11
+#define KEY_MINUS_LC    12
+#define KEY_EQUAL_LC    13
+#define KEY_TAB_LC      15
+#define KEY_Q_LC        16
+#define KEY_W_LC        17
+#define KEY_E_LC        18
+#define KEY_R_LC        19
+#define KEY_T_LC        20
+#define KEY_Y_LC        21
+#define KEY_ENTER_LC    28
+#define KEY_A_LC        30
+#define KEY_S_LC        31
+#define KEY_D_LC        32
+#define KEY_F_LC        33
+#define KEY_LSHIFT_LC   42
+#define KEY_COMMA_LC    51
+#define KEY_DOT_LC      52
+#define KEY_RSHIFT_LC   54
+#define KEY_SPACE_LC    57
+#define KEY_UP_LC      103
+#define KEY_LEFT_LC    105
+#define KEY_RIGHT_LC   106
+#define KEY_DOWN_LC    108
+
+struct virtio_input_event {
+    uint16_t type;
+    uint16_t code;
+    uint32_t value;
+};
 
 static void extract_wad(void)
 {
@@ -49,16 +96,22 @@ void DG_Init(void)
         exit(1);
     }
 
-    struct termios raw;
-    tcgetattr(STDIN_FILENO, &orig_termios);
-    raw = orig_termios;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+    kb_fd = open("/dev/keyboard0", O_RDONLY | O_NONBLOCK);
+    if (kb_fd >= 0) {
+        fprintf(stderr, "Using VirtIO keyboard input\n");
+    } else {
+        fprintf(stderr, "No VirtIO keyboard, falling back to stdin\n");
+        struct termios raw;
+        tcgetattr(STDIN_FILENO, &orig_termios);
+        raw = orig_termios;
+        raw.c_lflag &= ~(ICANON | ECHO);
+        raw.c_cc[VMIN] = 0;
+        raw.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+        int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+        fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
 }
 
 void DG_DrawFrame(void)
@@ -95,6 +148,47 @@ uint32_t DG_GetTicksMs(void)
     return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
+static unsigned char linux_keycode_to_doom(uint16_t code)
+{
+    switch (code) {
+        case KEY_UP_LC:     return KEY_UPARROW;
+        case KEY_DOWN_LC:   return KEY_DOWNARROW;
+        case KEY_LEFT_LC:   return KEY_LEFTARROW;
+        case KEY_RIGHT_LC:  return KEY_RIGHTARROW;
+        case KEY_W_LC:      return KEY_UPARROW;
+        case KEY_S_LC:      return KEY_DOWNARROW;
+        case KEY_A_LC:      return KEY_LEFTARROW;
+        case KEY_D_LC:      return KEY_RIGHTARROW;
+        case KEY_SPACE_LC:  return KEY_FIRE;
+        case KEY_ENTER_LC:  return KEY_ENTER;
+        case KEY_ESC_LC:    return KEY_ESCAPE;
+        case KEY_TAB_LC:    return KEY_TAB;
+        case KEY_COMMA_LC:  return KEY_STRAFE_L;
+        case KEY_DOT_LC:    return KEY_STRAFE_R;
+        case KEY_E_LC:      return KEY_USE;
+        case KEY_LSHIFT_LC: return KEY_RSHIFT;
+        case KEY_RSHIFT_LC: return KEY_RSHIFT;
+        case KEY_1_LC:      return '1';
+        case KEY_2_LC:      return '2';
+        case KEY_3_LC:      return '3';
+        case KEY_4_LC:      return '4';
+        case KEY_5_LC:      return '5';
+        case KEY_6_LC:      return '6';
+        case KEY_7_LC:      return '7';
+        case KEY_8_LC:      return '8';
+        case KEY_9_LC:      return '9';
+        case KEY_0_LC:      return '0';
+        case KEY_MINUS_LC:  return KEY_MINUS;
+        case KEY_EQUAL_LC:  return KEY_EQUALS;
+        case KEY_Y_LC:      return 'y';
+        case KEY_Q_LC:      return 'q';
+        case KEY_F_LC:      return 'f';
+        case KEY_R_LC:      return 'r';
+        case KEY_T_LC:      return 't';
+        default:            return 0;
+    }
+}
+
 static unsigned char convert_key(unsigned char c)
 {
     switch (c) {
@@ -113,11 +207,39 @@ static unsigned char convert_key(unsigned char c)
     }
 }
 
+/* Buffer for VirtIO keyboard events */
+#define MAX_EVENTS 16
+static struct virtio_input_event event_buf[MAX_EVENTS];
+static int event_count = 0;
+static int event_index = 0;
+
 static int pending_release = 0;
 static unsigned char pending_release_key = 0;
 
 int DG_GetKey(int *pressed, unsigned char *doomKey)
 {
+    if (kb_fd >= 0) {
+        /* VirtIO keyboard path: real press/release events */
+        if (event_index >= event_count) {
+            ssize_t n = read(kb_fd, event_buf, sizeof(event_buf));
+            if (n <= 0) return 0;
+            event_count = n / sizeof(struct virtio_input_event);
+            event_index = 0;
+        }
+
+        while (event_index < event_count) {
+            struct virtio_input_event *ev = &event_buf[event_index++];
+            if (ev->type != EV_KEY) continue;
+            unsigned char key = linux_keycode_to_doom(ev->code);
+            if (key == 0) continue;
+            *pressed = (ev->value != 0) ? 1 : 0;
+            *doomKey = key;
+            return 1;
+        }
+        return 0;
+    }
+
+    /* Fallback: stdin with synthetic key-release */
     if (pending_release) {
         pending_release = 0;
         *pressed = 0;
