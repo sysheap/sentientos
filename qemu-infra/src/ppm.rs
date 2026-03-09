@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::anyhow;
+use image::{ImageBuffer, Rgb};
 
 pub struct PpmImage {
     pub width: u32,
@@ -54,12 +55,13 @@ impl PpmImage {
         self.pixels.iter().any(|&b| b != 0)
     }
 
-    pub fn to_ppm_bytes(&self) -> Vec<u8> {
-        let header = format!("P6\n{} {}\n255\n", self.width, self.height);
-        let mut data = Vec::with_capacity(header.len() + self.pixels.len());
-        data.extend_from_slice(header.as_bytes());
-        data.extend_from_slice(&self.pixels);
-        data
+    pub fn to_png_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        let img: ImageBuffer<Rgb<u8>, _> =
+            ImageBuffer::from_raw(self.width, self.height, self.pixels.clone())
+                .ok_or_else(|| anyhow!("pixel data size mismatch"))?;
+        let mut buf = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut buf, image::ImageFormat::Png)?;
+        Ok(buf.into_inner())
     }
 }
 

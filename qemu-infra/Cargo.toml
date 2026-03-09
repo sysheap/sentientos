@@ -6,4 +6,5 @@ edition = "2024"
 
 [dependencies]
 anyhow = { version = "1.0.94", features = ["backtrace"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1.43.1", features = ["full"] }
