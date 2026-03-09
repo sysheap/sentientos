@@ -247,6 +247,57 @@ pub fn register_random_device() {
     dir.entries.lock().insert(String::from("random"), node);
 }
 
+fn mmio_write_bulk(addr: usize, data: &[u8]) {
+    let mut pos = 0;
+    let len = data.len();
+    let head = addr % 8;
+    if head != 0 {
+        let n = (8 - head).min(len);
+        for &byte in &data[..n] {
+            let mut mmio: MMIO<u8> = MMIO::new(addr + pos);
+            mmio.write(byte);
+            pos += 1;
+        }
+    }
+    while pos + 8 <= len {
+        let mut mmio: MMIO<u64> = MMIO::new(addr + pos);
+        let bytes: [u8; 8] = data[pos..pos + 8]
+            .try_into()
+            .expect("slice is exactly 8 bytes");
+        mmio.write(u64::from_le_bytes(bytes));
+        pos += 8;
+    }
+    while pos < len {
+        let mut mmio: MMIO<u8> = MMIO::new(addr + pos);
+        mmio.write(data[pos]);
+        pos += 1;
+    }
+}
+
+fn mmio_read_bulk(addr: usize, buf: &mut [u8]) {
+    let mut pos = 0;
+    let len = buf.len();
+    let head = addr % 8;
+    if head != 0 {
+        let n = (8 - head).min(len);
+        for byte in &mut buf[..n] {
+            let mmio: MMIO<u8> = MMIO::new(addr + pos);
+            *byte = mmio.read();
+            pos += 1;
+        }
+    }
+    while pos + 8 <= len {
+        let mmio: MMIO<u64> = MMIO::new(addr + pos);
+        buf[pos..pos + 8].copy_from_slice(&mmio.read().to_le_bytes());
+        pos += 8;
+    }
+    while pos < len {
+        let mmio: MMIO<u8> = MMIO::new(addr + pos);
+        buf[pos] = mmio.read();
+        pos += 1;
+    }
+}
+
 struct DevFramebuffer {
     ino: u64,
 }
@@ -274,10 +325,8 @@ impl VfsNode for DevFramebuffer {
             return Ok(0);
         }
         let len = end - offset;
-        for (i, byte) in buf[..len].iter_mut().enumerate() {
-            let mmio: MMIO<u8> = MMIO::new(base + offset + i);
-            *byte = mmio.read();
-        }
+        let addr = base + offset;
+        mmio_read_bulk(addr, &mut buf[..len]);
         Ok(len)
     }
 
@@ -293,10 +342,8 @@ impl VfsNode for DevFramebuffer {
             return Ok(0);
         }
         let len = end - offset;
-        for (i, &byte) in data[..len].iter().enumerate() {
-            let mut mmio: MMIO<u8> = MMIO::new(base + offset + i);
-            mmio.write(byte);
-        }
+        let addr = base + offset;
+        mmio_write_bulk(addr, &data[..len]);
         Ok(len)
     }
 
