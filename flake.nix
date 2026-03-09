@@ -98,6 +98,7 @@
               pwndbg.packages.${system}.default
               pkgs.typos-lsp
               pkgs.dtc
+              pkgs.e2fsprogs
             ]
             ++ basePackages;
             shellHook = hook;
