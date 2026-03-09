@@ -4,7 +4,7 @@ use headers::errno::Errno;
 use crate::{
     drivers::{
         bochs_display,
-        virtio::{block, rng},
+        virtio::{block, input, rng},
     },
     io::tty_device::{TtyDevice, console_tty},
     klibc::{MMIO, Spinlock},
@@ -375,4 +375,47 @@ pub fn register_block_device(index: usize) {
         .clone()
         .expect("devfs must be initialized before registering devices");
     dir.entries.lock().insert(name, node);
+}
+
+struct DevKeyboard {
+    ino: u64,
+}
+
+impl VfsNode for DevKeyboard {
+    fn node_type(&self) -> NodeType {
+        NodeType::File
+    }
+
+    fn ino(&self) -> u64 {
+        self.ino
+    }
+
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn read(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
+        let n = input::read_events(buf);
+        if n == 0 {
+            return Err(Errno::EAGAIN);
+        }
+        Ok(n)
+    }
+
+    fn write(&self, _offset: usize, data: &[u8]) -> Result<usize, Errno> {
+        Ok(data.len())
+    }
+
+    fn truncate(&self) -> Result<(), Errno> {
+        Ok(())
+    }
+}
+
+pub fn register_keyboard_device() {
+    let node: VfsNodeRef = Arc::new(DevKeyboard { ino: alloc_ino() });
+    let dir = DEVFS
+        .lock()
+        .clone()
+        .expect("devfs must be initialized before registering devices");
+    dir.entries.lock().insert(String::from("keyboard0"), node);
 }
