@@ -113,14 +113,26 @@ static unsigned char convert_key(unsigned char c)
     }
 }
 
+static int pending_release = 0;
+static unsigned char pending_release_key = 0;
+
 int DG_GetKey(int *pressed, unsigned char *doomKey)
 {
+    if (pending_release) {
+        pending_release = 0;
+        *pressed = 0;
+        *doomKey = pending_release_key;
+        return 1;
+    }
+
     unsigned char c;
     int n = read(STDIN_FILENO, &c, 1);
     if (n <= 0) return 0;
 
     *pressed = 1;
     *doomKey = convert_key(c);
+    pending_release = 1;
+    pending_release_key = *doomKey;
     return 1;
 }
 
