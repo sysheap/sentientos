@@ -1,5 +1,33 @@
 {
   "nodes": {
+    "doom1-wad": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-nabmIuMv406W8r4Gl8L/kBzmcZBV1yB53zzEVwO0p3k=",
+        "type": "file",
+        "url": "https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://distro.ibiblio.org/slitaz/sources/packages/d/doom1.wad"
+      }
+    },
+    "doomgeneric": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1756017292,
+        "narHash": "sha256-JGa7gTvSvxlmCLw9E+RDMt5RRjorNuA0GnC1kU9xnZ0=",
+        "owner": "ozkl",
+        "repo": "doomgeneric",
+        "rev": "fc601639494e089702a1ada082eb51aaafc03722",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ozkl",
+        "repo": "doomgeneric",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -109,6 +137,8 @@
     },
     "root": {
       "inputs": {
+        "doom1-wad": "doom1-wad",
+        "doomgeneric": "doomgeneric",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "pwndbg": "pwndbg",
