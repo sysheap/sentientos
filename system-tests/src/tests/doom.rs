@@ -18,6 +18,19 @@ async fn doom_starts() -> anyhow::Result<()> {
     let output_str = String::from_utf8_lossy(&output);
     eprintln!("=== DOOM OUTPUT ===\n{}\n=== END ===", output_str);
 
+    // Capture screenshot and verify Doom rendered something
+    let screenshot = solaya.screendump().await?;
+    eprintln!(
+        "Screenshot: {}x{}, non-black: {}",
+        screenshot.width,
+        screenshot.height,
+        screenshot.has_non_black_pixels()
+    );
+    assert!(
+        screenshot.has_non_black_pixels(),
+        "Doom should have rendered non-black pixels"
+    );
+
     // Doom is now running (blocking the shell). Send Ctrl+C to kill it.
     solaya.ctrl_c_and_assert_prompt().await?;
 

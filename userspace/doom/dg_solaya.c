@@ -96,6 +96,18 @@ void DG_Init(void)
         exit(1);
     }
 
+    /* Clear top and bottom 40px borders once */
+    {
+        int border = (FB_HEIGHT - DOOMGENERIC_RESY) / 2;
+        size_t border_bytes = border * FB_WIDTH * sizeof(uint32_t);
+        void *black = calloc(border * FB_WIDTH, sizeof(uint32_t));
+        lseek(fb_fd, 0, SEEK_SET);
+        write(fb_fd, black, border_bytes);
+        lseek(fb_fd, (border + DOOMGENERIC_RESY) * FB_WIDTH * sizeof(uint32_t), SEEK_SET);
+        write(fb_fd, black, border_bytes);
+        free(black);
+    }
+
     kb_fd = open("/dev/keyboard0", O_RDONLY | O_NONBLOCK);
     if (kb_fd >= 0) {
         fprintf(stderr, "Using VirtIO keyboard input\n");
@@ -116,21 +128,12 @@ void DG_Init(void)
 
 void DG_DrawFrame(void)
 {
-    /* Doom renders at DOOMGENERIC_RESX(640) x DOOMGENERIC_RESY(400).
-     * Framebuffer is 640x480. Center vertically with 40px offset. */
-    static uint32_t fb[FB_WIDTH * FB_HEIGHT];
-
+    /* Doom renders at 640x400. Framebuffer is 640x480.
+     * Borders cleared once in DG_Init; write game area directly. */
     int y_offset = (FB_HEIGHT - DOOMGENERIC_RESY) / 2;
-
-    memset(fb, 0, sizeof(fb));
-    for (int y = 0; y < DOOMGENERIC_RESY; y++) {
-        memcpy(&fb[(y_offset + y) * FB_WIDTH],
-               &DG_ScreenBuffer[y * DOOMGENERIC_RESX],
-               DOOMGENERIC_RESX * sizeof(uint32_t));
-    }
-
-    lseek(fb_fd, 0, SEEK_SET);
-    write(fb_fd, fb, sizeof(fb));
+    lseek(fb_fd, y_offset * FB_WIDTH * sizeof(uint32_t), SEEK_SET);
+    write(fb_fd, DG_ScreenBuffer,
+          DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t));
 }
 
 void DG_SleepMs(uint32_t ms)
