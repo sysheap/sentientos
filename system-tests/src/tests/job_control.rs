@@ -103,6 +103,9 @@ async fn cat_bg_then_fg_then_ctrl_c() -> anyhow::Result<()> {
     solaya.stdin().flush().await?;
     solaya.stdout().assert_read_until("fg\n").await?;
 
+    // Wait for dash to read fg from input_buf and resume cat in foreground
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
     // Send Ctrl+C to kill cat (now in foreground)
     solaya.stdin().write_all(&[0x03]).await?;
     solaya.stdin().flush().await?;

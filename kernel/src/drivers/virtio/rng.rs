@@ -18,7 +18,6 @@ use crate::{
 
 const QUEUE_SIZE: usize = 0x10;
 const VIRTIO_RNG_SUBSYSTEM_ID: u16 = 4;
-const SPIN_LIMIT: usize = 1_000_000;
 
 pub struct RngDevice {
     common_cfg: MMIO<virtio_pci_common_cfg>,
@@ -196,14 +195,11 @@ impl RngDevice {
                 .expect("Must be able to submit RNG request");
             self.request_queue.notify();
 
-            let mut spins = 0;
             let received = loop {
                 let buffers = self.request_queue.receive_buffer();
                 if !buffers.is_empty() {
                     break buffers;
                 }
-                spins += 1;
-                assert!(spins < SPIN_LIMIT, "VirtIO RNG device not responding");
                 core::hint::spin_loop();
             };
 

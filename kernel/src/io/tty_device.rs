@@ -139,6 +139,8 @@ impl TtyDeviceInner {
                     self.echo_newline(&mut echo);
                 }
                 self.line_buf.clear();
+                self.input_buf.clear();
+                self.eof_pending = false;
                 return InputResult {
                     action: InputAction::Signal(headers::syscall_types::SIGINT),
                     echo,
@@ -151,6 +153,8 @@ impl TtyDeviceInner {
                     self.echo_newline(&mut echo);
                 }
                 self.line_buf.clear();
+                self.input_buf.clear();
+                self.eof_pending = false;
                 return InputResult {
                     action: InputAction::Signal(headers::syscall_types::SIGTSTP),
                     echo,
@@ -163,6 +167,8 @@ impl TtyDeviceInner {
                     self.echo_newline(&mut echo);
                 }
                 self.line_buf.clear();
+                self.input_buf.clear();
+                self.eof_pending = false;
                 return InputResult {
                     action: InputAction::Signal(headers::syscall_types::SIGQUIT),
                     echo,
@@ -450,6 +456,26 @@ mod tests {
     fn onlcr_output_processing() {
         let dev = TtyDeviceInner::new();
         assert_eq!(dev.process_output(b"hello\nworld\n"), b"hello\r\nworld\r\n");
+    }
+
+    #[test_case]
+    fn ctrl_c_flushes_input_buf() {
+        let mut dev = TtyDeviceInner::new();
+        dev.process_input_byte(b'f');
+        dev.process_input_byte(b'g');
+        dev.process_input_byte(b'\n');
+        assert!(!dev.is_input_empty());
+        dev.process_input_byte(3); // Ctrl-C
+        assert!(dev.is_input_empty());
+    }
+
+    #[test_case]
+    fn signal_clears_eof_pending() {
+        let mut dev = TtyDeviceInner::new();
+        dev.process_input_byte(4); // Ctrl-D on empty line
+        assert!(dev.eof_pending);
+        dev.process_input_byte(3); // Ctrl-C
+        assert!(!dev.eof_pending);
     }
 
     #[test_case]
