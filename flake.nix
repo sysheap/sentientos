@@ -80,7 +80,7 @@
             riscv64-unknown-linux-musl-ld -r -b binary -o wad_obj/doom1_wad.o doom1.wad
 
             CC=riscv64-unknown-linux-musl-gcc
-            CFLAGS="-static -O2 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -I."
+            CFLAGS="-static -O3 -DNORMALUNIX -DLINUX -D_DEFAULT_SOURCE -I."
 
             SRCS="
               dummy.c am_map.c doomdef.c doomstat.c dstrings.c
