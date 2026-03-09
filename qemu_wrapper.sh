@@ -14,6 +14,7 @@ QEMU_CMD="qemu-system-riscv64 \
     -device virtio-rng-pci"
 
 NEED_DISPLAY=false
+HEADLESS=false
 
 # Process options
 while [[ $# -gt 0 ]]; do
@@ -25,6 +26,10 @@ while [[ $# -gt 0 ]]; do
         --fb)
             QEMU_CMD+=" -device bochs-display"
             NEED_DISPLAY=true
+            shift
+            ;;
+        --headless)
+            HEADLESS=true
             shift
             ;;
         --gdb)
@@ -43,6 +48,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --block FILE   Attach a raw disk image as virtio-blk device"
             echo "  --fb           Attach bochs-display framebuffer device"
+            echo "  --headless     Force -display none even with framebuffer"
+            echo "  --qmp PATH     Enable QMP on a Unix socket"
             echo "  --gdb [PORT]   Enable GDB server (default: dynamic port)"
             echo "  --log          Log qemu events to /tmp/solaya.log"
             echo "  --capture      Capture network traffic into network.pcap"
@@ -53,6 +60,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --log)
             QEMU_CMD+=" -d guest_errors,cpu_reset,unimp,int -D /tmp/solaya.log"
+            shift
+            ;;
+        --qmp)
+            shift
+            QMP_SOCKET="$1"
+            QEMU_CMD+=" -qmp unix:${QMP_SOCKET},server,wait=off"
             shift
             ;;
         --block)
@@ -101,7 +114,9 @@ if [[ -z "$KERNEL_PATH" ]]; then
     exit 1
 fi
 
-if [[ "$NEED_DISPLAY" == "true" ]] && [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+if [[ "$HEADLESS" == "true" ]]; then
+    QEMU_CMD+=" -display none"
+elif [[ "$NEED_DISPLAY" == "true" ]] && [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
     QEMU_CMD+=" -display gtk"
 else
     QEMU_CMD+=" -display none"

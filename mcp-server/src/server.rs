@@ -80,6 +80,8 @@ pub struct BootParams {
     pub gdb: Option<bool>,
     #[schemars(description = "Path to a raw disk image to attach as virtio-blk device")]
     pub block: Option<String>,
+    #[schemars(description = "Enable bochs-display framebuffer device")]
+    pub framebuffer: Option<bool>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -100,6 +102,14 @@ pub struct SendInputParams {
 pub struct BuildKernelParams {
     #[schemars(description = "Also run clippy after building")]
     pub clippy: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ScreenshotParams {
+    #[schemars(
+        description = "File path to save the PPM screenshot (default: /tmp/solaya-screenshot.ppm)"
+    )]
+    pub output_path: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -140,7 +150,8 @@ impl QemuMcpServer {
         let mut options = QemuOptions::default()
             .add_network_card(params.network.unwrap_or(false))
             .use_smp(params.smp.unwrap_or(true))
-            .enable_gdb(params.gdb.unwrap_or(true));
+            .enable_gdb(params.gdb.unwrap_or(true))
+            .framebuffer(params.framebuffer.unwrap_or(false));
         if let Some(block_path) = params.block {
             options = options.block_device(std::path::PathBuf::from(block_path));
         }
@@ -267,6 +278,35 @@ impl QemuMcpServer {
             .map_err(|e| mcp_err(format!("Failed to send Ctrl+C: {e}")))?;
 
         text_result("Ctrl+C sent, shell prompt received.")
+    }
+
+    #[tool(
+        description = "Take a screenshot of the QEMU framebuffer. Requires framebuffer to be enabled. Saves a PPM image to the given path (or a temp path) and returns image dimensions and path."
+    )]
+    async fn screenshot(
+        &self,
+        Parameters(params): Parameters<ScreenshotParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut guard = lock_qemu(&self.qemu).await?;
+        let instance = require_running(&mut guard)?;
+        let image = instance
+            .screendump()
+            .await
+            .map_err(|e| mcp_err(format!("Screenshot failed: {e}")))?;
+
+        let output_path = params
+            .output_path
+            .unwrap_or_else(|| "/tmp/solaya-screenshot.ppm".to_string());
+        let ppm_data = image.to_ppm_bytes();
+        std::fs::write(&output_path, &ppm_data)
+            .map_err(|e| mcp_err(format!("Failed to write screenshot: {e}")))?;
+
+        text_result(format!(
+            "Screenshot saved to {output_path} ({}x{}, {} bytes)",
+            image.width,
+            image.height,
+            ppm_data.len()
+        ))
     }
 
     #[tool(description = "Non-blocking read of any available console output from QEMU.")]

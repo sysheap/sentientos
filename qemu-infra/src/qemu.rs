@@ -1,6 +1,6 @@
 use std::{
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
     time::Duration,
 };
@@ -11,7 +11,7 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
-use crate::{PROMPT, read_asserter::ReadAsserter};
+use crate::{PROMPT, qmp::QmpClient, read_asserter::ReadAsserter};
 
 fn find_available_port() -> anyhow::Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -38,6 +38,8 @@ pub struct QemuOptions {
     enable_gdb: bool,
     block_device: Option<PathBuf>,
     framebuffer: bool,
+    headless: bool,
+    qmp_socket: Option<PathBuf>,
 }
 
 impl Default for QemuOptions {
@@ -49,6 +51,8 @@ impl Default for QemuOptions {
             enable_gdb,
             block_device: None,
             framebuffer: false,
+            headless: true,
+            qmp_socket: None,
         }
     }
 }
@@ -74,6 +78,14 @@ impl QemuOptions {
         self.framebuffer = value;
         self
     }
+    pub fn headless(mut self, value: bool) -> Self {
+        self.headless = value;
+        self
+    }
+    pub fn qmp_socket(mut self, path: PathBuf) -> Self {
+        self.qmp_socket = Some(path);
+        self
+    }
 
     fn apply(self, command: &mut Command) -> Option<u16> {
         let mut network_port = None;
@@ -87,6 +99,12 @@ impl QemuOptions {
         }
         if self.framebuffer {
             command.arg("--fb");
+        }
+        if self.headless {
+            command.arg("--headless");
+        }
+        if let Some(qmp_path) = &self.qmp_socket {
+            command.args(["--qmp", &qmp_path.to_string_lossy()]);
         }
         if self.use_smp {
             command.arg("--smp");
@@ -104,6 +122,7 @@ pub struct QemuInstance {
     stdout: ReadAsserter<ChildStdout>,
     network_port: Option<u16>,
     gdb_port: Option<u16>,
+    qmp_socket: Option<PathBuf>,
 }
 
 impl QemuInstance {
@@ -111,7 +130,7 @@ impl QemuInstance {
         Self::start_with(QemuOptions::default()).await
     }
 
-    pub async fn start_with(options: QemuOptions) -> anyhow::Result<Self> {
+    pub async fn start_with(mut options: QemuOptions) -> anyhow::Result<Self> {
         let root = project_root()?;
         let wrapper = root.join("qemu_wrapper.sh");
         let mut command = Command::new(&wrapper);
@@ -123,7 +142,13 @@ impl QemuInstance {
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
 
+        if options.framebuffer && options.qmp_socket.is_none() {
+            let pid = std::process::id();
+            options.qmp_socket = Some(std::env::temp_dir().join(format!("solaya-qmp-{pid}.sock")));
+        }
+
         let gdb_enabled = options.enable_gdb;
+        let qmp_socket = options.qmp_socket.clone();
         let network_port = options.apply(&mut command);
 
         command.arg("target/riscv64gc-unknown-none-elf/release/kernel");
@@ -168,6 +193,7 @@ impl QemuInstance {
             stdout,
             network_port,
             gdb_port,
+            qmp_socket,
         })
     }
 
@@ -185,6 +211,24 @@ impl QemuInstance {
 
     pub fn gdb_port(&self) -> Option<u16> {
         self.gdb_port
+    }
+
+    pub fn qmp_socket(&self) -> Option<&Path> {
+        self.qmp_socket.as_deref()
+    }
+
+    pub async fn screendump(&self) -> anyhow::Result<crate::ppm::PpmImage> {
+        let socket = self
+            .qmp_socket
+            .as_ref()
+            .ok_or_else(|| anyhow!("QMP not enabled (no framebuffer?)"))?;
+        let tmp =
+            std::env::temp_dir().join(format!("solaya-screendump-{}.ppm", std::process::id()));
+        let mut qmp = QmpClient::connect(socket).await?;
+        qmp.screendump(&tmp).await?;
+        let image = crate::ppm::PpmImage::from_file(&tmp)?;
+        let _ = std::fs::remove_file(&tmp);
+        Ok(image)
     }
 
     pub async fn ctrl_c_and_assert_prompt(&mut self) -> anyhow::Result<String> {
