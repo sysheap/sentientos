@@ -22,6 +22,7 @@ pub use self::{
 };
 
 pub static PCI_ALLOCATOR_64_BIT: Spinlock<PCIAllocator> = Spinlock::new(PCIAllocator::new());
+pub static PCI_ALLOCATOR_32_BIT: Spinlock<PCIAllocator> = Spinlock::new(PCIAllocator::new());
 
 const INVALID_VENDOR_ID: u16 = 0xffff;
 
@@ -196,10 +197,12 @@ impl PCIDevice {
 
         debug!("Bar {} size: {:#x} 64bit={}", index, size, is_64bit);
 
-        let space = pci::PCI_ALLOCATOR_64_BIT
-            .lock()
-            .allocate(size as usize)
-            .expect("There must be enough space for the bar");
+        let space = if is_64bit {
+            pci::PCI_ALLOCATOR_64_BIT.lock().allocate(size as usize)
+        } else {
+            pci::PCI_ALLOCATOR_32_BIT.lock().allocate(size as usize)
+        }
+        .expect("There must be enough space for the bar");
 
         configuration_space.write_bar(
             index,

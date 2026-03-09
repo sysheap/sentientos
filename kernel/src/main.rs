@@ -128,6 +128,13 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         pci_allocator.init(pci_space_64_bit);
     }
 
+    if let Some(pci_space_32_bit) =
+        pci_information.get_first_range_for_type(pci::PCIBitField::MEMORY_SPACE_32_BIT_CODE)
+    {
+        let mut pci_allocator = pci::PCI_ALLOCATOR_32_BIT.lock();
+        pci_allocator.init(pci_space_32_bit);
+    }
+
     let mut runtime_mapping = Vec::new();
 
     runtime_mapping.push(MappingDescription {
