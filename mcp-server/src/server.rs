@@ -107,7 +107,7 @@ pub struct BuildKernelParams {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ScreenshotParams {
     #[schemars(
-        description = "File path to save the PPM screenshot (default: /tmp/solaya-screenshot.ppm)"
+        description = "File path to save the PNG screenshot (default: /tmp/solaya-screenshot.png)"
     )]
     pub output_path: Option<String>,
 }
@@ -281,7 +281,7 @@ impl QemuMcpServer {
     }
 
     #[tool(
-        description = "Take a screenshot of the QEMU framebuffer. Requires framebuffer to be enabled. Saves a PPM image to the given path (or a temp path) and returns image dimensions and path."
+        description = "Take a screenshot of the QEMU framebuffer. Requires framebuffer to be enabled. Saves a PNG image to the given path (or a temp path) and returns image dimensions and path."
     )]
     async fn screenshot(
         &self,
@@ -296,16 +296,18 @@ impl QemuMcpServer {
 
         let output_path = params
             .output_path
-            .unwrap_or_else(|| "/tmp/solaya-screenshot.ppm".to_string());
-        let ppm_data = image.to_ppm_bytes();
-        std::fs::write(&output_path, &ppm_data)
+            .unwrap_or_else(|| "/tmp/solaya-screenshot.png".to_string());
+        let png_data = image
+            .to_png_bytes()
+            .map_err(|e| mcp_err(format!("PNG encoding failed: {e}")))?;
+        std::fs::write(&output_path, &png_data)
             .map_err(|e| mcp_err(format!("Failed to write screenshot: {e}")))?;
 
         text_result(format!(
             "Screenshot saved to {output_path} ({}x{}, {} bytes)",
             image.width,
             image.height,
-            ppm_data.len()
+            png_data.len()
         ))
     }
 
