@@ -10,6 +10,7 @@ use crate::{
     fs::vfs::{self, VfsNodeRef, alloc_ino},
     info,
     klibc::util::BufferExtension,
+    warn,
 };
 
 use dir::Ext2Dir;
@@ -24,11 +25,13 @@ pub async fn mount_ext2(dev: usize) {
     info!("ext2: mounting block device {}", dev);
 
     let sb = read_superblock(dev).await;
-    assert!(
-        sb.s_magic == EXT2_MAGIC,
-        "ext2: bad magic 0x{:04X}",
-        sb.s_magic
-    );
+    if sb.s_magic != EXT2_MAGIC {
+        warn!(
+            "ext2: block device {} is not ext2 (magic 0x{:04X}), skipping",
+            dev, sb.s_magic
+        );
+        return;
+    }
 
     let block_size = sb.block_size();
     info!(
