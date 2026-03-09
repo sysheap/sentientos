@@ -1,35 +1,8 @@
-use std::path::Path;
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 use crate::infra::qemu::{QemuInstance, QemuOptions};
 
-fn find_mkfs_ext2() -> Option<String> {
-    // Try PATH first
-    if Command::new("mkfs.ext2")
-        .arg("-V")
-        .output()
-        .is_ok_and(|o| o.status.success() || !o.stderr.is_empty())
-    {
-        return Some("mkfs.ext2".into());
-    }
-    // Try nix store paths
-    for entry in std::fs::read_dir("/nix/store").ok()? {
-        let entry = entry.ok()?;
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.contains("e2fsprogs") && name_str.ends_with("-bin") {
-            let candidate = entry.path().join("bin/mkfs.ext2");
-            if candidate.exists() {
-                return Some(candidate.to_string_lossy().into_owned());
-            }
-        }
-    }
-    None
-}
-
 fn create_ext2_image(path: &Path, files: &[(&str, &str)], dirs: &[&str]) {
-    let mkfs = find_mkfs_ext2().expect("mkfs.ext2 not found; install e2fsprogs");
-
     let dir = tempfile::tempdir().expect("create tmpdir for ext2 root");
     let root = dir.path();
 
@@ -44,13 +17,13 @@ fn create_ext2_image(path: &Path, files: &[(&str, &str)], dirs: &[&str]) {
         std::fs::write(&file_path, content).expect("write file");
     }
 
-    let output = Command::new(&mkfs)
+    let output = Command::new("mkfs.ext2")
         .args(["-d", &root.to_string_lossy()])
         .arg("-F")
         .arg(path)
         .arg("4096")
         .output()
-        .expect("run mkfs.ext2");
+        .expect("run mkfs.ext2 (install e2fsprogs or enter nix shell)");
     assert!(
         output.status.success(),
         "mkfs.ext2 failed: {}",
@@ -60,11 +33,6 @@ fn create_ext2_image(path: &Path, files: &[(&str, &str)], dirs: &[&str]) {
 
 #[tokio::test]
 async fn ext2_read_file() -> anyhow::Result<()> {
-    if find_mkfs_ext2().is_none() {
-        eprintln!("SKIP: mkfs.ext2 not found");
-        return Ok(());
-    }
-
     let dir = tempfile::tempdir()?;
     let img = dir.path().join("ext2.img");
     create_ext2_image(
@@ -120,11 +88,6 @@ async fn ext2_read_file() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn ext2_ls_mnt() -> anyhow::Result<()> {
-    if find_mkfs_ext2().is_none() {
-        eprintln!("SKIP: mkfs.ext2 not found");
-        return Ok(());
-    }
-
     let dir = tempfile::tempdir()?;
     let img = dir.path().join("ext2.img");
     create_ext2_image(&img, &[("testfile.txt", "abc")], &[]);
