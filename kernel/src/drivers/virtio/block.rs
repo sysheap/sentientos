@@ -154,6 +154,10 @@ pub fn assign_block_device(device: BlockDevice) -> usize {
     index
 }
 
+pub fn device_count() -> usize {
+    BLOCK_DEVICES.lock().len()
+}
+
 pub fn capacity(index: usize) -> u64 {
     BLOCK_DEVICES
         .lock()

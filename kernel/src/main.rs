@@ -193,6 +193,10 @@ extern "C" fn kernel_init(hart_id: usize, device_tree_pointer: *const ()) -> ! {
         plic::init_virtio_block_interrupt(plic_irq);
     }
 
+    if drivers::virtio::block::device_count() > 0 {
+        processes::kernel_tasks::spawn(fs::ext2::mount_ext2(0));
+    }
+
     if let Some(i) = pci_devices
         .iter()
         .position(drivers::bochs_display::is_bochs_display)
