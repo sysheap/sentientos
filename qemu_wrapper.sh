@@ -10,9 +10,10 @@ QEMU_CMD="qemu-system-riscv64 \
     -machine virt \
     -cpu rv64 \
     -m 512M \
-    -nographic \
     -serial mon:stdio \
     -device virtio-rng-pci"
+
+NEED_DISPLAY=false
 
 # Process options
 while [[ $# -gt 0 ]]; do
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --fb)
             QEMU_CMD+=" -device bochs-display"
+            NEED_DISPLAY=true
             shift
             ;;
         --gdb)
@@ -97,6 +99,12 @@ if [[ -z "$KERNEL_PATH" ]]; then
     echo "Error: You must specify the kernel path."
     echo "Use $0 --help for more information."
     exit 1
+fi
+
+if [[ "$NEED_DISPLAY" == "true" ]] && [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+    QEMU_CMD+=" -display gtk"
+else
+    QEMU_CMD+=" -display none"
 fi
 
 # Add the kernel option
