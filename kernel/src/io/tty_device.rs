@@ -44,6 +44,7 @@ pub struct TtyDeviceInner {
     wakeup_queue: Vec<Waker>,
     fg_pgid: Tid,
     eof_pending: bool,
+    last_tty_signal: Option<(u32, Tid)>,
 }
 
 impl TtyDeviceInner {
@@ -72,6 +73,7 @@ impl TtyDeviceInner {
             wakeup_queue: Vec::new(),
             fg_pgid: Tid::new(1), // init process group by default
             eof_pending: false,
+            last_tty_signal: None,
         }
     }
 
@@ -89,6 +91,22 @@ impl TtyDeviceInner {
 
     pub fn set_fg_pgid(&mut self, pgid: Tid) {
         self.fg_pgid = pgid;
+    }
+
+    pub fn record_tty_signal(&mut self, sig: u32, target_pgid: Tid) {
+        self.last_tty_signal = Some((sig, target_pgid));
+    }
+
+    pub fn take_signal_for_new_fg(&mut self, caller_pgid: Tid) -> Option<u32> {
+        let (sig, _sent_to) = self.last_tty_signal.take()?;
+        // Forward only when the caller (shell) was the old foreground group.
+        // This means the shell is switching from itself to a job, and the
+        // signal may have been sent to the shell instead of the job.
+        if self.fg_pgid == caller_pgid {
+            Some(sig)
+        } else {
+            None
+        }
     }
 
     fn has_lflag(&self, flag: u32) -> bool {
@@ -125,6 +143,7 @@ impl TtyDeviceInner {
     }
 
     pub fn process_input_byte(&mut self, mut byte: u8) -> InputResult {
+        self.last_tty_signal = None;
         let mut echo = ArrayVec::new();
 
         if self.has_iflag(ICRNL) && byte == b'\r' {
@@ -483,5 +502,45 @@ mod tests {
         let mut dev = TtyDeviceInner::new();
         dev.settings.c_oflag = 0;
         assert_eq!(dev.process_output(b"hello\nworld\n"), b"hello\nworld\n");
+    }
+
+    #[test_case]
+    fn take_signal_forwards_when_caller_is_fg() {
+        let mut dev = TtyDeviceInner::new();
+        let shell = Tid::new(10);
+        dev.set_fg_pgid(shell);
+        dev.record_tty_signal(headers::syscall_types::SIGINT, shell);
+        assert_eq!(
+            dev.take_signal_for_new_fg(shell),
+            Some(headers::syscall_types::SIGINT)
+        );
+    }
+
+    #[test_case]
+    fn take_signal_does_not_forward_when_caller_is_not_fg() {
+        let mut dev = TtyDeviceInner::new();
+        let job = Tid::new(20);
+        let shell = Tid::new(10);
+        dev.set_fg_pgid(job);
+        dev.record_tty_signal(headers::syscall_types::SIGINT, job);
+        assert_eq!(dev.take_signal_for_new_fg(shell), None);
+    }
+
+    #[test_case]
+    fn take_signal_returns_none_when_no_signal() {
+        let mut dev = TtyDeviceInner::new();
+        let shell = Tid::new(10);
+        dev.set_fg_pgid(shell);
+        assert_eq!(dev.take_signal_for_new_fg(shell), None);
+    }
+
+    #[test_case]
+    fn input_clears_stale_tty_signal() {
+        let mut dev = TtyDeviceInner::new();
+        let shell = Tid::new(10);
+        dev.set_fg_pgid(shell);
+        dev.record_tty_signal(headers::syscall_types::SIGINT, shell);
+        dev.process_input_byte(b'f');
+        assert_eq!(dev.take_signal_for_new_fg(shell), None);
     }
 }
