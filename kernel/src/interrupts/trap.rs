@@ -95,7 +95,12 @@ fn handle_external_interrupt() {
             }
 
             if let Some(sig) = signal_to_send {
-                let fg_pgid = tty.lock().fg_pgid();
+                let fg_pgid = {
+                    let mut dev = tty.lock();
+                    let pgid = dev.fg_pgid();
+                    dev.record_tty_signal(sig, pgid);
+                    pgid
+                };
                 Cpu::with_scheduler(|mut s| {
                     s.send_tty_signal(sig, fg_pgid);
                 });
