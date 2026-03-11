@@ -126,6 +126,9 @@ void DG_Init(void)
     }
 }
 
+static uint32_t frame_count = 0;
+static uint32_t fps_last_time = 0;
+
 void DG_DrawFrame(void)
 {
     /* Doom renders at 640x400. Framebuffer is 640x480.
@@ -134,6 +137,18 @@ void DG_DrawFrame(void)
     lseek(fb_fd, y_offset * FB_WIDTH * sizeof(uint32_t), SEEK_SET);
     write(fb_fd, DG_ScreenBuffer,
           DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(uint32_t));
+
+    frame_count++;
+    uint32_t now = DG_GetTicksMs();
+    if (fps_last_time == 0) fps_last_time = now;
+    uint32_t elapsed = now - fps_last_time;
+    if (elapsed >= 2000) {
+        fprintf(stderr, "FPS: %u.%u\n",
+                (frame_count * 1000) / elapsed,
+                ((frame_count * 10000) / elapsed) % 10);
+        frame_count = 0;
+        fps_last_time = now;
+    }
 }
 
 void DG_SleepMs(uint32_t ms)
