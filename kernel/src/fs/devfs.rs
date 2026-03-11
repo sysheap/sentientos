@@ -247,33 +247,6 @@ pub fn register_random_device() {
     dir.entries.lock().insert(String::from("random"), node);
 }
 
-fn mmio_write_bulk(addr: usize, data: &[u8]) {
-    let mut pos = 0;
-    let len = data.len();
-    let head = addr % 8;
-    if head != 0 {
-        let n = (8 - head).min(len);
-        for &byte in &data[..n] {
-            let mut mmio: MMIO<u8> = MMIO::new(addr + pos);
-            mmio.write(byte);
-            pos += 1;
-        }
-    }
-    while pos + 8 <= len {
-        let mut mmio: MMIO<u64> = MMIO::new(addr + pos);
-        let bytes: [u8; 8] = data[pos..pos + 8]
-            .try_into()
-            .expect("slice is exactly 8 bytes");
-        mmio.write(u64::from_le_bytes(bytes));
-        pos += 8;
-    }
-    while pos < len {
-        let mut mmio: MMIO<u8> = MMIO::new(addr + pos);
-        mmio.write(data[pos]);
-        pos += 1;
-    }
-}
-
 fn mmio_read_bulk(addr: usize, buf: &mut [u8]) {
     let mut pos = 0;
     let len = buf.len();
@@ -342,8 +315,15 @@ impl VfsNode for DevFramebuffer {
             return Ok(0);
         }
         let len = end - offset;
-        let addr = base + offset;
-        mmio_write_bulk(addr, &data[..len]);
+        let dst = (base + offset) as *mut u8;
+        // SAFETY: dst points into the framebuffer BAR (non-cacheable MMIO on
+        // RISC-V). copy_nonoverlapping emits a tight store loop that the
+        // compiler can unroll. No volatile needed because PCI BAR memory
+        // is I/O-type in PMA — stores are never cached or elided by the CPU.
+        unsafe {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), dst, len);
+        }
+        arch::cpu::memory_fence();
         Ok(len)
     }
 
