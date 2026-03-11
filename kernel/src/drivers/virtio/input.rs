@@ -78,9 +78,19 @@ pub fn set_device(device: InputDevice) {
 impl InputDevice {
     pub fn is_virtio_input(device: &PCIDevice) -> bool {
         let cs = device.configuration_space();
-        cs.vendor_id().read() == VIRTIO_VENDOR_ID
-            && VIRTIO_DEVICE_ID.contains(&cs.device_id().read())
-            && cs.subsystem_id().read() == VIRTIO_INPUT_SUBSYSTEM_ID
+        if cs.vendor_id().read() != VIRTIO_VENDOR_ID {
+            return false;
+        }
+        let device_id = cs.device_id().read();
+        if !VIRTIO_DEVICE_ID.contains(&device_id) {
+            return false;
+        }
+        // Non-transitional VirtIO 1.0+ devices encode the device type in the
+        // PCI device ID (0x1040 + type). Transitional devices use subsystem_id.
+        if device_id >= 0x1040 {
+            return device_id - 0x1040 == VIRTIO_INPUT_SUBSYSTEM_ID;
+        }
+        cs.subsystem_id().read() == VIRTIO_INPUT_SUBSYSTEM_ID
     }
 
     pub fn initialize(mut pci_device: PCIDevice) -> Result<InitializedInput, &'static str> {
