@@ -73,6 +73,7 @@
           buildPhase = ''
             cd doomgeneric
             cp ${./userspace/doom/dg_solaya.c} dg_solaya.c
+            cp ${./userspace/doom/i_video_solaya.c} i_video.c
 
             # Embed doom1.wad as a binary object in a separate directory
             cp ${doom1-wad} doom1.wad

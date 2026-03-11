@@ -16,6 +16,7 @@ extern char _binary_doom1_wad_end[];
 
 static int fb_fd = -1;
 static int kb_fd = -1;
+static int log_fd = -1;
 static struct termios orig_termios;
 
 #define FB_WIDTH  640
@@ -90,13 +91,15 @@ static void extract_wad(void)
 
 void DG_Init(void)
 {
+    log_fd = open("/tmp/doom_fps.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
     fb_fd = open("/dev/fb0", O_WRONLY);
     if (fb_fd < 0) {
         fprintf(stderr, "Failed to open /dev/fb0\n");
         exit(1);
     }
 
-    /* Clear top and bottom 40px borders once */
+    /* Clear top and bottom borders once */
     {
         int border = (FB_HEIGHT - DOOMGENERIC_RESY) / 2;
         size_t border_bytes = border * FB_WIDTH * sizeof(uint32_t);
@@ -131,8 +134,6 @@ static uint32_t fps_last_time = 0;
 
 void DG_DrawFrame(void)
 {
-    /* Doom renders at 640x400. Framebuffer is 640x480.
-     * Borders cleared once in DG_Init; write game area directly. */
     int y_offset = (FB_HEIGHT - DOOMGENERIC_RESY) / 2;
     lseek(fb_fd, y_offset * FB_WIDTH * sizeof(uint32_t), SEEK_SET);
     write(fb_fd, DG_ScreenBuffer,
@@ -143,9 +144,15 @@ void DG_DrawFrame(void)
     if (fps_last_time == 0) fps_last_time = now;
     uint32_t elapsed = now - fps_last_time;
     if (elapsed >= 2000) {
-        fprintf(stderr, "FPS: %u.%u\n",
+        char buf[64];
+        int len = snprintf(buf, sizeof(buf), "FPS: %u.%u (frames=%u elapsed=%u)\n",
                 (frame_count * 1000) / elapsed,
-                ((frame_count * 10000) / elapsed) % 10);
+                ((frame_count * 10000) / elapsed) % 10,
+                frame_count, elapsed);
+        if (log_fd >= 0 && len > 0) {
+            if (len > (int)sizeof(buf)) len = (int)sizeof(buf) - 1;
+            write(log_fd, buf, len);
+        }
         frame_count = 0;
         fps_last_time = now;
     }
