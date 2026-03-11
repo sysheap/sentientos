@@ -14,7 +14,7 @@ use headers::{errno::Errno, syscall_types::timespec};
 
 pub use arch::timer::{CLINT_BASE, CLINT_SIZE};
 
-static CLOCKS_PER_NANO: RuntimeInitializedData<u64> = RuntimeInitializedData::new();
+static TIMEBASE_FREQ: RuntimeInitializedData<u64> = RuntimeInitializedData::new();
 
 type WakeupClockTime = u64;
 
@@ -33,7 +33,7 @@ pub fn init() {
         .consume_sized_type::<BigEndian<u32>>()
         .expect("The value must be u32")
         .get() as u64;
-    CLOCKS_PER_NANO.initialize(clocks_per_sec / 1000 / 1000);
+    TIMEBASE_FREQ.initialize(clocks_per_sec);
 }
 
 pub struct Sleep {
@@ -51,10 +51,9 @@ impl Sleep {
 }
 
 pub fn sleep(duration: &timespec) -> Result<Sleep, Errno> {
-    let clocks_per_nano = *CLOCKS_PER_NANO;
-    let clocks_per_second = clocks_per_nano * 1000 * 1000;
-    let clocks = u64::try_from(duration.tv_sec)? * clocks_per_second
-        + u64::try_from(duration.tv_nsec)? * clocks_per_nano;
+    let freq = *TIMEBASE_FREQ;
+    let clocks = u64::try_from(duration.tv_sec)? * freq
+        + u64::try_from(duration.tv_nsec)? * freq / 1_000_000_000;
     let wakeup_time = arch::timer::get_current_clocks() + clocks;
     Ok(Sleep::new(wakeup_time))
 }
@@ -93,11 +92,10 @@ pub fn wakeup_wakers() {
 #[allow(clippy::cast_possible_truncation)]
 pub fn current_time() -> timespec {
     let clocks = arch::timer::get_current_clocks();
-    let clocks_per_nano = *CLOCKS_PER_NANO;
-    let clocks_per_second = clocks_per_nano * 1000 * 1000;
-    let secs = clocks / clocks_per_second;
-    let remaining_clocks = clocks % clocks_per_second;
-    let nsecs = remaining_clocks / clocks_per_nano;
+    let freq = *TIMEBASE_FREQ;
+    let secs = clocks / freq;
+    let remaining_clocks = clocks % freq;
+    let nsecs = remaining_clocks * 1_000_000_000 / freq;
     timespec {
         tv_sec: secs as i64,
         tv_nsec: nsecs as i64,
@@ -107,7 +105,7 @@ pub fn current_time() -> timespec {
 pub fn set_timer(milliseconds: u64) {
     debug!("enabling timer {milliseconds} ms");
     let current = arch::timer::get_current_clocks();
-    let next = current.wrapping_add(*CLOCKS_PER_NANO * 1000 * milliseconds);
+    let next = current.wrapping_add(*TIMEBASE_FREQ * milliseconds / 1000);
     arch::sbi::extensions::timer_extension::sbi_set_timer(next).assert_success();
     arch::cpu::enable_timer_interrupt();
 }
