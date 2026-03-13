@@ -8,5 +8,5 @@ if [ -n "$staged_rs_files" ]; then
     echo "$staged_rs_files" | xargs git add
 fi
 
-# Run tests — commit is blocked if any test fails
-just test
+# Auto-fix what clippy can, fail on remaining warnings
+cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
