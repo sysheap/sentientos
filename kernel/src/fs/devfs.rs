@@ -7,7 +7,7 @@ use crate::{
         virtio::{block, input, rng},
     },
     io::tty_device::{TtyDevice, console_tty},
-    klibc::{MMIO, Spinlock},
+    klibc::{Spinlock, mmio},
 };
 
 use super::vfs::{DirEntry, NodeType, VfsNode, VfsNodeRef, alloc_ino};
@@ -247,30 +247,6 @@ pub fn register_random_device() {
     dir.entries.lock().insert(String::from("random"), node);
 }
 
-fn mmio_read_bulk(addr: usize, buf: &mut [u8]) {
-    let mut pos = 0;
-    let len = buf.len();
-    let head = addr % 8;
-    if head != 0 {
-        let n = (8 - head).min(len);
-        for byte in &mut buf[..n] {
-            let mmio: MMIO<u8> = MMIO::new(addr + pos);
-            *byte = mmio.read();
-            pos += 1;
-        }
-    }
-    while pos + 8 <= len {
-        let mmio: MMIO<u64> = MMIO::new(addr + pos);
-        buf[pos..pos + 8].copy_from_slice(&mmio.read().to_le_bytes());
-        pos += 8;
-    }
-    while pos < len {
-        let mmio: MMIO<u8> = MMIO::new(addr + pos);
-        buf[pos] = mmio.read();
-        pos += 1;
-    }
-}
-
 struct DevFramebuffer {
     ino: u64,
 }
@@ -289,25 +265,18 @@ impl VfsNode for DevFramebuffer {
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<usize, Errno> {
-        let base = bochs_display::fb_base();
-        if base == 0 {
-            return Err(Errno::ENODEV);
-        }
+        let base = bochs_display::fb_base().ok_or(Errno::ENODEV)?;
         let end = offset.saturating_add(buf.len()).min(bochs_display::FB_SIZE);
         if offset >= end {
             return Ok(0);
         }
         let len = end - offset;
-        let addr = base + offset;
-        mmio_read_bulk(addr, &mut buf[..len]);
+        mmio::read_bytes(base.as_usize() + offset, &mut buf[..len]);
         Ok(len)
     }
 
     fn write(&self, offset: usize, data: &[u8]) -> Result<usize, Errno> {
-        let base = bochs_display::fb_base();
-        if base == 0 {
-            return Err(Errno::ENODEV);
-        }
+        let base = bochs_display::fb_base().ok_or(Errno::ENODEV)?;
         let end = offset
             .saturating_add(data.len())
             .min(bochs_display::FB_SIZE);
@@ -315,7 +284,7 @@ impl VfsNode for DevFramebuffer {
             return Ok(0);
         }
         let len = end - offset;
-        let dst = (base + offset) as *mut u8;
+        let dst = (base.as_usize() + offset) as *mut u8;
         // SAFETY: dst points into the framebuffer BAR (non-cacheable MMIO on
         // RISC-V). copy_nonoverlapping emits a tight store loop that the
         // compiler can unroll. No volatile needed because PCI BAR memory

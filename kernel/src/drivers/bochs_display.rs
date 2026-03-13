@@ -1,4 +1,8 @@
-use crate::{info, klibc::MMIO, pci::PCIDevice};
+use crate::{
+    info,
+    klibc::MMIO,
+    pci::{PCIDevice, PciCpuAddr},
+};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 const VBE_DISPI_INDEX_XRES: u16 = 1;
@@ -20,8 +24,13 @@ pub const FB_SIZE: usize = FB_STRIDE * FB_HEIGHT;
 
 static FB_BASE: AtomicUsize = AtomicUsize::new(0);
 
-pub fn fb_base() -> usize {
-    FB_BASE.load(Ordering::Relaxed)
+pub fn fb_base() -> Option<PciCpuAddr> {
+    let addr = FB_BASE.load(Ordering::Relaxed);
+    if addr == 0 {
+        None
+    } else {
+        Some(PciCpuAddr::new(addr))
+    }
 }
 
 pub fn is_bochs_display(device: &PCIDevice) -> bool {
