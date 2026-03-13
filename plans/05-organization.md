@@ -6,7 +6,7 @@ Solaya is a single-maintainer RISC-V 64-bit OS kernel aiming for 100% Linux bina
 
 The maintainer reviews all code via GitHub PRs. Claude Code is the primary "worker" -- it reads issues, writes code, runs tests via the MCP server (QEMU interaction), and creates PRs. The project already has:
 - A `CLAUDE.md` with development guidelines
-- A `.claude/agents/commit-review.md` subagent for post-commit review
+- A `claude-code-review.yml` GitHub Actions workflow for PR code review
 - Hook files (doc-check, commit-reminder, question-reminder)
 - A `claude.yml` GitHub Action that triggers on `@claude` mentions in issues and PRs
 - CI pipeline (build, fmt, clippy, unit-test, miri, system-test, kani)
@@ -183,7 +183,7 @@ Avoid deep dependency chains. Prefer independent tasks that can run in parallel.
 4. Agent implements the feature
    - Writes code, runs `just clippy`, runs `just system-test`
    - Uses MCP server to boot QEMU and test interactively
-   - Commits incrementally (existing commit-review agent runs after each commit)
+   - Commits incrementally
       |
       v
 5. Agent creates PR
@@ -361,7 +361,7 @@ Statuses: `done`, `partial`, `stub` (returns hardcoded value), `not-started`.
 
 **Generating the initial list:** Use the RISC-V syscall table from the Linux kernel headers (`include/uapi/asm-generic/unistd.h`) and cross-reference with the `linux_syscalls!` macro in `kernel/src/syscalls/linux.rs`. This can be automated.
 
-**Keeping it updated:** The commit-review agent or a CI step can verify that the status file matches the actual implementation (grep the macro for implemented syscalls, compare to the status file).
+**Keeping it updated:** A CI step can verify that the status file matches the actual implementation (grep the macro for implemented syscalls, compare to the status file).
 
 ### Linux Test Suite Integration
 
