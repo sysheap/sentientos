@@ -229,8 +229,8 @@ Solaya is licensed under **MIT**. To keep it that way:
 **Syscall organization.** New syscalls: add the trait method in `linux.rs` (≤5 lines, delegates to `do_*` helper), implement in the appropriate `*_ops.rs` file grouped by concern. Trivial stubs stay inline.
 
 **Commit automatically.** After completing a task, commit without waiting for user intervention. Before committing:
-- Run `just clippy` to ensure no warnings
 - Remove any dead or unused code introduced by your changes
+- The pre-commit hook runs `cargo fmt` and `cargo clippy --fix` automatically; it will block the commit if clippy finds unfixable warnings.
 
 **Commit incrementally.** Commit each small working step toward a larger goal. Include test code in commits. This enables incremental progress verification rather than large, hard-to-debug changesets.
 
