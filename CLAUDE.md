@@ -236,4 +236,8 @@ Solaya is licensed under **MIT**. To keep it that way:
 
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
+**GitHub issue attribution.** When creating GitHub issues via `gh`, always:
+- Add `--label "created-by-claude"` so it's clear the issue was AI-generated
+- Append this footer to the issue body: `---\n_Created by [Claude Code](https://claude.ai/code)_`
+
 **Network port.** Both system tests and `--net` without an explicit port use dynamic port allocation. Use `--net PORT` to specify a fixed port. See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.
