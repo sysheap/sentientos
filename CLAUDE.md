@@ -202,6 +202,16 @@ just mcp-server                    # Build
 ### Claude Code Integration
 Already configured in `.mcp.json` at the project root. Claude Code picks it up automatically on startup.
 
+## Licensing and Clean-Room Policy
+
+Solaya is licensed under **MIT**. To keep it that way:
+
+**Never reference Linux kernel source code.** All implementations must be written from scratch based on public specifications, hardware documentation, RFCs, and man pages — not by reading or porting Linux kernel code (which is GPL-2.0). This applies to drivers, syscalls, filesystems, and all other subsystems.
+
+**Loading Linux kernel modules (.ko) is allowed.** Implementing the interfaces to load and run GPL-licensed kernel modules is fine — that's interface compatibility, not a derivative work.
+
+**Third-party driver contributions.** If external contributors want to port a Linux driver to Solaya, the licensing implications are theirs to manage. We do not accept code ported from GPL sources into the MIT-licensed codebase.
+
 ## Development Guidelines
 
 **Prefer less code.** Achieve the same result with fewer lines. Avoid unnecessary abstractions, helpers for one-time operations, or premature optimization. Simplify existing code when touching it for a feature.
