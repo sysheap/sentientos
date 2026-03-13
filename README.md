@@ -6,24 +6,35 @@ A RISC-V 64-bit hobby operating system kernel written in Rust. No third-party ru
 
 Inspired by [SerenityOS](https://github.com/SerenityOS/serenity), this project exists because writing an OS from scratch is fun. Check out the [sysheap YouTube channel](http://www.youtube.com/@sysheap) for coding videos.
 
+## Goal
+
+**An experiment: can we write a Linux-compatible kernel in Rust from scratch?**
+
+The long-term goal is a kernel that runs unmodified Linux userspace binaries — the same programs you'd run on a real Linux system, without recompilation. Only the kernel is rewritten; all userspace comes from existing projects (musl libc, dash, coreutils, etc.).
+
+This is a hobby project and an honest experiment. We don't know how far we'll get. Progress is measured by running real programs: first a shell, then coreutils, then Python, then nginx. Each milestone is a concrete proof of compatibility, not a line-count metric.
+
+See `plans/` for the roadmap and strategy.
+
 ## Status
 
 ### Kernel
 
 - **Memory management** — Bitmap page allocator with lazy zeroing, Sv39 page tables (3-level), kernel heap, per-process address spaces, mmap/munmap, brk
 - **Processes & threads** — ELF loading, per-process file descriptor tables, thread states (Running/Runnable/Waiting/Zombie), async syscall model with wakers
-- **Scheduler** — Per-CPU round-robin scheduler with 10ms quantum (50ms idle/powersave), global run queue
+- **Scheduler** — Per-CPU round-robin scheduler with 10ms quantum, global run queue, SMP support
 - **SMP** — Multi-core boot via SBI hart management, per-CPU state structs, inter-processor interrupts (IPI)
-- **Syscalls** — 22+ Linux-compatible syscalls (read, write, mmap, nanosleep, wait4, ppoll, signal handling, etc.) plus custom kernel syscalls for program execution and UDP sockets
+- **Syscalls** — 74 Linux-compatible syscalls including signals, mmap, futex, networking, and filesystem operations
 - **Interrupts** — RISC-V trap handling, PLIC for external interrupts, timer interrupts
-- **Networking** — UDP stack with ARP, IPv4, Ethernet framing, VirtIO network driver, per-port socket binding
-- **Drivers** — VirtIO network device (feature negotiation, virtqueues, packet TX/RX), PCI enumeration with MMIO BAR allocation and device tree parsing
-- **Debugging** — DWARF-based backtrace with symbol resolution, state dump on Ctrl+D (heap stats, page allocator usage, process table), configurable per-module debug logging
+- **Networking** — TCP and UDP stacks with ARP, IPv4, Ethernet framing; VirtIO network driver; per-port socket binding
+- **Filesystem** — VFS layer with tmpfs, procfs, devfs, and read-only ext2; programs can read from disk images
+- **Drivers** — VirtIO network and block devices (feature negotiation, virtqueues), PCI enumeration with MMIO BAR allocation
+- **Debugging** — DWARF-based backtrace with symbol resolution, Rust demangling, state dump on Ctrl+D, configurable per-module debug logging
 
 ### Userspace
 
 - **Shell (SoSH)** — Command parsing, program execution with arguments, background processes (`&`), built-in help
-- **12 programs** — init, shell, UDP networking, sleep, stress testing, game board, and various test utilities
+- **30+ programs** — init, shell, TCP/UDP networking, sleep, stress testing, filesystem tests, signal tests, and various test utilities
 - Programs are compiled against musl libc and embedded directly into the kernel binary
 
 ### Infrastructure
@@ -32,14 +43,17 @@ Inspired by [SerenityOS](https://github.com/SerenityOS/serenity), this project e
 - **GDB MCP server** — Programmatic GDB debugging (breakpoints, stepping, register inspection) exposed as MCP tools
 - **System tests** — Integration tests that boot the OS in QEMU and interact via stdin/stdout, covering networking, processes, signals, stress, and shell behavior
 - **Unit tests** — Kernel unit tests with a custom `#[test_case]` framework, plus Miri for undefined behavior detection
+- **Kani proofs** — Model checking for pure functions (address arithmetic, page table entries, utility functions)
 - **CI** — Build, fmt, clippy, unit tests, Miri, and system tests on self-hosted Nix runners
 
 ### Not Yet Implemented
 
-- Filesystem (programs are embedded in the kernel image)
-- TCP
-- GUI
-- DHCP / configurable IP addressing
+- Copy-on-Write fork (currently copies the full address space on fork)
+- Demand paging (mmap allocates all pages eagerly)
+- epoll / select (only ppoll is implemented)
+- Unix domain sockets
+- Pseudo-terminals (PTY)
+- Writable disk filesystem
 
 ## How Do I Run It?
 
@@ -88,6 +102,7 @@ mcp-server/       MCP server for AI agent interaction
 gdb_mcp_server/   GDB MCP server for programmatic debugging
 headers/          Linux C header bindings via bindgen
 doc/ai/           Detailed AI-facing documentation
+plans/            Roadmap and strategy documents
 ```
 
 ## Useful Commands
