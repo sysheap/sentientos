@@ -317,6 +317,21 @@ Solaya is currently RISC-V only. x86_64 is essential for running on real hardwar
 - x86 timer sources (HPET, TSC, APIC timer)
 - This is a substantial effort; the arch/ crate's abstraction helps but the differences are deep
 
+#### 5.6 CPU Bug Mitigations
+RISC-V currently has very few known CPU errata requiring software mitigations, so this is not a concern for the initial RISC-V target. When the x86_64 port begins (5.5), CPU bug mitigations become mandatory before any production use.
+
+Required mitigations for x86_64:
+- **Spectre v1/v2:** Retpolines for indirect branch prediction attacks; IBRS/STIBP where available
+- **Meltdown:** KPTI (Kernel Page Table Isolation) -- separate page tables for user and kernel mode
+- **Spectre v4 (SSBD):** Speculative Store Bypass Disable for sensitive code paths
+- **MDS/TAA/MMIO:** Microarchitectural data sampling mitigations (buffer clearing on context switch)
+- **L1TF:** L1 Terminal Fault mitigations for virtualization scenarios
+- **SRSO/Inception (AMD):** Return address prediction mitigations
+
+All mitigations are based on public CPU vendor advisories (Intel/AMD errata documents, architecture manuals, and published mitigation guides), fully compatible with MIT licensing.
+
+**Strategy:** Defer implementation until the x86_64 port is underway. On first boot, detect CPU model and applicable errata via CPUID. Enable mitigations conditionally. The tracing infrastructure planned in Phase 6 (perf_event_open in 6.2 and eBPF in 6.3) will be valuable for measuring mitigation performance overhead.
+
 ### Phase 6: Advanced Features (18-36 months)
 
 **Goal:** Feature parity with a production Linux kernel for developer/server workloads.
