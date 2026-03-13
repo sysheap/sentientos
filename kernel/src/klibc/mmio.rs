@@ -2,6 +2,31 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
 use common::numbers::Number;
 
+/// Read bytes from an MMIO region, using word-sized reads where aligned.
+pub fn read_bytes(addr: usize, buf: &mut [u8]) {
+    let mut pos = 0;
+    let len = buf.len();
+    let head = addr % 8;
+    if head != 0 {
+        let n = (8 - head).min(len);
+        for byte in &mut buf[..n] {
+            let mmio: MMIO<u8> = MMIO::new(addr + pos);
+            *byte = mmio.read();
+            pos += 1;
+        }
+    }
+    while pos + 8 <= len {
+        let mmio: MMIO<u64> = MMIO::new(addr + pos);
+        buf[pos..pos + 8].copy_from_slice(&mmio.read().to_le_bytes());
+        pos += 8;
+    }
+    while pos < len {
+        let mmio: MMIO<u8> = MMIO::new(addr + pos);
+        buf[pos] = mmio.read();
+        pos += 1;
+    }
+}
+
 #[allow(clippy::upper_case_acronyms)]
 pub struct MMIO<T> {
     addr: *mut T,
