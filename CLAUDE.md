@@ -234,8 +234,6 @@ Solaya is licensed under **MIT**. To keep it that way:
 
 **Commit incrementally.** Commit each small working step toward a larger goal. Include test code in commits. This enables incremental progress verification rather than large, hard-to-debug changesets.
 
-**Run commit-review after every commit.** After creating a commit, always use the Task tool with `subagent_type: commit-review` to review your changes. Run it in the foreground (not background) and wait for it to complete before continuing work, to prevent file conflicts from concurrent edits. Do not skip this step.
-
 **Keep docs in sync.** Update `CLAUDE.md` and `doc/ai/*` when discovering inconsistencies or implementing new features.
 
 **Network port.** Both system tests and `--net` without an explicit port use dynamic port allocation. Use `--net PORT` to specify a fixed port. See `doc/ai/DEBUGGING.md` for all QEMU wrapper options.
