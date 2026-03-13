@@ -6,6 +6,10 @@ Device driver subsystems:
 1. **PCI** - PCI device enumeration and configuration
 2. **VirtIO** - VirtIO device framework (network, block)
 
+## Clean-Room Development Policy
+
+All drivers must be implemented from scratch using public hardware specs, VirtIO specifications, and RFCs. Never reference or port Linux kernel driver source code — Solaya is MIT-licensed and Linux drivers are GPL-2.0. If no public spec exists for a device, that device cannot be supported until one becomes available or a contributor takes on the licensing implications independently.
+
 ## PCI Subsystem
 
 **File:** `kernel/src/pci/mod.rs`
