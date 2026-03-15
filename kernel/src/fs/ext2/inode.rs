@@ -7,7 +7,6 @@ use super::structures::{
     Ext2Inode, Ext2Superblock,
 };
 
-#[allow(clippy::cast_possible_truncation)]
 pub async fn read_inode(
     dev: usize,
     sb: &Ext2Superblock,
@@ -38,7 +37,6 @@ pub async fn read_inode(
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
 pub async fn read_inode_data(dev: usize, sb: &Ext2Superblock, inode: &Ext2Inode) -> Vec<u8> {
     let file_size = inode.i_size as usize;
     if file_size == 0 {
@@ -103,7 +101,6 @@ pub async fn read_inode_data(dev: usize, sb: &Ext2Superblock, inode: &Ext2Inode)
     data
 }
 
-#[allow(clippy::cast_possible_truncation)]
 async fn read_block_data(
     dev: usize,
     block_num: u32,
@@ -123,7 +120,6 @@ async fn read_block_data(
 
 async fn read_block_pointers(dev: usize, block_num: u32, block_size: usize) -> Vec<u32> {
     let mut buf = vec![0u8; block_size];
-    #[allow(clippy::cast_possible_truncation)]
     let offset = block_num as usize * block_size;
     let n = block::read(dev, offset, &mut buf)
         .await

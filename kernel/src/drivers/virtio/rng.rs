@@ -136,7 +136,6 @@ impl RngDevice {
         // Write our desired queue size to the device (VirtIO spec allows
         // reducing from the device maximum).
         common_cfg.queue_select().write(0);
-        #[allow(clippy::cast_possible_truncation)]
         let queue_size = QUEUE_SIZE as u16;
         common_cfg.queue_size().write(queue_size);
         let mut request_queue: VirtQueue<QUEUE_SIZE> = VirtQueue::new(queue_size, 0);

@@ -179,7 +179,6 @@ impl InputDevice {
 
         // Setup eventq at index 0
         common_cfg.queue_select().write(0);
-        #[allow(clippy::cast_possible_truncation)]
         let queue_size = QUEUE_SIZE as u16;
         common_cfg.queue_size().write(queue_size);
         let mut event_queue: VirtQueue<QUEUE_SIZE> = VirtQueue::new(queue_size, 0);

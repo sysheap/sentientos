@@ -10,13 +10,9 @@ use crate::{
 
 use super::{ipv4::IpV4Header, mac::MacAddress};
 
-#[allow(clippy::cast_possible_truncation)]
 pub const FLAG_FIN: u16 = headers::socket::TH_FIN as u16;
-#[allow(clippy::cast_possible_truncation)]
 pub const FLAG_SYN: u16 = headers::socket::TH_SYN as u16;
-#[allow(clippy::cast_possible_truncation)]
 pub const FLAG_RST: u16 = headers::socket::TH_RST as u16;
-#[allow(clippy::cast_possible_truncation)]
 pub const FLAG_ACK: u16 = headers::socket::TH_ACK as u16;
 
 #[derive(Debug)]
@@ -38,7 +34,6 @@ impl ByteInterpretable for TcpHeader {}
 
 impl TcpHeader {
     const HEADER_SIZE: usize = core::mem::size_of::<Self>();
-    #[allow(clippy::cast_possible_truncation)]
     const TCP_PROTOCOL: u8 = headers::socket::IPPROTO_TCP as u8;
 
     pub fn source_port(&self) -> u16 {

@@ -39,13 +39,11 @@ pub fn is_bochs_display(device: &PCIDevice) -> bool {
 }
 
 fn write_vbe_reg(dispi_base: usize, index: u16, value: u16) {
-    #[allow(clippy::cast_possible_truncation)]
     let offset = index as usize * 2;
     let mut reg: MMIO<u16> = MMIO::new(dispi_base + offset);
     reg.write(value);
 }
 
-#[allow(clippy::cast_possible_truncation)]
 pub fn initialize(mut pci_device: PCIDevice) {
     let bar0 = pci_device.get_or_initialize_bar(0);
     let bar2 = pci_device.get_or_initialize_bar(2);

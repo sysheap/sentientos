@@ -16,7 +16,6 @@ pub trait UsizeExt {
 }
 
 impl UsizeExt for u64 {
-    #[allow(clippy::cast_possible_truncation)]
     fn as_usize(self) -> usize {
         self as usize
     }
