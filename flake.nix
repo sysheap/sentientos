@@ -116,48 +116,62 @@
           }
         );
 
-        packages.ci-image = pkgs.dockerTools.buildLayeredImage {
-          name = "ghcr.io/sysheap/solaya-ci";
-          tag = "latest";
-          contents = [
-            pkgs.bash
-            pkgs.coreutils
-            pkgs.git
-            pkgs.cacert
-            pkgs.gnugrep
-            pkgs.findutils
-            pkgs.gawk
-            pkgs.gnused
-            pkgs.gnutar
-            pkgs.gzip
-            pkgs.gnumake
-            pkgs.qemu
-            pkgs.cargo-nextest
-            pkgs.just
-            rustToolchain
-            kani
-            riscv-toolchain.buildPackages.gcc
-            riscv-toolchain.buildPackages.binutils
-            pkgs.llvmPackages.libclang.lib
-            musl-riscv.dev
-            musl-riscv.linuxHeaders
-            doomgeneric
-            doom1-wad
-            dash-src
-          ];
-          config = {
-            Env = [
-              "LIBCLANG_PATH=${pkgs.llvmPackages.libclang.lib}/lib"
-              "LINUX_HEADERS_PATH=${musl-riscv.linuxHeaders}"
-              "MUSL_HEADERS_PATH=${musl-riscv.dev}/include"
-              "DOOMGENERIC_SRC=${doomgeneric}"
-              "DOOM1_WAD=${doom1-wad}"
-              "DASH_SRC=${dash-src}"
-              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        packages.ci-image =
+          let
+            tools = pkgs.buildEnv {
+              name = "solaya-ci-tools";
+              paths = [
+                pkgs.bash
+                pkgs.coreutils
+                pkgs.git
+                pkgs.cacert
+                pkgs.gnugrep
+                pkgs.findutils
+                pkgs.gawk
+                pkgs.gnused
+                pkgs.gnutar
+                pkgs.gzip
+                pkgs.gnumake
+                pkgs.qemu
+                pkgs.cargo-nextest
+                pkgs.just
+                rustToolchain
+                kani
+                riscv-toolchain.buildPackages.gcc.out
+                riscv-toolchain.buildPackages.binutils.out
+                pkgs.llvmPackages.libclang.lib
+                musl-riscv.dev
+                musl-riscv.linuxHeaders
+              ];
+              ignoreCollisions = true;
+            };
+            sources = pkgs.runCommand "solaya-ci-sources" { } ''
+              mkdir -p $out/opt
+              ln -s ${doomgeneric} $out/opt/doomgeneric
+              cp ${doom1-wad} $out/opt/doom1.wad
+              ln -s ${dash-src} $out/opt/dash-src
+            '';
+          in
+          pkgs.dockerTools.buildLayeredImage {
+            name = "ghcr.io/sysheap/solaya-ci";
+            tag = "latest";
+            contents = [
+              tools
+              sources
             ];
-            Cmd = [ "${pkgs.bash}/bin/bash" ];
+            config = {
+              Env = [
+                "LIBCLANG_PATH=${pkgs.llvmPackages.libclang.lib}/lib"
+                "LINUX_HEADERS_PATH=${musl-riscv.linuxHeaders}"
+                "MUSL_HEADERS_PATH=${musl-riscv.dev}/include"
+                "DOOMGENERIC_SRC=/opt/doomgeneric"
+                "DOOM1_WAD=/opt/doom1.wad"
+                "DASH_SRC=/opt/dash-src"
+                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              ];
+              Cmd = [ "${pkgs.bash}/bin/bash" ];
+            };
           };
-        };
       }
     );
 }
