@@ -1,0 +1,69 @@
+name: container
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      image:
+        description: Full container image reference
+        value: ${{ jobs.build.outputs.image }}
+
+permissions:
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.result.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compute image tag
+        id: hash
+        run: |
+          HASH=$(sha256sum flake.nix flake.lock rust-toolchain nix/kani.nix | sha256sum | cut -c1-12)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Image tag: $HASH"
+
+      - name: Check if image exists
+        id: check
+        run: |
+          IMAGE="ghcr.io/sysheap/solaya-ci:${{ steps.hash.outputs.hash }}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image already exists: $IMAGE"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Image not found, will build: $IMAGE"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to ghcr.io
+        if: steps.check.outputs.exists == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Nix
+        if: steps.check.outputs.exists == 'false'
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Build container image
+        if: steps.check.outputs.exists == 'false'
+        run: nix build .#ci-image
+
+      - name: Load and push container image
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          docker load < result
+          docker tag ghcr.io/sysheap/solaya-ci:latest ${{ steps.check.outputs.image }}
+          docker push ${{ steps.check.outputs.image }}
+
+      - name: Set output
+        id: result
+        run: echo "image=${{ steps.check.outputs.image }}" >> "$GITHUB_OUTPUT"

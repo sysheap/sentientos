@@ -6,75 +6,126 @@ on:
   pull_request:
 
 concurrency:
-  group: ci
-  cancel-in-progress: false
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  packages: write
 
 jobs:
+  container:
+    uses: ./.github/workflows/container.yml
+    permissions:
+      packages: write
+
   build:
-    runs-on: [self-hosted, nix]
+    needs: container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
       - run: just build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          retention-days: 1
+          path: |
+            kernel/compiled_userspace/
+            kernel/compiled_userspace_nix/
+            target-coreutils/bin/
+            target/riscv64gc-unknown-none-elf/release/kernel
+            symbols
 
   fmt:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
-      - uses: ./.github/actions/setup
       - run: cargo fmt --check
 
   clippy:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: [container, build]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
       - run: just clippy
 
   unit-test:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: [container, build]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
       - run: just unit-test
 
   miri:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: [container, build]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
       - run: just miri
 
   system-test:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: [container, build]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
       - run: just system-test
 
   kani:
-    needs: build
-    runs-on: [self-hosted, nix]
+    needs: container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          clean: false
       - uses: ./.github/actions/setup
       - run: just kani
