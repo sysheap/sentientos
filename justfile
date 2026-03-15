@@ -4,8 +4,26 @@ patch-symbols:
     riscv64-unknown-linux-musl-nm --demangle --numeric-sort --line-numbers target/riscv64gc-unknown-none-elf/release/kernel | grep -e ' t ' -e ' T ' > symbols && printf '\0' >> symbols
     riscv64-unknown-linux-musl-objcopy --update-section symbols=./symbols target/riscv64gc-unknown-none-elf/release/kernel
 
-build-cargo: build-userspace
+build-dash:
+    @test -f kernel/compiled_userspace_nix/dash || make -C userspace/dash
+
+build-doom:
+    @test -f kernel/compiled_userspace_nix/doom || make -C userspace/doom
+
+build-cargo: build-userspace build-dash build-doom
     cargo build --release
+
+docker-build:
+    nix build .#ci-image
+    docker load < result
+
+docker-push: docker-build
+    #!/usr/bin/env bash
+    HASH=$(sha256sum flake.nix flake.lock rust-toolchain nix/kani.nix | sha256sum | cut -c1-12)
+    IMAGE="ghcr.io/sysheap/solaya-ci"
+    docker tag ${IMAGE}:latest ${IMAGE}:${HASH}
+    docker push ${IMAGE}:${HASH}
+    echo "Pushed ${IMAGE}:${HASH}"
 
 COREUTILS_FEATURES := "cat,echo,false,ls,mkdir,pwd,rm,touch,true"
 

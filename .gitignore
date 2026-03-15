@@ -12,8 +12,9 @@ mcp-server/target/
 /symbols
 /.direnv
 /.gdb_sources
-/musl
 /headers/musl_headers
 
 __pycache__/
 disk.img
+userspace/dash/build/
+userspace/doom/build/

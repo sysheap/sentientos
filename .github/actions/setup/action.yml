@@ -1,11 +1,12 @@
 name: Setup
-description: Load Nix environment via direnv (requires checkout first)
+description: Configure build environment inside CI container
 
 runs:
   using: composite
   steps:
-    - name: Load environment
+    - name: Setup build environment
       shell: bash
       run: |
-        direnv allow .
-        direnv export gha >> "$GITHUB_ENV"
+        ln -sf "$LINUX_HEADERS_PATH" headers/linux_headers
+        ln -sf "$MUSL_HEADERS_PATH" headers/musl_headers
+        mkdir -p kernel/compiled_userspace_nix
