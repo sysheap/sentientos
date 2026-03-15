@@ -18,7 +18,7 @@ impl PciAddr {
     }
 
     /// Apply device-tree offset to translate from PCI to CPU address space.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[allow(clippy::cast_sign_loss)]
     pub const fn to_cpu_addr(self, offset: i64) -> PciCpuAddr {
         PciCpuAddr((self.0 as i64 + offset) as usize)
     }

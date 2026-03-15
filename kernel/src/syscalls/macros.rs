@@ -34,7 +34,6 @@ impl NeedsUserSpaceWrapper for c_int {
 
 impl NeedsUserSpaceWrapper for c_uint {
     type Wrapped = c_uint;
-    #[allow(clippy::cast_possible_truncation)]
     fn wrap_arg(
         value: usize,
         _process: ProcessRef,

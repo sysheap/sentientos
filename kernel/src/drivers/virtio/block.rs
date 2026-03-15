@@ -169,9 +169,7 @@ pub async fn read(index: usize, offset: usize, buf: &mut [u8]) -> Result<usize, 
     let cap = {
         let guard = BLOCK_DEVICES.lock();
         let dev = guard.get(index).ok_or(Errno::ENODEV)?;
-        #[allow(clippy::cast_possible_truncation)]
-        let cap = dev.capacity_bytes() as usize;
-        cap
+        dev.capacity_bytes() as usize
     };
 
     if offset >= cap {
@@ -217,9 +215,7 @@ pub async fn write(index: usize, offset: usize, data: &[u8]) -> Result<usize, Er
     let cap = {
         let guard = BLOCK_DEVICES.lock();
         let dev = guard.get(index).ok_or(Errno::ENODEV)?;
-        #[allow(clippy::cast_possible_truncation)]
-        let cap = dev.capacity_bytes() as usize;
-        cap
+        dev.capacity_bytes() as usize
     };
 
     if offset >= cap {

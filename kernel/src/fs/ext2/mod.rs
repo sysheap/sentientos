@@ -46,7 +46,6 @@ pub async fn mount_ext2(dev: usize) {
     info!("ext2: mounted at /mnt");
 }
 
-#[allow(clippy::cast_possible_truncation)]
 async fn read_superblock(dev: usize) -> Ext2Superblock {
     let sb_size = core::mem::size_of::<Ext2Superblock>();
     let mut buf = vec![0u8; sb_size];
@@ -63,7 +62,6 @@ async fn read_superblock(dev: usize) -> Ext2Superblock {
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
 async fn read_block_group_descriptors(
     dev: usize,
     sb: &Ext2Superblock,
@@ -109,7 +107,6 @@ fn build_tree<'a>(
                 } else if file_type == EXT2_FT_REG_FILE {
                     let child_inode = read_inode(dev, sb, bgds, child_ino).await;
                     let data = read_inode_data(dev, sb, &child_inode).await;
-                    #[allow(clippy::cast_possible_truncation)]
                     let file_size = child_inode.i_size as usize;
                     Ext2File::new(alloc_ino(), data, file_size)
                 } else {
@@ -121,7 +118,6 @@ fn build_tree<'a>(
             Ext2Dir::new(alloc_ino(), children) as VfsNodeRef
         } else if ext2_inode.is_regular() {
             let data = read_inode_data(dev, sb, &ext2_inode).await;
-            #[allow(clippy::cast_possible_truncation)]
             let file_size = ext2_inode.i_size as usize;
             Ext2File::new(alloc_ino(), data, file_size) as VfsNodeRef
         } else {
@@ -130,7 +126,6 @@ fn build_tree<'a>(
     })
 }
 
-#[allow(clippy::cast_possible_truncation)]
 fn parse_dir_entries(data: &[u8]) -> alloc::vec::Vec<(String, u32, u8)> {
     let mut entries = alloc::vec::Vec::new();
     let mut offset = 0;

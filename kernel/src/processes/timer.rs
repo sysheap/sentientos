@@ -89,7 +89,6 @@ pub fn wakeup_wakers() {
     }
 }
 
-#[allow(clippy::cast_possible_truncation)]
 pub fn current_time() -> timespec {
     let clocks = arch::timer::get_current_clocks();
     let freq = *TIMEBASE_FREQ;

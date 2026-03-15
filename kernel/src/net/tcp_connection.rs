@@ -35,7 +35,6 @@ pub fn allocate_ephemeral_port() -> u16 {
     port
 }
 
-#[allow(clippy::cast_possible_truncation)]
 fn generate_iss() -> u32 {
     arch::timer::get_current_clocks() as u32
 }

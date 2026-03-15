@@ -52,7 +52,6 @@ pub fn stat_from_node(node: &VfsNodeRef) -> headers::fs::stat {
 }
 
 pub fn statx_from_node(node: &VfsNodeRef) -> headers::fs::statx {
-    #[allow(clippy::cast_possible_truncation)]
     let mode = node.node_type().stat_mode() as u16;
     headers::fs::statx {
         stx_mask: 0x7ff,

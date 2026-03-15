@@ -87,7 +87,6 @@ impl VfsNode for DevBlock {
         self.ino
     }
 
-    #[allow(clippy::cast_possible_truncation)]
     fn size(&self) -> usize {
         block::capacity(self.index) as usize
     }
@@ -312,7 +311,6 @@ pub fn register_framebuffer_device() {
 
 pub fn register_block_device(index: usize) {
     assert!(index < 26, "block device index must be < 26 (a-z)");
-    #[allow(clippy::cast_possible_truncation)]
     let suffix = (b'a' + index as u8) as char;
     let name = alloc::format!("vd{suffix}");
     let node: VfsNodeRef = Arc::new(DevBlock {

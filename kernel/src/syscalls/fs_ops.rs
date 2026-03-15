@@ -196,7 +196,6 @@ impl LinuxSyscallHandler {
 
             out[pos..pos + 8].copy_from_slice(&entry.ino.to_le_bytes());
             out[pos + 8..pos + 16].copy_from_slice(&(entry_idx as i64).to_le_bytes());
-            #[allow(clippy::cast_possible_truncation)]
             let reclen_u16 = reclen as u16;
             out[pos + 16..pos + 18].copy_from_slice(&reclen_u16.to_le_bytes());
             out[pos + 18] = d_type;
