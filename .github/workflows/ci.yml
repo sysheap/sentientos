@@ -16,7 +16,7 @@ jobs:
       # CMakePresets.json defaults to this path for the build tree.
       BUILD_DIR: ${{ github.workspace }}/build
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install host build prerequisites
         run: |
