@@ -60,9 +60,9 @@ checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
 name = "gimli"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c"
+checksum = "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10"
 
 [[package]]
 name = "hal"
@@ -101,7 +101,7 @@ dependencies = [
  "driver-api",
  "drivers",
  "elf",
- "gimli 0.33.0",
+ "gimli 0.34.0",
  "hal",
  "headers",
  "klib",
