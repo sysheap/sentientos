@@ -61,7 +61,7 @@ jobs:
           $HOME/.cargo/bin/rustc --version
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-nextest
 
